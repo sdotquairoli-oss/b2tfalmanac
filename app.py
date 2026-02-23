@@ -853,7 +853,7 @@ def run_nba_heaters(target_stat="Points"):
         final_df['+/- Diff'] = final_df['+/- Diff'].round(1).apply(lambda x: f"+{x}" if x > 0 else str(x))
         return final_df, f"✅ Found top {target_stat} trends."
     except Exception as e: return None, f"API Error: {str(e)}"
-        @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)
 def run_barn_burner():
     try:
         schedule_data, _ = get_nhl_schedule()
