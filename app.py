@@ -914,23 +914,60 @@ def run_barn_burner():
     except Exception as e: return None, f"API Error: {str(e)}"
 
 @st.cache_data(ttl=3600)
-def run_mlb_heaters(target_stat="Hits"):
+def run_nhl_heaters():
     try:
-        schedule_data, _ = get_mlb_schedule()
-        if not schedule_data: return None, "No games scheduled today."
+        sched, _ = get_nhl_schedule()
+        if not sched: return None, "No NHL games scheduled today."
+        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+
+        # Instantly pull the Top 50 Skaters in the NHL right now
+        r = requests.get("https://api-web.nhle.com/v1/skater-stats-leaders/current?gameTypes=2&limit=50", timeout=5).json()
         
-        teams_today = []
-        team_to_opp = {}
-        for g in schedule_data: 
-            teams_today.extend([g['home'], g['away']])
-            team_to_opp[g['home']], team_to_opp[g['away']] = g['away'], g['home']
-            
-        # Note: True L5 MLB scanning requires looping 30 rosters. 
-        # This is a lightweight proxy that targets known active teams.
-        df = pd.DataFrame({"Message": ["MLB Scanner is active. Teams playing today are loaded into memory."], "Active Teams": [", ".join(teams_today)]})
-        return df, "✅ MLB Matchups loaded. (Advanced L5 player scanning requires a premium MLB API feed)."
+        heaters = []
+        for p in r.get('data', []):
+            if p.get('teamAbbrev') in teams_today:
+                name = f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip()
+                heaters.append({
+                    "Player": name, 
+                    "Team": p.get('teamAbbrev'), 
+                    "Category": "Points Leader", 
+                    "Season Pts": p.get('points', 0), 
+                    "Status": "🔥 Elite Scorer Active Tonight"
+                })
+
+        if not heaters: return None, "No top 50 league leaders playing tonight."
+        return pd.DataFrame(heaters), "✅ Found elite NHL scorers active on tonight's slate."
     except Exception as e: return None, f"API Error: {str(e)}"
 
+@st.cache_data(ttl=3600)
+def run_mlb_heaters():
+    try:
+        sched, _ = get_mlb_schedule()
+        if not sched: return None, "No MLB games scheduled today."
+        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+
+        # Pull Top 50 MLB Hitters (Fallback to last year if current season is fresh)
+        curr_year = datetime.now().year
+        r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year}&limit=50", timeout=5).json()
+        if not r.get('stats'): # Spring training fallback
+            r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year-1}&limit=50", timeout=5).json()
+
+        heaters = []
+        for s in r.get('stats', []):
+            for p in s.get('splits', []):
+                # Check if the player's team matches any team playing today
+                team_name = p.get('team', {}).get('name', '').upper()
+                if any(t[:3].upper() in team_name for t in teams_today): 
+                    heaters.append({
+                        "Player": p.get('player', {}).get('fullName', ''), 
+                        "Category": "Elite Hitter", 
+                        "Season Hits": p.get('stat', {}).get('hits', 0), 
+                        "Status": "🔥 Active Today"
+                    })
+
+        if not heaters: return None, "No top 50 hitters playing today."
+        return pd.DataFrame(heaters), "✅ Found elite MLB hitters active on today's slate."
+    except Exception as e: return None, f"API Error: {str(e)}"
 # ==========================================
 # 10. APP WRAPPER
 # ==========================================
@@ -992,7 +1029,7 @@ with tab_mlb:
     render_league_tab("MLB", get_mlb_schedule)
 
 with tab_roi:
-    roi_mode = st.radio("Select View:", ["🎯 Individual Picks", "🎟️ Parlay Tracker", "💵 Wallet Manager"], horizontal=True)
+roi_mode = st.sidebar.radio("Navigation", ["🎯 Individual Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger", "📡 Skynet Scanners"])
     st.markdown("---")
     
     if roi_mode == "💵 Wallet Manager":
@@ -1093,7 +1130,31 @@ with tab_roi:
             for _, row in single_df[single_df['Result'] == 'Pending'].iterrows():
                 desc_str = f"{row['Player']} - {row['Stat']} {row['Vote']} {row['Line']}"
                 pick_options.append(desc_str); pick_odds_map[desc_str] = float(row['Odds']); pick_prob_map[desc_str] = float(row.get('Win_Prob', 0.55))
+    elif roi_mode == "📡 Skynet Scanners":
+        st.markdown("### 📡 The Syndicate Radar")
+        scan_col1, scan_col2, scan_col3 = st.columns(3)
         
+        with scan_col1:
+            if st.button("🏀 Run NBA Heaters"):
+                with st.spinner("Scanning NBA..."):
+                    df, msg = run_nba_heaters()
+                    if df is not None: st.dataframe(df, use_container_width=True)
+                    st.info(msg)
+                    
+        with scan_col2:
+            if st.button("🏒 Run NHL Heaters"):
+                with st.spinner("Scanning NHL..."):
+                    df, msg = run_nhl_heaters()
+                    if df is not None: st.dataframe(df, use_container_width=True)
+                    st.info(msg)
+                    
+        with scan_col3:
+            if st.button("⚾ Run MLB Heaters"):
+                with st.spinner("Scanning MLB..."):
+                    df, msg = run_mlb_heaters()
+                    if df is not None: st.dataframe(df, use_container_width=True)
+                    st.info(msg)   
+                    
 # Added unique memory keys to stabilize the UI and prevent freezing
         selected_picks = st.multiselect("🔗 Link Pending Picks into a Ticket", pick_options, key="parlay_picker")
         
