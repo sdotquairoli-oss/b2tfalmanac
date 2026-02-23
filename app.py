@@ -106,7 +106,11 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55):
 
 def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"])
-    if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False
+    if "Is_Free_Bet" not in df.columns: 
+        df["Is_Free_Bet"] = False
+    else:
+        # Safely convert Google Sheets text "TRUE"/"FALSE" back to actual Python code
+        df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     return df
 def save_to_parlay_ledger(desc, odds, risk, book, is_free):
     row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free}
