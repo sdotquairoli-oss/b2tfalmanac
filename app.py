@@ -515,13 +515,22 @@ def get_mlb_stats(player_label):
         if not sr.get('people'): return pd.DataFrame(), 404, []
         pid = next((p['id'] for p in sr.get('people', []) if p.get('fullName','').lower() == cn.lower()), sr['people'][0]['id'] if sr.get('people') else None)
         
-        # 🕰️ The MLB Time Machine (Pull last 3 years simultaneously)
+        # 🕰️ The MLB Time Machine (Loop through last 3 years safely)
         curr_year = datetime.now().year
-        seasons_str = f"{curr_year},{curr_year-1},{curr_year-2}"
-        log = requests.get(f"https://statsapi.mlb.com/api/v1/people/{pid}/stats?stats=gameLog&group=hitting,pitching&season={seasons_str}", timeout=10).json()
+        seasons = [str(curr_year), str(curr_year-1), str(curr_year-2)]
         
-        splits = log.get('stats', [{}])[0].get('splits', [])
+        splits = []
+        for s in seasons:
+            try:
+                log = requests.get(f"https://statsapi.mlb.com/api/v1/people/{pid}/stats?stats=gameLog&group=hitting,pitching&season={s}", timeout=5).json()
+                # 🚨 BUG FIX: Loop through ALL stat folders so Pitchers aren't ignored
+                if 'stats' in log:
+                    for stat_group in log['stats']:
+                        splits.extend(stat_group.get('splits', []))
+            except: pass
+            
         if not splits: return pd.DataFrame(), 404, []
+        
         data = [{'ValidDate': pd.to_datetime(s.get('date', '2025-01-01')), 'MATCHUP': s.get('opponent', {}).get('name', 'OPP').split(' ')[-1][:3].upper(), 'Is_Home': 1 if s.get('isHome', True) else 0, 'H': s.get('stat', {}).get('hits', 0), 'HR': s.get('stat', {}).get('homeRuns', 0), 'TB': s.get('stat', {}).get('totalBases', 0), 'K': s.get('stat', {}).get('strikeOuts', 0), 'ER': s.get('stat', {}).get('earnedRuns', 0), 'MINS': float(s.get('stat', {}).get('plateAppearances', s.get('stat', {}).get('battersFaced', 1)))} for s in splits]
         
         df = pd.DataFrame(data)
