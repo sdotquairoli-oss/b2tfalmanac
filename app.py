@@ -485,7 +485,14 @@ def get_nhl_stats(player_label):
             
         if not logs: return pd.DataFrame(), 404, []
         df = pd.DataFrame(logs)
-        for c in ['points', 'goals', 'assists', 'shots', 'powerPlayPoints']: df[c.upper()[:3] if c != 'powerPlayPoints' else 'PPP'] = pd.to_numeric(df.get(c, 0))
+        
+        # 🚨 THE SURGICAL FIX: Hardcode exact ML column names
+        df['PTS'] = pd.to_numeric(df.get('points', 0))
+        df['G'] = pd.to_numeric(df.get('goals', 0))
+        df['A'] = pd.to_numeric(df.get('assists', 0))
+        df['SOG'] = pd.to_numeric(df.get('shots', 0))
+        df['PPP'] = pd.to_numeric(df.get('powerPlayPoints', 0))
+        
         df['Is_Home'] = np.where(df.get('homeRoadFlag', 'H') == 'H', 1, 0)
         df['MINS'] = df.get('toi', '15:00').apply(lambda x: int(str(x).split(':')[0]) + int(str(x).split(':')[1])/60.0 if ':' in str(x) else 0.0)
         df['MATCHUP'] = df['opponentAbbrev']
@@ -500,7 +507,6 @@ def get_nhl_stats(player_label):
         
         return df.sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
-
 @st.cache_data(ttl=300)
 def get_mlb_stats(player_label):
     cn = player_label.split("(")[0].strip()
