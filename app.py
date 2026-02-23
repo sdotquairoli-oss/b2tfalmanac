@@ -1107,7 +1107,7 @@ with tab_roi:
                 st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E676; margin-top: 10px; text-align: center;"><div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div><div style="font-size: 24px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div></div>""", unsafe_allow_html=True)
         
         p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
-        with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68, key="parlay_desc")
+        with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68)
         with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10, key="parlay_odds")
         with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0, key="parlay_risk")
         with p_col4: p_book = st.selectbox("Sportsbook", SPORTSBOOKS, key="parlay_book"); p_free = st.checkbox("🆓 Free Bet", key="parlay_free_box")
