@@ -254,34 +254,97 @@ def get_player_archetype(df, league):
             
     return best_match
 
+@st.cache_data(ttl=43200) # Caches the data for 12 hours so we don't spam the NBA API
+def get_live_nba_team_stats():
+    try:
+        from nba_api.stats.endpoints import leaguedashteamstats
+        # Pull Advanced Stats directly from the NBA servers
+        stats = leaguedashteamstats.LeagueDashTeamStats(measure_type_detailed_defense='Advanced')
+        df = stats.get_data_frames()[0]
+        
+        # Map full team names to abbreviations so the AI can match them
+        team_mapping = {
+            'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'Charlotte Hornets': 'CHA',
+            'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE', 'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN',
+            'Detroit Pistons': 'DET', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND',
+            'LA Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM', 'Miami Heat': 'MIA',
+            'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN', 'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK',
+            'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX',
+            'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'TOR',
+            'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS'
+        }
+        df['TEAM_ABBREV'] = df['TEAM_NAME'].map(team_mapping)
+        
+        # Keep only the data we need to rank defenses and pace
+        df_clean = df[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
+        
+        # Rank them (Rank 1 is the best defense, Rank 1 is the fastest pace)
+        df_clean['DEF_RANK'] = df_clean['DEF_RATING'].rank(ascending=True) 
+        df_clean['PACE_RANK'] = df_clean['PACE'].rank(ascending=False)
+        
+        return df_clean.to_dict('index')
+    except Exception as e:
+        return {}
+
 def get_archetype_defense_modifier(league, opp, archetype):
     if league == "NBA":
-        tough = ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]
-        weak = ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]
+        live_stats = get_live_nba_team_stats()
+        
+        if opp in live_stats:
+            def_rank = live_stats[opp]['DEF_RANK']
+            pace_rank = live_stats[opp]['PACE_RANK']
+            
+            mod_val = 1.0
+            mod_desc = f"🛡️ Def Rank: #{int(def_rank)} | 🏃 Pace: #{int(pace_rank)} -> "
+            
+            # 1. Advanced Defense Math
+            if def_rank <= 10:
+                mod_val *= 0.90
+                mod_desc += "Elite Defense (-10%). "
+            elif def_rank >= 21:
+                mod_val *= 1.10
+                mod_desc += "Weak Defense (+10%). "
+            else:
+                mod_desc += "Avg Defense (Neutral). "
+                
+            # 2. Advanced Pace Math (More possessions = more stats)
+            if pace_rank <= 10:
+                mod_val *= 1.05
+                mod_desc += "Fast Pace Boost (+5%). "
+            elif pace_rank >= 21:
+                mod_val *= 0.95
+                mod_desc += "Slow Pace Fade (-5%). "
+                
+            # 3. AI Archetype Exploit Overrides
+            if "Point-Forward" in archetype and def_rank >= 15:
+                mod_val *= 1.05
+                mod_desc += "🚨 Exploit: Bad vs Forwards. "
+            elif "Primary Playmaker" in archetype and def_rank <= 10:
+                mod_val *= 0.95
+                mod_desc += "🛑 Fade: Locked down by Elite Def. "
+                
+            return mod_val, mod_desc
+        else:
+            # Fallback if the API is momentarily down
+            tough = ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]
+            weak = ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]
+            if opp in tough: return 0.90, "Elite Defense (-10%)"
+            elif opp in weak: return 1.10, "Weak Defense (+10%)"
+            return 1.00, "Average Def (Neutral)"
+            
     elif league == "MLB":
         tough = ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]
         weak = ["COL", "OAK", "CHW", "KC", "WSH"]
+        if opp in tough: return 0.90, "Elite Pitching (-10%)"
+        elif opp in weak: return 1.10, "Weak Pitching (+10%)"
+        return 1.00, "Average Pitching (Neutral)"
+        
     else: 
         tough = ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"]
         weak = ["SJS", "ANA", "CBJ", "CHI", "MTL", "NYI"]
-
-    if opp in tough: mod_val, mod_desc = 0.90, "Elite Defense (-10%)"
-    elif opp in weak: mod_val, mod_desc = 1.10, "Weak Defense (+10%)"
-    else: mod_val, mod_desc = 1.00, "Average Def (Neutral)"
-    
-    if league == "NBA":
-        if "Point-Forward" in archetype and opp in ["ATL", "WAS", "CHA", "IND"]:
-            mod_val *= 1.08
-            mod_desc = "🚨 Matchup Exploit: Opponent weak vs Athletic Forwards (+8%)"
-        elif "Paint Beast" in archetype and opp in ["BKN", "OKC", "GSW", "WAS"]:
-            mod_val *= 1.08
-            mod_desc = "🚨 Matchup Exploit: Opponent undersized inside (+8%)"
-        elif "Primary Playmaker" in archetype and opp in ["MIN", "BOS", "ORL"]:
-            mod_val *= 0.92
-            mod_desc = "🛑 Archetype Fade: Elite perimeter defenders (-8%)"
-            
-    return mod_val, mod_desc
-
+        if opp in tough: return 0.90, "Elite Goalie (-10%)"
+        elif opp in weak: return 1.10, "Swiss Cheese Def (+10%)"
+        return 1.00, "Average Def (Neutral)"
 # ==========================================
 # ⛽ API FUEL GAUGE CHECKER
 # ==========================================
