@@ -445,41 +445,39 @@ def get_nba_stats(player_label):
     
     clean_name = player_label.split("(")[0].strip()
     try:
-        # 1. Search for the player ID
-        p_res = requests.get("https://api.balldontlie.io/v1/players", headers={"Authorization": BDL_API_KEY}, params={"search": clean_name}, timeout=10)
+        # 1. Search for the player ID (Hardcoded URL to prevent bracket mangling)
+        p_url = f"https://api.balldontlie.io/v1/players?search={requests.utils.quote(clean_name)}"
+        p_res = requests.get(p_url, headers={"Authorization": BDL_API_KEY}, timeout=10)
         if p_res.status_code == 429: return pd.DataFrame(), 429, []
         if p_res.status_code != 200: return pd.DataFrame(), 500, []
         
         p_data = p_res.json().get('data', [])
         if not p_data: return pd.DataFrame(), 404, []
         
-        # Grab exact match ID
         player_id = p_data[0]['id']
         
-        # 2. Fetch the current season logs (2025-26 season is registered as "2025" in BDL)
-        s_res = requests.get("https://api.balldontlie.io/v1/stats", headers={"Authorization": BDL_API_KEY}, params={"player_ids[]": [player_id], "seasons[]": [2025], "per_page": 100}, timeout=10)
+        # 2. Fetch stats across multiple years to ensure we catch current games
+        stats_url = f"https://api.balldontlie.io/v1/stats?player_ids[]={player_id}&seasons[]=2024&seasons[]=2025&seasons[]=2026&per_page=100"
+        
+        s_res = requests.get(stats_url, headers={"Authorization": BDL_API_KEY}, timeout=10)
         if s_res.status_code == 429: return pd.DataFrame(), 429, []
         
         s_data = s_res.json().get('data', [])
         if not s_data: return pd.DataFrame(), 404, []
         
-        # Map BDL Team IDs to standard abbreviations
         BDL_TEAMS = {1: 'ATL', 2: 'BOS', 3: 'BKN', 4: 'CHA', 5: 'CHI', 6: 'CLE', 7: 'DAL', 8: 'DEN', 9: 'DET', 10: 'GSW', 11: 'HOU', 12: 'IND', 13: 'LAC', 14: 'LAL', 15: 'MEM', 16: 'MIA', 17: 'MIL', 18: 'MIN', 19: 'NOP', 20: 'NYK', 21: 'OKC', 22: 'ORL', 23: 'PHI', 24: 'PHX', 25: 'POR', 26: 'SAC', 27: 'SAS', 28: 'TOR', 29: 'UTA', 30: 'WAS'}
         
         records = []
         for g in s_data:
             if not g.get('game') or g.get('min') in [None, "", "0", "0:00"]: continue
+            
             game = g['game']
             is_home = 1 if game['home_team_id'] == g['team']['id'] else 0
             opp_id = game['visitor_team_id'] if is_home else game['home_team_id']
             opp_abbrev = BDL_TEAMS.get(opp_id, 'OPP')
             
-            # Convert minutes to decimal
             m_str = str(g['min'])
-            if ":" in m_str:
-                mins = float(m_str.split(":")[0]) + float(m_str.split(":")[1])/60.0
-            else:
-                mins = float(m_str)
+            mins = float(m_str.split(":")[0]) + float(m_str.split(":")[1])/60.0 if ":" in m_str else float(m_str)
                 
             records.append({
                 'Date': game['date'],
@@ -497,31 +495,12 @@ def get_nba_stats(player_label):
         if not records: return pd.DataFrame(), 404, []
         df = pd.DataFrame(records)
         df = df.sort_values('ValidDate').reset_index(drop=True)
-        return df, 200, []
+        
+        # Isolate the most recent 82 games to keep the ML models perfectly tuned
+        return df.tail(82).reset_index(drop=True), 200, []
         
     except Exception as e:
         return pd.DataFrame(), 500, []
-    
-    for i in range(1, 6):
-        try:
-            r = requests.get(f"https://www.basketball-reference.com/players/{slug[0]}/{slug[:-2]}{i:02d}/gamelog/2026", headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-            if r.status_code == 429: return pd.DataFrame(), 429, []
-            if r.status_code != 200: continue
-            df = max([t for t in pd.read_html(StringIO(r.text), header=0) if 'Opp' in t.columns and 'Date' in t.columns], key=len, default=pd.DataFrame())
-            if df.empty: continue
-            df = df[df['Date'] != 'Date'].copy()
-            df['ValidDate'] = pd.to_datetime(df['Date'], errors='coerce')
-            df['PTS'] = pd.to_numeric(df.get('PTS', 0), errors='coerce')
-            df = df.dropna(subset=['ValidDate', 'PTS'])
-            if not df.empty:
-                df['Is_Home'] = np.where(df.apply(lambda row: '@' in str(row.values), axis=1), 0, 1)
-                df['MINS'] = df.get('MP', '30:00').apply(lambda x: int(str(x).split(':')[0]) + int(str(x).split(':')[1])/60.0 if ':' in str(x) else 0.0)
-                for c in ["TRB", "AST"]: df[c] = pd.to_numeric(df.get(c, 0), errors='coerce').fillna(0)
-                df['FG3M'] = pd.to_numeric(df.get('3P', 0), errors='coerce').fillna(0)
-                df['MATCHUP'], df['ShortDate'] = df['Opp'], df['ValidDate'].dt.strftime('%b %d')
-                return df.reset_index(drop=True), 200, []
-        except: continue
-    return pd.DataFrame(), 404, []
 
 @st.cache_data(ttl=300)
 def get_nhl_stats(player_label):
