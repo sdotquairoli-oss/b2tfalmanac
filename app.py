@@ -1078,7 +1078,8 @@ with tab_roi:
                 desc_str = f"{row['Player']} - {row['Stat']} {row['Vote']} {row['Line']}"
                 pick_options.append(desc_str); pick_odds_map[desc_str] = float(row['Odds']); pick_prob_map[desc_str] = float(row.get('Win_Prob', 0.55))
         
-        selected_picks = st.multiselect("🔗 Link Pending Picks into a Ticket", pick_options)
+# Added unique memory keys to stabilize the UI and prevent freezing
+        selected_picks = st.multiselect("🔗 Link Pending Picks into a Ticket", pick_options, key="parlay_picker")
         
         calc_dec, c_prob = 1.0, 1.0 
         for p in selected_picks:
@@ -1092,21 +1093,21 @@ with tab_roi:
         with st.expander("📘 Open Bankroll Advisor (Calculate Bet Size)", expanded=False):
             liq_bal = get_liquid_balance()
             st.markdown(f"**Live Bankroll:** ${liq_bal:.2f}")
-            if "Micro" in st.radio("Select Strategy", ["🔥 Micro-Aggressor (Tiered)", "🤖 True Kelly (AI Math)"], horizontal=True, label_visibility="collapsed"):
+            if "Micro" in st.radio("Select Strategy", ["🔥 Micro-Aggressor (Tiered)", "🤖 True Kelly (AI Math)"], horizontal=True, label_visibility="collapsed", key="parlay_strat"):
                 s_rec, p_rec = (5.0, 2.0) if liq_bal < 100 else ((10.0, 4.0) if liq_bal <= 200 else ((15.0, 5.0) if liq_bal <= 500 else (liq_bal * 0.03, liq_bal * 0.01)))
                 st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #ff0055; margin-top: 10px;"><div style="display: flex; justify-content: space-around; text-align: center;"><div><div style="font-size: 12px; color: #94a3b8;">Standard Single Wager</div><div style="font-size: 24px; font-weight: 900; color: #ff0055;">${s_rec:.2f}</div></div><div><div style="font-size: 12px; color: #94a3b8;">Standard Parlay Risk</div><div style="font-size: 24px; font-weight: 900; color: #00E5FF;">${p_rec:.2f}</div></div></div></div>""", unsafe_allow_html=True)
             else:
                 kc1, kc2 = st.columns(2)
-                k_prob, k_odds = kc1.number_input("Est. Win Prob (%)", min_value=0.1, max_value=99.9, value=float(def_prob), step=1.0), kc2.number_input("Bet Odds", value=true_american, step=10)
+                k_prob, k_odds = kc1.number_input("Est. Win Prob (%)", min_value=0.1, max_value=99.9, value=float(def_prob), step=1.0, key="parlay_kprob"), kc2.number_input("Bet Odds", value=true_american, step=10, key="parlay_kodds")
                 win_prob_dec, b_odds = k_prob / 100.0, (100 / abs(k_odds)) if k_odds < 0 else (k_odds / 100)
                 s_rec = liq_bal * (max(0.0, (b_odds * win_prob_dec - (1 - win_prob_dec)) / b_odds if b_odds > 0 else 0) * 0.5) 
                 st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E676; margin-top: 10px; text-align: center;"><div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div><div style="font-size: 24px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div></div>""", unsafe_allow_html=True)
         
         p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
-        with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68)
-        with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10)
-        with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0)
-        with p_col4: p_book = st.selectbox("Sportsbook", SPORTSBOOKS); p_free = st.checkbox("🆓 Free Bet")
+        with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68, key="parlay_desc")
+        with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10, key="parlay_odds")
+        with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0, key="parlay_risk")
+        with p_col4: p_book = st.selectbox("Sportsbook", SPORTSBOOKS, key="parlay_book"); p_free = st.checkbox("🆓 Free Bet", key="parlay_free_box")
             
         proj_profit = (p_risk * (p_odds / 100) if p_odds > 0 else p_risk / (abs(p_odds) / 100)) if p_odds != 0 else 0.0
         st.info(f"💸 **Projected Payout:** ${(proj_profit if p_free else p_risk + proj_profit):.2f} (Profit: ${proj_profit:.2f})")
