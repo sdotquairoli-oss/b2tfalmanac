@@ -1123,13 +1123,16 @@ with tab_roi:
         with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68)
         with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10)
         with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0)
-        with p_col4: p_book = st.selectbox("Sportsbook", SPORTSBOOKS); p_free = st.checkbox("🆓 Free Bet")
+        with p_col4: 
+            p_book = st.selectbox("Sportsbook", SPORTSBOOKS)
+            p_free = st.checkbox("🆓 Free Bet")
+            p_boost = st.checkbox("🚀 Odds Boost")
             
         proj_profit = (p_risk * (p_odds / 100) if p_odds > 0 else p_risk / (abs(p_odds) / 100)) if p_odds != 0 else 0.0
         st.info(f"💸 **Projected Payout:** ${(proj_profit if p_free else p_risk + proj_profit):.2f} (Profit: ${proj_profit:.2f})")
         
         if st.button("➕ Add Bet to Tracker", type="primary"):
-            if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
+            if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
             else: st.error("Please enter a description.")
 
         parlay_df = load_parlay_ledger()
@@ -1157,8 +1160,11 @@ with tab_roi:
                 status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
                 legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
                 
+                # The Golden Boost Tag!
+                boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
+                
                 pc1, pc2 = st.columns([4, 1])
-                with pc1: st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{row.get('Sportsbook', 'LIVE BET').upper()} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${( ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) if is_f else r + ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) ):.2f}</span></div></div>""", unsafe_allow_html=True)
+                with pc1: st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{row.get('Sportsbook', 'LIVE BET').upper()} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${( ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) if is_f else r + ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) ):.2f}</span></div></div>""", unsafe_allow_html=True)
                 with pc2:
                     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
                     opts = ["Pending", "Win", "Loss", "Push"]
