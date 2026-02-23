@@ -67,6 +67,7 @@ def get_gc():
     except Exception as e: st.error(f"🚨 Google Sheets Auth Error: {e}")
     return None
 
+@st.cache_data(ttl=300)
 def load_sheet_df(sheet_name, expected_cols):
     gc = get_gc()
     if not gc: return pd.DataFrame(columns=expected_cols)
@@ -86,6 +87,7 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
         ws = gc.open("B2TF_Database").worksheet(sheet_name)
         if ws.row_count == 0 or not ws.row_values(1): ws.append_row(expected_cols)
         ws.append_row([row_dict.get(col, "") for col in expected_cols])
+        load_sheet_df.clear() # 🧠 Wipe memory so the next read is fresh!
     except Exception as e: st.error(f"Failed to save to database: {e}")
 
 def overwrite_sheet(sheet_name, df):
@@ -96,6 +98,7 @@ def overwrite_sheet(sheet_name, df):
         ws.clear()
         clean_df = df.fillna("")
         ws.update(values=[clean_df.columns.values.tolist()] + clean_df.values.tolist())
+        load_sheet_df.clear() # 🧠 Wipe memory so the next read is fresh!
     except Exception as e: st.error(f"Failed to update database: {e}")
 
 # LEDGER WRAPPERS
