@@ -924,7 +924,27 @@ def render_syndicate_board(league_key):
                 elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
                 
                 ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
+                if c_vote == "OVER": ai_summary_short = f"Projected to clear {line} with a {win_prob*100:.1f}% probability."
+                elif c_vote == "UNDER": ai_summary_short = f"Projected to stay under {line} with a {win_prob*100:.1f}% probability."
+                else: ai_summary_short = f"Projection too close to {line} to recommend."
+                    
+                if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
+                elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
+                
+                ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
 
+                # 🌟 NEW: Official AI Top Pick Banner
+                if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);">
+                        <div style="background-color: #0f172a; padding: 12px; border-radius: 6px; text-align: center;">
+                            <span style="font-size: 22px;">🌟</span> <span style="font-size: 18px; font-weight: 900; color: #FFD700; letter-spacing: 2px;">OFFICIAL AI TOP PICK</span> <span style="font-size: 22px;">🌟</span>
+                            <div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">Massive Edge Detected! {win_prob*100:.1f}% Win Probability and +{edge_pct:.1f}% EV Edge on the {c_vote}.</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
                 sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
                 
                 with sum_c1:
@@ -973,10 +993,15 @@ def render_syndicate_board(league_key):
                     df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
                     df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
                     
-                    bars = alt.Chart(df_l10).mark_bar(opacity=0.7).encode(
+                    # 🎯 NEW: Identify games against tonight's opponent
+                    df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
+                    
+                    bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
                         x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
                         y=alt.Y(s_col, title=stat_type),
                         color=alt.condition(alt.datum[s_col] > line, alt.value('#00c853'), alt.value('#d50000')),
+                        stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
+                        strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
                         tooltip=[alt.Tooltip('ShortDate', title='Date'), alt.Tooltip('Matchup_Formatted', title='Opponent'), alt.Tooltip(s_col, title='Actual Stats'), alt.Tooltip('AI_Proj', title='AI Projection', format='.2f')]
                     ).properties(height=350)
 
@@ -985,8 +1010,7 @@ def render_syndicate_board(league_key):
                     text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
                     final_chart = (bars + vegas_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0)
                     st.altair_chart(final_chart, use_container_width=True)
-                    st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection (Skynet Adjusted)")
-                    
+                    st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
                 with side_col:
                     with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
                         player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else "Team"
