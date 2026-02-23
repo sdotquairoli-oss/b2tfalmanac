@@ -102,10 +102,16 @@ def overwrite_sheet(sheet_name, df):
     except Exception as e: st.error(f"Failed to update database: {e}")
 
 # LEDGER WRAPPERS
-def load_ledger(): return load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob"])
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55):
-    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob)}
-    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob"])
+# LEDGER WRAPPERS
+def load_ledger(): 
+    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+    if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
+    else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+    return df
+
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False):
+    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob), "Is_Boosted": is_boosted}
+    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
 
 def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"])
@@ -702,6 +708,7 @@ def render_syndicate_board(league_key):
             if sync and f_line is not None and f_odds is not None: st.session_state[f"odds_{league_key}"] = estimate_alt_odds(float(f_line), int(f_odds), line, stat_type)
             elif f"odds_{league_key}" not in st.session_state: st.session_state[f"odds_{league_key}"] = -110
             odds = st.number_input("Odds", step=5, key=f"odds_{league_key}")
+            is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"boost_{league_key}")
                 
         with c4: 
             opp = st.selectbox("Opponent", teams, key=f"op_{league_key}")
@@ -748,7 +755,7 @@ def render_syndicate_board(league_key):
                 with btn_c2:
                     if c_vote != "PASS": lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"lock_{league_key}")
                 if lock_pressed:
-                    save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob)
+                    save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob, is_boosted)
                     st.success("Pick locked! It is safely stored in your Google Sheets Database.")
                     
                 if odds < 0: implied_prob = abs(odds) / (abs(odds) + 100); profit = 100 / (abs(odds) / 100); risk = 100
@@ -1055,9 +1062,11 @@ with tab_roi:
                 orig_idx, o = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce'))
                 status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
                 
+                boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
+                
                 sc1, sc2 = st.columns([4, 1])
                 with sc1:
-                    st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">{row['League']} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}</span></div><div style="font-size: 16px; font-weight: 900; color: #00E5FF;">{row['Player']}</div><div style="font-size: 14px; font-weight: bold; color: #f8fafc; margin-top: 2px;">{row['Stat']} <span style="color: #00E676;">{row['Vote']} {row['Line']}</span></div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">Risk: $100.00 &nbsp;|&nbsp; <span style="color: #00E5FF; font-weight: bold;">AI Prob: {float(row.get('Win_Prob', 0.55)) * 100:.1f}%</span></span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${(100 + ((100 * (o / 100)) if o > 0 else (100 / (abs(o) / 100)))):.2f}</span></div></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">{row['League']} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 16px; font-weight: 900; color: #00E5FF;">{row['Player']}</div><div style="font-size: 14px; font-weight: bold; color: #f8fafc; margin-top: 2px;">{row['Stat']} <span style="color: #00E676;">{row['Vote']} {row['Line']}</span></div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">Risk: $100.00 &nbsp;|&nbsp; <span style="color: #00E5FF; font-weight: bold;">AI Prob: {float(row.get('Win_Prob', 0.55)) * 100:.1f}%</span></span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${(100 + ((100 * (o / 100)) if o > 0 else (100 / (abs(o) / 100)))):.2f}</span></div></div>""", unsafe_allow_html=True)
                     if row['Result'] == 'Loss':
                         if st.button("🔍 Run AI Autopsy", key=f"run_auto_{orig_idx}"):
                             with st.spinner("Analyzing logs..."): st.session_state[f"autopsy_{orig_idx}"] = generate_ai_autopsy(row['League'], row['Player'], row['Stat'], row['Line'], row['Vote'], row['Date'])
@@ -1066,6 +1075,7 @@ with tab_roi:
                     st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
                     opts = ["Pending", "Win", "Loss", "Push"]
                     new_results[orig_idx] = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"s_res_{orig_idx}", label_visibility="collapsed")
+                    
                     
             if st.button("💾 Save All Single Grades", type="primary", use_container_width=True):
                 for orig_idx, res in new_results.items(): ledger_df.at[orig_idx, 'Result'] = res
