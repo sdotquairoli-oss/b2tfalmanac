@@ -102,16 +102,19 @@ def overwrite_sheet(sheet_name, df):
     except Exception as e: st.error(f"Failed to update database: {e}")
 
 # LEDGER WRAPPERS
-# LEDGER WRAPPERS
-def load_ledger(): 
-    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+def load_parlay_ledger():
+    df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
+    if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False
+    else: df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+    
+    # Add the new Boosted column safely
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False):
-    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob), "Is_Boosted": is_boosted}
-    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+def save_to_parlay_ledger(desc, odds, risk, book, is_free, is_boosted=False):
+    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted}
+    append_to_sheet("Parlay_Ledger", row, ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
 
 def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"])
