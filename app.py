@@ -1029,8 +1029,7 @@ with tab_mlb:
     render_league_tab("MLB", get_mlb_schedule)
 
 with tab_roi:
-    
-roi_mode = st.sidebar.radio("Navigation", ["🎯 Individual Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger", "📡 Skynet Scanners"])
+    roi_mode = st.sidebar.radio("Navigation", ["🎯 Individual Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger", "📡 Skynet Scanners"])
     st.markdown("---")
     
     if roi_mode == "💵 Wallet Manager":
