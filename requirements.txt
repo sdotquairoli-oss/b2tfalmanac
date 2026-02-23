@@ -4,3 +4,4 @@ altair
 requests
 scikit-learn
 pytz
+gspread
