@@ -470,15 +470,26 @@ def get_nba_stats(player_label):
     try:
         from nba_api.stats.static import players
         from nba_api.stats.endpoints import playergamelog
+        import time
         
         nba_players = players.get_players()
         player_dict = [p for p in nba_players if p['full_name'].lower() == cn.lower()]
         if not player_dict: return pd.DataFrame(), 404, []
         
         pid = player_dict[0]['id']
-        log = playergamelog.PlayerGameLog(player_id=pid)
-        df = log.get_data_frames()[0]
         
+        # 🕰️ THE TIME MACHINE: Pull the last 3 Seasons
+        seasons = ['2025-26', '2024-25', '2023-24']
+        df_list = []
+        for s in seasons:
+            try:
+                log = playergamelog.PlayerGameLog(player_id=pid, season=s)
+                df_list.append(log.get_data_frames()[0])
+                time.sleep(0.5) # Prevent rate-limiting
+            except: pass
+            
+        if not df_list: return pd.DataFrame(), 404, []
+        df = pd.concat(df_list, ignore_index=True)
         if df.empty: return pd.DataFrame(), 404, []
         
         df['Is_Home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in x else 0)
@@ -496,7 +507,15 @@ def get_nba_stats(player_label):
         df['MINS'] = df['MIN'].apply(parse_mins)
         df = df.rename(columns={'REB': 'TRB'}) 
         
-        final_cols = ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'FG3M']
+        # 🧮 TIME DECAY MATH: Calculate Half-Life weights
+        today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
+        df['Days_Ago'] = (today - df['ValidDate']).dt.days
+        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] # Hard cutoff at 3 years
+        
+        # Exponential Decay Formula (Half-Life of exactly 200 Days)
+        df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
+        
+        final_cols = ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'FG3M', 'Weight']
         df = df[final_cols].sort_values('ValidDate').reset_index(drop=True)
         return df, 200, []
     except Exception as e: return pd.DataFrame(), 500, []
