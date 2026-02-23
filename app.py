@@ -1108,9 +1108,9 @@ with tab_roi:
         
         p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
         with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68)
-        with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10, key="parlay_odds")
-        with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0, key="parlay_risk")
-        with p_col4: p_book = st.selectbox("Sportsbook", SPORTSBOOKS, key="parlay_book"); p_free = st.checkbox("🆓 Free Bet", key="parlay_free_box")
+        with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10)
+        with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0)
+        with p_col4: p_book = st.selectbox("Sportsbook", SPORTSBOOKS); p_free = st.checkbox("🆓 Free Bet")
             
         proj_profit = (p_risk * (p_odds / 100) if p_odds > 0 else p_risk / (abs(p_odds) / 100)) if p_odds != 0 else 0.0
         st.info(f"💸 **Projected Payout:** ${(proj_profit if p_free else p_risk + proj_profit):.2f} (Profit: ${proj_profit:.2f})")
