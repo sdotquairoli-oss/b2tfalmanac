@@ -331,6 +331,71 @@ def check_api_quota():
 # API DATA PULLS
 # ==========================================
 @st.cache_data(ttl=3600)
+def run_nba_heaters(target_stat="Points"):
+    from nba_api.stats.endpoints import leaguedashplayerstats
+    import time
+    
+    col_map = {
+        "Points": "PTS", "Rebounds": "REB", "Assists": "AST", 
+        "Threes Made": "FG3M", "PRA (Pts+Reb+Ast)": "PRA", 
+        "Points + Rebounds": "PR", "Points + Assists": "PA", "Rebounds + Assists": "RA"
+    }
+    sc = col_map.get(target_stat, "PTS")
+    
+    try:
+        # Pull overall season averages and Last 5 Games averages for the entire league
+        season_stats = leaguedashplayerstats.LeagueDashPlayerStats(per_mode_detailed='PerGame').get_data_frames()[0]
+        time.sleep(0.5) # Prevent rate-limiting
+        l5_stats = leaguedashplayerstats.LeagueDashPlayerStats(per_mode_detailed='PerGame', last_n_games=5).get_data_frames()[0]
+        
+        # Calculate Combo Stats (PRA, etc.) since the API doesn't provide them natively
+        for df_temp in [season_stats, l5_stats]:
+            df_temp['PRA'] = df_temp['PTS'] + df_temp['REB'] + df_temp['AST']
+            df_temp['PR'] = df_temp['PTS'] + df_temp['REB']
+            df_temp['PA'] = df_temp['PTS'] + df_temp['AST']
+            df_temp['RA'] = df_temp['REB'] + df_temp['AST']
+            
+        # Merge the two databases together
+        merged = pd.merge(l5_stats[['PLAYER_ID', 'PLAYER_NAME', 'TEAM_ABBREVIATION', sc, 'MIN']], 
+                          season_stats[['PLAYER_ID', sc]], 
+                          on='PLAYER_ID', suffixes=('_L5', '_Season'))
+                          
+        # Filter for actual rotational players (must average at least 15 mins in their Last 5)
+        merged = merged[merged['MIN'] >= 15]
+        
+        # Pull today's active schedule to filter out players who aren't playing tonight
+        schedule_data, _ = get_nba_schedule()
+        if not schedule_data: return None, "No games scheduled today."
+        
+        teams_today = []
+        for g in schedule_data: teams_today.extend([g['home'], g['away']])
+            
+        merged = merged[merged['TEAM_ABBREVIATION'].isin(teams_today)]
+        if merged.empty: return None, "Scan complete. No rotational players found for today's active slate."
+        
+        # Calculate the mathematical differential
+        merged['Diff'] = merged[f'{sc}_L5'] - merged[f'{sc}_Season']
+        
+        # Isolate Top 8 Heaters and Top 8 Freezers
+        heaters = merged.sort_values('Diff', ascending=False).head(8).copy()
+        heaters['Status'] = "🔥 HEATER"
+        
+        freezers = merged.sort_values('Diff', ascending=True).head(8).copy()
+        freezers['Status'] = "❄️ FREEZER"
+        
+        # Stitch them together and format the table
+        final_df = pd.concat([heaters, freezers])
+        final_df = final_df[['PLAYER_NAME', 'TEAM_ABBREVIATION', 'Status', f'{sc}_L5', f'{sc}_Season', 'Diff']]
+        final_df.columns = ['Player', 'Team', 'Trend', 'L5 Avg', 'Season Avg', '+/- Diff']
+        
+        final_df['L5 Avg'] = final_df['L5 Avg'].round(1)
+        final_df['Season Avg'] = final_df['Season Avg'].round(1)
+        final_df['+/- Diff'] = final_df['+/- Diff'].round(1).apply(lambda x: f"+{x}" if x > 0 else str(x))
+        
+        return final_df, f"✅ Found the top {target_stat} trends for today's active games."
+        
+    except Exception as e: return None, f"API Error: {str(e)}"
+@st.cache_data(ttl=3600)
 def search_nba_players(query):
     if not query: return []
     try:
@@ -962,7 +1027,23 @@ with tab_nba:
     else: st.info(msg)
     st.markdown("---")
     render_syndicate_board("NBA")
-
+st.markdown("---")
+    with st.expander("🔥 Launch NBA Heaters & Freezers Scanner", expanded=False):
+        st.markdown("Scan all players active on today's slate to find the most extreme hot and cold streaks (Last 5 Games vs Season Average).")
+        nba_heat_c1, nba_heat_c2 = st.columns([1, 2])
+        with nba_heat_c1:
+            target_stat_nba = st.selectbox("Select Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists"])
+        
+        if st.button("🚀 Scan Today's NBA Slate", type="primary"):
+            with st.status(f"Scanning the NBA database for {target_stat_nba} trends...", expanded=True) as status:
+                df_nba_heat, nba_heat_msg = run_nba_heaters(target_stat_nba)
+                if df_nba_heat is not None:
+                    status.update(label="Scan Complete!", state="complete", expanded=False)
+                    st.success(nba_heat_msg)
+                    st.dataframe(df_nba_heat, use_container_width=True, hide_index=True)
+                else:
+                    status.update(label="Scan Complete!", state="complete", expanded=False)
+                    st.warning(nba_heat_msg)
 with tab_nhl:
     t_col1, t_col2 = st.columns([8, 1])
     with t_col1: st.markdown("### 📅 Today's Slate")
