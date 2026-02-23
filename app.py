@@ -101,13 +101,24 @@ def overwrite_sheet(sheet_name, df):
         load_sheet_df.clear() # 🧠 Wipe memory so the next read is fresh!
     except Exception as e: st.error(f"Failed to update database: {e}")
 
+# ==========================================
 # LEDGER WRAPPERS
+# ==========================================
+def load_ledger(): 
+    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+    if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
+    else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+    return df
+
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False):
+    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob), "Is_Boosted": is_boosted}
+    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+
 def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
     if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False
     else: df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     
-    # Add the new Boosted column safely
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     return df
@@ -116,19 +127,8 @@ def save_to_parlay_ledger(desc, odds, risk, book, is_free, is_boosted=False):
     row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted}
     append_to_sheet("Parlay_Ledger", row, ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
 
-def load_parlay_ledger():
-    df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"])
-    if "Is_Free_Bet" not in df.columns: 
-        df["Is_Free_Bet"] = False
-    else:
-        # Safely convert Google Sheets text "TRUE"/"FALSE" back to actual Python code
-        df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
-    return df
-def save_to_parlay_ledger(desc, odds, risk, book, is_free):
-    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free}
-    append_to_sheet("Parlay_Ledger", row, ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"])
-
 def load_bankroll(): return load_sheet_df("Bankroll_Ledger", ["Date", "Sportsbook", "Type", "Amount"])
+
 def save_bankroll_transaction(book, trans_type, amount):
     row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %H:%M"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
     append_to_sheet("Bankroll_Ledger", row, ["Date", "Sportsbook", "Type", "Amount"])
@@ -139,10 +139,10 @@ def get_liquid_balance():
     if not p_df.empty:
         for _, r in p_df.iterrows():
             o, risk, is_f = pd.to_numeric(r['Odds'], errors='coerce'), pd.to_numeric(r['Risk'], errors='coerce'), r.get('Is_Free_Bet', False)
-            if r['Result'] == 'Win': bal += (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
+            if r['Result'] == 'Win': 
+                prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof + (0 if is_f else risk)
             elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk)
     return max(bal, 0.0)
-
 # ==========================================
 # AUTO-GRADER & AI AUTOPSY
 # ==========================================
