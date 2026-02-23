@@ -426,26 +426,64 @@ def search_mlb_players(query):
 @st.cache_data(ttl=60)
 def get_nba_schedule():
     try:
-        ts = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
-        r = requests.get("https://api.balldontlie.io/v1/games", headers={"Authorization": BDL_API_KEY}, params={"dates[]": [ts]}, timeout=5)
-        if r.status_code == 200:
-            games = r.json().get('data', [])
-            if not games: return None, "No games scheduled."
-            matchups = []
-            for g in games:
-                stat = g.get('status', 'TBD')
-                il = any(x in stat for x in ["Qtr", "Half", "Final", "End", "1st", "2nd", "3rd", "4th"])
+        from nba_api.stats.endpoints import scoreboardv2
+        from nba_api.stats.static import teams
+        import pandas as pd
+        
+        # Pull live scoreboard directly from NBA official servers
+        board = scoreboardv2.ScoreboardV2()
+        games = board.get_data_frames()[0]
+        
+        if games.empty: 
+            return None, "No games scheduled."
+            
+        # Get official team abbreviations (e.g., LAL, BOS)
+        nba_teams = teams.get_teams()
+        team_dict = {t['id']: t['abbreviation'] for t in nba_teams}
+        
+        matchups = []
+        for _, g in games.iterrows():
+            home_id = g['HOME_TEAM_ID']
+            away_id = g['VISITOR_TEAM_ID']
+            
+            home_abbrev = team_dict.get(home_id, 'HOME')
+            away_abbrev = team_dict.get(away_id, 'AWAY')
+            
+            status_id = g['GAME_STATUS_ID'] # 1=Pre-Game, 2=Live, 3=Final
+            status_text = g['GAME_STATUS_TEXT']
+            is_live_or_final = status_id in [2, 3]
+            
+            # Extract live scores if the game is actively being played
+            line_score = board.get_data_frames()[1]
+            home_score, away_score = 0, 0
+            if not line_score.empty:
+                try:
+                    home_row = line_score[line_score['TEAM_ID'] == home_id]
+                    away_row = line_score[line_score['TEAM_ID'] == away_id]
+                    if not home_row.empty and pd.notna(home_row['PTS'].iloc[0]): 
+                        home_score = int(home_row['PTS'].iloc[0])
+                    if not away_row.empty and pd.notna(away_row['PTS'].iloc[0]): 
+                        away_score = int(away_row['PTS'].iloc[0])
+                except: pass
                 
-                if il or stat == "TBD": ds = stat
-                elif "T" in stat and "Z" in stat:
-                    try: ds = f"Today - {pd.to_datetime(stat).tz_convert('US/Eastern').strftime('%I:%M %p').lstrip('0')}"
-                    except: ds = f"Today - {stat}"
-                else: ds = f"Today - {stat.replace(' ET','').replace(' EST','').upper()}"
-                    
-                matchups.append({"home": g.get('home_team', {}).get('abbreviation', 'HOME'), "away": g.get('visitor_team', {}).get('abbreviation', 'AWAY'), "status": ds, "home_score": g.get('home_team_score', 0), "away_score": g.get('visitor_team_score', 0), "is_live_or_final": il})
-            return matchups, "Success"
-        return None, "API error."
-    except: return None, "Failed to connect to NBA API."
+            # Format the display status for the dashboard
+            if status_id == 1:
+                ds = f"Today - {status_text.replace(' ET', '').replace(' EST', '').upper()}"
+            else:
+                ds = status_text
+
+            matchups.append({
+                "home": home_abbrev,
+                "away": away_abbrev,
+                "status": ds,
+                "home_score": home_score,
+                "away_score": away_score,
+                "is_live_or_final": is_live_or_final
+            })
+            
+        return matchups, "Success"
+    except Exception as e: 
+        return None, "Failed to connect to NBA API."
 
 @st.cache_data(ttl=60)
 def get_nhl_schedule():
