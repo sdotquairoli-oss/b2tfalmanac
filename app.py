@@ -6,6 +6,8 @@ import numpy as np
 import time
 import os
 import base64
+import json
+import gspread
 from datetime import datetime
 import pytz
 from io import StringIO
@@ -33,10 +35,6 @@ NHL_TEAMS = sorted(["ANA", "BOS", "BUF", "CGY", "CAR", "CHI", "COL", "CBJ", "DAL
 MLB_TEAMS = sorted(["ARI", "ATL", "BAL", "BOS", "CHC", "CHW", "CIN", "CLE", "COL", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "OAK", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"])
 SPORTSBOOKS = ["FanDuel", "Fanatics", "DraftKings", "BetMGM", "Caesars", "ESPN Bet", "Hard Rock", "Other"]
 
-LEDGER_FILE = "roi_ledger.csv"
-PARLAY_LEDGER_FILE = "parlay_ledger.csv" 
-BANKROLL_FILE = "bankroll_ledger.csv"
-
 # --- THEME CSS ---
 st.markdown("""
 <style>
@@ -59,48 +57,96 @@ div.stContainer { background-color: #1e293b; border-radius: 12px; border: 1px so
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. LEDGERS & DATA MANAGEMENT
+# 1. GOOGLE SHEETS DATABASE MANAGEMENT
 # ==========================================
+def get_gc():
+    try:
+        if "google_credentials" in st.secrets:
+            creds_dict = json.loads(st.secrets["google_credentials"])
+            return gspread.service_account_from_dict(creds_dict)
+    except Exception as e:
+        st.error(f"🚨 Google Sheets Auth Error: {e}")
+    return None
+
+def load_sheet_df(sheet_name, expected_cols):
+    gc = get_gc()
+    if not gc: return pd.DataFrame(columns=expected_cols)
+    try:
+        sh = gc.open("B2TF_Database")
+        ws = sh.worksheet(sheet_name)
+        data = ws.get_all_records()
+        if not data:
+            if ws.row_count == 0 or not ws.row_values(1):
+                ws.append_row(expected_cols)
+            return pd.DataFrame(columns=expected_cols)
+        return pd.DataFrame(data)
+    except:
+        return pd.DataFrame(columns=expected_cols)
+
+def append_to_sheet(sheet_name, row_dict, expected_cols):
+    gc = get_gc()
+    if not gc: return
+    try:
+        sh = gc.open("B2TF_Database")
+        ws = sh.worksheet(sheet_name)
+        if ws.row_count == 0 or not ws.row_values(1):
+            ws.append_row(expected_cols)
+        row_values = [row_dict.get(col, "") for col in expected_cols]
+        ws.append_row(row_values)
+    except Exception as e:
+        st.error(f"Failed to save to database: {e}")
+
+def overwrite_sheet(sheet_name, df):
+    gc = get_gc()
+    if not gc: return
+    try:
+        sh = gc.open("B2TF_Database")
+        ws = sh.worksheet(sheet_name)
+        ws.clear()
+        clean_df = df.fillna("")
+        ws.update(values=[clean_df.columns.values.tolist()] + clean_df.values.tolist())
+    except Exception as e:
+        st.error(f"Failed to update database: {e}")
+
+# --- LEDGER WRAPPERS ---
 def load_ledger():
-    if os.path.exists(LEDGER_FILE):
-        df = pd.read_csv(LEDGER_FILE)
-        if "Win_Prob" not in df.columns: df["Win_Prob"] = 0.55 
-        return df
-    return pd.DataFrame(columns=["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob"])
+    cols = ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob"]
+    return load_sheet_df("ROI_Ledger", cols)
 
 def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55):
-    df = load_ledger()
-    new_row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob)}
-    pd.concat([df, pd.DataFrame([new_row])], ignore_index=True).to_csv(LEDGER_FILE, index=False)
+    cols = ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob"]
+    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob)}
+    append_to_sheet("ROI_Ledger", row, cols)
 
 def load_parlay_ledger():
-    if os.path.exists(PARLAY_LEDGER_FILE):
-        df = pd.read_csv(PARLAY_LEDGER_FILE)
-        if "Sportsbook" not in df.columns: df["Sportsbook"] = "FanDuel" 
-        if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False 
-        return df
-    return pd.DataFrame(columns=["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"])
+    cols = ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"]
+    df = load_sheet_df("Parlay_Ledger", cols)
+    if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False
+    return df
 
 def save_to_parlay_ledger(desc, odds, risk, book, is_free):
-    df = load_parlay_ledger()
-    new_row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free}
-    pd.concat([df, pd.DataFrame([new_row])], ignore_index=True).to_csv(PARLAY_LEDGER_FILE, index=False)
+    cols = ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet"]
+    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free}
+    append_to_sheet("Parlay_Ledger", row, cols)
 
 def load_bankroll():
-    if os.path.exists(BANKROLL_FILE): return pd.read_csv(BANKROLL_FILE)
-    return pd.DataFrame(columns=["Date", "Sportsbook", "Type", "Amount"])
+    cols = ["Date", "Sportsbook", "Type", "Amount"]
+    return load_sheet_df("Bankroll_Ledger", cols)
 
 def save_bankroll_transaction(book, trans_type, amount):
-    df = load_bankroll()
-    new_row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %H:%M"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
-    pd.concat([df, pd.DataFrame([new_row])], ignore_index=True).to_csv(BANKROLL_FILE, index=False)
+    cols = ["Date", "Sportsbook", "Type", "Amount"]
+    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %H:%M"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
+    append_to_sheet("Bankroll_Ledger", row, cols)
 
 def get_liquid_balance():
     b_df, p_df, bal = load_bankroll(), load_parlay_ledger(), 0.0
-    if not b_df.empty: bal += b_df['Amount'].sum()
+    if not b_df.empty: 
+        bal += pd.to_numeric(b_df['Amount'], errors='coerce').sum()
     if not p_df.empty:
         for _, r in p_df.iterrows():
-            o, risk, is_f = r['Odds'], r['Risk'], r.get('Is_Free_Bet', False)
+            o = pd.to_numeric(r['Odds'], errors='coerce')
+            risk = pd.to_numeric(r['Risk'], errors='coerce')
+            is_f = r.get('Is_Free_Bet', False)
             if r['Result'] == 'Win': bal += (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
             elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk)
     return max(bal, 0.0)
@@ -130,12 +176,14 @@ def auto_grade_ledger():
             g_row = stats[stats['td'] == pd.to_datetime(r['Date']).date()]
             if not g_row.empty:
                 val = g_row.iloc[0][s_col]
-                if r['Vote'] == "OVER": df.at[idx, 'Result'] = 'Win' if val > r['Line'] else 'Loss' if val < r['Line'] else 'Push'
-                elif r['Vote'] == "UNDER": df.at[idx, 'Result'] = 'Win' if val < r['Line'] else 'Loss' if val > r['Line'] else 'Push'
+                line_val = float(r['Line'])
+                if r['Vote'] == "OVER": df.at[idx, 'Result'] = 'Win' if val > line_val else 'Loss' if val < line_val else 'Push'
+                elif r['Vote'] == "UNDER": df.at[idx, 'Result'] = 'Win' if val < line_val else 'Loss' if val > line_val else 'Push'
                 updated += 1
         except: continue
-    df.to_csv(LEDGER_FILE, index=False)
-    return df, f"Graded {updated} bets!"
+    
+    overwrite_sheet("ROI_Ledger", df)
+    return df, f"Graded {updated} bets synced to Cloud!"
 
 def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
     try:
@@ -665,7 +713,6 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current):
         elif p <= line - 0.3: return "UNDER", "#d50000"
         return "PASS", "#94a3b8"
 
-    # 🟢 DYNAMIC AI EXPLANATIONS
     min_exp = f"Projects {trend_proj:.1f} by weighting recent minutes ({expected_mins:.1f} MPG). Suggests the {get_vote(trend_proj)[0]}."
     stat_exp = f"L3 avg of {df_ml['Roll3'].iloc[-1]:.1f} creates a stable floor. Decision trees favor the {get_vote(stat_proj)[0]}."
     dev_dir = "regression" if con_proj < season_avg else "spike"
@@ -816,7 +863,7 @@ def render_syndicate_board(league_key):
                         lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"lock_{league_key}")
                 if lock_pressed:
                     save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob)
-                    st.success("Pick locked! Head over to the **ROI Ledger** tab to grade it later.")
+                    st.success("Pick locked! It is safely stored in your Google Sheets Database.")
                     
                 if odds < 0:
                     implied_prob = abs(odds) / (abs(odds) + 100)
@@ -830,7 +877,6 @@ def render_syndicate_board(league_key):
                 ev_dollars = (win_prob * profit) - ((1 - win_prob) * risk)
                 edge_pct = (win_prob - implied_prob) * 100
 
-                # 🟢 NEW: AI SYNTHESIS TEXT PROMPT (Embedded inside the Consensus Box!)
                 if c_vote == "OVER":
                     ai_summary_short = f"Projected to clear {line} with a {win_prob*100:.1f}% probability."
                 elif c_vote == "UNDER":
@@ -1092,7 +1138,7 @@ with st.expander("⛽ System Diagnostics & API Fuel Gauge", expanded=False):
     diag_c1, diag_c2 = st.columns([1, 2])
     with diag_c1:
         st.markdown("**⚙️ Module Status**")
-        st.caption("✅ Odds API (Live)\n✅ BallDontLie (Active)\n✅ NHL/MLB (Active)\n✅ Archetype Engine (Online)")
+        st.caption("✅ Odds API (Live)\n✅ BallDontLie (Active)\n✅ NHL/MLB (Active)\n✅ Archetype Engine (Online)\n☁️ Google DB (Online)")
     with diag_c2:
         st.markdown("**🔋 Odds API Fuel Level**")
         if ODDS_API_KEY:
@@ -1232,7 +1278,7 @@ with tab_roi:
                     amt = -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount
                     lbl = "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit"
                     save_bankroll_transaction(t_book, lbl, amt)
-                    st.success("Transaction Logged!")
+                    st.success("Transaction Logged to Cloud!")
                     time.sleep(1)
                     st.rerun()
                     
@@ -1241,19 +1287,21 @@ with tab_roi:
         tot_dep, tot_wit, tot_cas, tot_sports = 0.0, 0.0, 0.0, 0.0
         
         if not b_df.empty:
-            tot_dep = b_df[b_df['Type'] == 'Deposit']['Amount'].sum() if 'Deposit' in b_df['Type'].values else 0.0
-            tot_wit = abs(b_df[b_df['Type'] == 'Withdrawal']['Amount'].sum()) if 'Withdrawal' in b_df['Type'].values else 0.0
-            tot_cas = b_df[b_df['Type'] == 'Casino']['Amount'].sum() if 'Casino' in b_df['Type'].values else 0.0
+            tot_dep = pd.to_numeric(b_df[b_df['Type'] == 'Deposit']['Amount'], errors='coerce').sum() if 'Deposit' in b_df['Type'].values else 0.0
+            tot_wit = abs(pd.to_numeric(b_df[b_df['Type'] == 'Withdrawal']['Amount'], errors='coerce').sum()) if 'Withdrawal' in b_df['Type'].values else 0.0
+            tot_cas = pd.to_numeric(b_df[b_df['Type'] == 'Casino']['Amount'], errors='coerce').sum() if 'Casino' in b_df['Type'].values else 0.0
         
         for book in SPORTSBOOKS:
             bal, has_hist = 0.0, False
             if not b_df.empty and book in b_df['Sportsbook'].values:
-                bal += b_df[b_df['Sportsbook'] == book]['Amount'].sum()
+                bal += pd.to_numeric(b_df[b_df['Sportsbook'] == book]['Amount'], errors='coerce').sum()
                 has_hist = True
             if not p_df.empty and book in p_df['Sportsbook'].values:
                 has_hist = True
                 for _, r in p_df[p_df['Sportsbook'] == book].iterrows():
-                    o, risk, is_f = r['Odds'], r['Risk'], r.get('Is_Free_Bet', False)
+                    o = pd.to_numeric(r['Odds'], errors='coerce')
+                    risk = pd.to_numeric(r['Risk'], errors='coerce')
+                    is_f = r.get('Is_Free_Bet', False)
                     if r['Result'] == 'Win': 
                         prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
                         bal += prof + (0 if is_f else risk)
@@ -1312,7 +1360,7 @@ with tab_roi:
             
             profit = 0.0
             for _, row in graded_df.iterrows():
-                o = row['Odds']
+                o = pd.to_numeric(row['Odds'], errors='coerce')
                 if row['Result'] == 'Win':
                     profit += (100 / (abs(o)/100)) if o < 0 else o
                 else:
@@ -1334,7 +1382,7 @@ with tab_roi:
             
             for i, row in reversed_df.iterrows():
                 orig_idx = row['index']
-                o = int(row['Odds'])
+                o = int(pd.to_numeric(row['Odds'], errors='coerce'))
                 to_win = (100 * (o / 100)) if o > 0 else (100 / (abs(o) / 100))
                 total_payout = 100 + to_win
                 
@@ -1387,8 +1435,8 @@ with tab_roi:
             if st.button("💾 Save All Single Grades", type="primary", use_container_width=True):
                 for orig_idx, res in new_results.items():
                     ledger_df.at[orig_idx, 'Result'] = res
-                ledger_df.to_csv(LEDGER_FILE, index=False)
-                st.success("Ledger Updated!")
+                overwrite_sheet("ROI_Ledger", ledger_df)
+                st.success("Ledger Updated in Cloud!")
                 time.sleep(1)
                 st.rerun()
 
@@ -1492,7 +1540,7 @@ with tab_roi:
         if st.button("➕ Add Bet to Tracker", type="primary"):
             if p_desc:
                 save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free)
-                st.success("Bet Added!")
+                st.success("Bet Added to Cloud DB!")
                 time.sleep(1.0)
                 st.rerun()
             else:
@@ -1508,8 +1556,8 @@ with tab_roi:
             p_profit = 0.0
             total_staked = 0.0
             for _, row in graded_p.iterrows():
-                o = row['Odds']
-                r = row['Risk']
+                o = pd.to_numeric(row['Odds'], errors='coerce')
+                r = pd.to_numeric(row['Risk'], errors='coerce')
                 is_f = row.get('Is_Free_Bet', False)
                 if not is_f: total_staked += r
                 
@@ -1534,8 +1582,8 @@ with tab_roi:
             for i, row in reversed_p_df.iterrows():
                 orig_idx = row['index']
                 
-                o = int(row['Odds'])
-                r = float(row['Risk'])
+                o = int(pd.to_numeric(row['Odds'], errors='coerce'))
+                r = float(pd.to_numeric(row['Risk'], errors='coerce'))
                 is_f = row.get('Is_Free_Bet', False)
                 to_win = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
                 total_payout = to_win if is_f else r + to_win
@@ -1578,7 +1626,7 @@ with tab_roi:
             if st.button("💾 Save All Live/Parlay Grades", type="primary", use_container_width=True):
                 for orig_idx, res in new_p_results.items():
                     parlay_df.at[orig_idx, 'Result'] = res
-                parlay_df.to_csv(PARLAY_LEDGER_FILE, index=False)
-                st.success("Tracker Updated!")
+                overwrite_sheet("Parlay_Ledger", parlay_df)
+                st.success("Tracker Updated in Cloud!")
                 time.sleep(1)
                 st.rerun()
