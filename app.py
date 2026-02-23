@@ -1028,7 +1028,7 @@ with tab_nba:
     st.markdown("---")
     render_syndicate_board("NBA")
 st.markdown("---")
-    with st.expander("🔥 Launch NBA Heaters & Freezers Scanner", expanded=False):
+with st.expander("🔥 Launch NBA Heaters & Freezers Scanner", expanded=False):
         st.markdown("Scan all players active on today's slate to find the most extreme hot and cold streaks (Last 5 Games vs Season Average).")
         nba_heat_c1, nba_heat_c2 = st.columns([1, 2])
         with nba_heat_c1:
