@@ -936,7 +936,7 @@ def render_syndicate_board(league_key):
 
     # (The rest of the rendering logic starting with `if target_player:` stays exactly the same!)
 
-    if target_player:key=f"{lk}.lock"
+if target_player:key=f"{lk}.lock"
         with st.spinner(f"Scouting data for {target_player}..."):
             if league_key == "NBA": df, status_code, _ = get_nba_stats(target_player)
             elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
