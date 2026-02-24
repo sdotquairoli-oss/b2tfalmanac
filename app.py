@@ -21,7 +21,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics.pairwise import euclidean_distances
 
 # --- CONFIGURATION & GLOBAL CONSTANTS ---
-st.set_page_config(page_title="B2TF Almanac", layout="wide", page_icon="⚡", initial_sidebar_state="expanded")
+st.set_page_config(page_title="B2TF Almanac", layout="wide", page_icon="⚡", initial_sidebar_state="collapsed")
 BDL_API_KEY = "b148807a-bbf0-45ee-b051-0a6d94a01ff9"
 
 try: ODDS_API_KEY = st.secrets["ODDS_API_KEY"]
@@ -906,25 +906,27 @@ with st.expander("⛽ System Diagnostics & API Fuel Gauge", expanded=False):
                     st.markdown(f'<div style="background-color: #1e293b; border-radius: 5px; width: 100%; height: 20px; border: 1px solid #334155; margin-top: 5px;"><div style="background-color: {color}; width: {fuel_pct*100}%; height: 100%; border-radius: 4px; transition: width 0.5s;"></div></div><div style="font-size: 12px; color: #94a3b8; margin-top: 5px; text-align: right;">{rem} / {total} Requests Remaining</div>', unsafe_allow_html=True)
                 else: st.caption("Sync a bet or hit 'Check' to load data.")
 
-# 3. RENDER SIDEBAR NAVIGATION THIRD
-st.sidebar.markdown(f"### 🏦 Liquid Bankroll: <span style='color:#00E676;'>${get_liquid_balance():.2f}</span>", unsafe_allow_html=True)
-roi_mode = st.sidebar.radio("Navigation", ["🎯 Syndicate Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger", "💵 Wallet Manager"])
-st.sidebar.markdown("---")
-if st.sidebar.button("🧹 Clear Skynet Cache (Reset API)"): st.cache_data.clear(); st.sidebar.success("Cache Cleared!")
+# ==========================================
+# 6. MAIN NAVIGATION & TAB ROUTING
+# ==========================================
+st.markdown("---")
+top_bar_c1, top_bar_c2 = st.columns([5, 1])
+with top_bar_c1: st.markdown(f"### 🏦 Liquid Bankroll: <span style='color:#00E676;'>${get_liquid_balance():.2f}</span>", unsafe_allow_html=True)
+with top_bar_c2: 
+    if st.button("🧹 Clear Skynet Cache", use_container_width=True): st.cache_data.clear(); st.rerun()
 
-# 4. RENDER PAGE BASED ON SIDEBAR SELECTION
-if roi_mode == "🎯 Syndicate Picks":
-    t_nba, t_nhl, t_mlb = st.tabs(["🏀 NBA", "🏒 NHL", "⚾ MLB"])
-    with t_nba: render_league_tab("NBA", get_nba_schedule)
-    with t_nhl: render_league_tab("NHL", get_nhl_schedule)
-    with t_mlb: render_league_tab("MLB", get_mlb_schedule)
+t_nba, t_nhl, t_mlb, t_parlay, t_roi, t_wallet = st.tabs(["🏀 NBA", "🏒 NHL", "⚾ MLB", "🎟️ Parlay Builder", "🏦 ROI Ledger", "💵 Wallet"])
 
-elif roi_mode == "🎟️ Parlay Tracker":
+with t_nba: render_league_tab("NBA", get_nba_schedule)
+with t_nhl: render_league_tab("NHL", get_nhl_schedule)
+with t_mlb: render_league_tab("MLB", get_mlb_schedule)
+
+with t_parlay:
     st.markdown("## 🎟️ Syndicate Parlay Builder")
     ledger_df = load_ledger()
     pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
     
-    if pending_picks.empty: st.warning("No pending singles found. Go to 'Syndicate Picks' to build your slips!")
+    if pending_picks.empty: st.warning("No pending singles found. Go to the sports boards to build your slips!")
     else:
         pick_options, pick_odds_map, pick_prob_map = [], {}, {}
         for _, r in pending_picks.iterrows():
@@ -1012,7 +1014,7 @@ elif roi_mode == "🎟️ Parlay Tracker":
             for orig_idx, res in new_p_results.items(): parlay_df.at[orig_idx, 'Result'] = res
             overwrite_sheet("Parlay_Ledger", parlay_df); st.success("Tracker Updated!"); time.sleep(1); st.rerun()
 
-elif roi_mode == "🏦 ROI Ledger":
+with t_roi:
     roi_col1, roi_col2 = st.columns([4, 1])
     with roi_col1: st.markdown("### 🏦 The Bankroll (Single Units)")
     with roi_col2:
@@ -1058,7 +1060,7 @@ elif roi_mode == "🏦 ROI Ledger":
             for orig_idx, res in new_results.items(): ledger_df.at[orig_idx, 'Result'] = res
             overwrite_sheet("ROI_Ledger", ledger_df); st.success("Ledger Updated!"); time.sleep(1); st.rerun()
 
-elif roi_mode == "💵 Wallet Manager":
+with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
     bw_c1, bw_c2 = st.columns([2, 1])
