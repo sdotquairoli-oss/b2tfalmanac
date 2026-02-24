@@ -195,8 +195,8 @@ def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
         if df.empty: return "No data."
         
         s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K", "Double Double": "DD", "Triple Double": "TD"}
-        s_col = s_map.get(r['Stat'], "PTS")
-        if league == "NBA":
+          s_col = s_map.get(r['Stat'], "PTS")
+          if league == "NBA":
                 if s_col == "A": s_col = "AST"
                 if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
                 if s_col in ["DD", "TD"]:
