@@ -222,8 +222,18 @@ def check_api_quota():
 def search_nba_players(query):
     if not query: return []
     try:
-        r = requests.get("https://api.balldontlie.io/v1/players", headers={"Authorization": BDL_API_KEY}, params={"search": query, "per_page": 100}, timeout=5)
-        if r.status_code == 200: return [f"{p['first_name']} {p['last_name']} ({p['team']['abbreviation']})" for p in r.json().get('data', []) if p.get('team')]
+        # The BDL API panics on spaces. We extract the last name, ping the API, and filter locally.
+        search_term = query.split()[-1] if " " in query else query
+        r = requests.get("https://api.balldontlie.io/v1/players", headers={"Authorization": BDL_API_KEY}, params={"search": search_term, "per_page": 100}, timeout=5)
+        if r.status_code == 200: 
+            matches = []
+            for p in r.json().get('data', []):
+                if p.get('team'):
+                    full_name = f"{p['first_name']} {p['last_name']}"
+                    # Ensure the user's exact full name query matches the result
+                    if query.lower() in full_name.lower():
+                        matches.append(f"{full_name} ({p['team']['abbreviation']})")
+            return matches
     except: pass; return []
 
 @st.cache_data(ttl=3600)
