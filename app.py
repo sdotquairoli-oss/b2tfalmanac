@@ -576,7 +576,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
         except: pass
 
     final_consensus = raw_consensus * skynet_mod
-    def get_final_vote(p): return "OVER", "#00c853" if p >= line + 0.3 else ("UNDER", "#d50000" if p <= line - 0.3 else ("PASS", "#94a3b8"))
+    def get_final_vote(p): return ("OVER", "#00c853") if p >= line + 0.3 else (("UNDER", "#d50000") if p <= line - 0.3 else ("PASS", "#94a3b8"))
     f_vote, f_color = get_final_vote(final_consensus)
     
     lr_hist = lr.predict(X) * df_ml['MINS'].values
