@@ -892,14 +892,16 @@ def render_league_tab(league_name, get_sched_func):
                 st.markdown("#### ⚡ Fast-Track to Analyzer")
                 ft_c1, ft_c2 = st.columns([3, 1])
                 with ft_c1: 
-                    selected_heater = st.selectbox("Select a target from the radar:", ["-- Select --"] + df_radar['Player'].tolist(), key=f"ft_sel_{league_name}")
+                    # Create formatted display strings for the dropdown: "Player Name (TEAM)"
+                    formatted_options = ["-- Select --"] + [f"{row['Player']} ({row['Team']})" if 'Team' in row else row['Player'] for _, row in df_radar.iterrows()]
+                    selected_heater = st.selectbox("Select a target from the radar:", formatted_options, key=f"ft_sel_{league_name}")
                 with ft_c2:
                     st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
                     if st.button("SEND TO BOARD 🚀", type="primary", use_container_width=True, key=f"ft_btn_{league_name}"):
                         if selected_heater != "-- Select --":
-                            # Injects the name into the search bar AND triggers the ML model instantly!
-                            st.session_state[f"sq_{league_name}"] = selected_heater
-                            st.session_state[f"target_player_{league_name}"] = selected_heater
+                            # Inject the perfectly formatted string into the search bar and target player state
+                            st.session_state[f"sq_{league_name}"] = selected_heater.split('(')[0].strip() # Clean search bar
+                            st.session_state[f"target_player_{league_name}"] = selected_heater # Full ML string
                             st.rerun()
 
         if f'radar_bb_{league_name}' in st.session_state:
