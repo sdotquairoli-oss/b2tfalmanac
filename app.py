@@ -87,7 +87,7 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
         ws = gc.open("B2TF_Database").worksheet(sheet_name)
         if ws.row_count == 0 or not ws.row_values(1): ws.append_row(expected_cols)
         ws.append_row([row_dict.get(col, "") for col in expected_cols])
-        load_sheet_df.clear() # 🧠 Wipe memory so the next read is fresh!
+        load_sheet_df.clear() 
     except Exception as e: st.error(f"Failed to save to database: {e}")
 
 def overwrite_sheet(sheet_name, df):
@@ -98,11 +98,11 @@ def overwrite_sheet(sheet_name, df):
         ws.clear()
         clean_df = df.fillna("")
         ws.update(values=[clean_df.columns.values.tolist()] + clean_df.values.tolist())
-        load_sheet_df.clear() # 🧠 Wipe memory so the next read is fresh!
+        load_sheet_df.clear() 
     except Exception as e: st.error(f"Failed to update database: {e}")
 
 # ==========================================
-# LEDGER WRAPPERS
+# 2. LEDGER WRAPPERS
 # ==========================================
 def load_ledger(): 
     df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
@@ -143,8 +143,9 @@ def get_liquid_balance():
                 prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof + (0 if is_f else risk)
             elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk)
     return max(bal, 0.0)
+
 # ==========================================
-# AUTO-GRADER & AI AUTOPSY
+# 3. AUTO-GRADER & AI AUTOPSY
 # ==========================================
 def auto_grade_ledger():
     df = load_ledger()
@@ -212,7 +213,7 @@ def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
     except: return "Failed to parse logs."
 
 # ==========================================
-# 🏀 AI PLAYER ARCHETYPE ENGINE & DEFENSE RADAR
+# 4. AI PLAYER ARCHETYPE ENGINE & DEFENSE RADAR
 # ==========================================
 @st.cache_data(ttl=43200) 
 def get_live_nba_team_stats():
@@ -284,7 +285,7 @@ def get_archetype_defense_modifier(league, opp, archetype):
         return 1.00, "Average Def (Neutral)"
 
 # ==========================================
-# ⛽ API FUEL GAUGE CHECKER
+# 5. API DATA PULLS & PARSERS
 # ==========================================
 def check_api_quota():
     if not ODDS_API_KEY: return
@@ -294,9 +295,6 @@ def check_api_quota():
         if u and rem: st.session_state['api_used'] = int(u); st.session_state['api_remaining'] = int(rem)
     except: pass
 
-# ==========================================
-# API DATA PULLS
-# ==========================================
 @st.cache_data(ttl=3600)
 def search_nba_players(query):
     if not query: return []
@@ -386,15 +384,6 @@ def get_mlb_schedule():
             matchups.append({"home": home, "away": away, "status": ds, "home_score": g['teams']['home'].get('score', 0), "away_score": g['teams']['away'].get('score', 0), "is_live_or_final": il})
         return matchups, "Success"
     except: return None, "Failed to connect to MLB API."
-
-def render_scoreboard(sd):
-    if not sd: return
-    for i in range(0, len(sd), 5):
-        cols = st.columns(5)
-        for j, g in enumerate(sd[i:i+5]):
-            with cols[j]:
-                dt = f"{g['away']} <span style='color: #FFD700;'>{g['away_score']}</span> - <span style='color: #FFD700;'>{g['home_score']}</span> {g['home']}" if g['is_live_or_final'] else f"{g['away']} @ {g['home']}"
-                st.markdown(f'<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;"><div style="font-size: 14px; font-weight: bold; color: #fff;">{dt}</div><div style="font-size: 11px; color: #00E5FF; margin-top: 4px;">{g["status"]}</div></div>', unsafe_allow_html=True)
 
 @st.cache_data(ttl=600)
 def get_live_line(player_label, stat_type, api_key, sport_path):
@@ -490,7 +479,6 @@ def get_nhl_stats(player_label):
         r = requests.get(f"https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=25&q={requests.utils.quote(cn)}", timeout=5).json()
         pid = next((p.get('playerId', p.get('id')) for p in r if p.get('name','').lower() == cn.lower()), r[0].get('playerId', r[0].get('id')) if r else None)
         
-        # 🕰️ The NHL Time Machine (Pull last 3 seasons)
         seasons = ['20252026', '20242025', '20232024']
         logs = []
         for s in seasons:
@@ -502,7 +490,6 @@ def get_nhl_stats(player_label):
         if not logs: return pd.DataFrame(), 404, []
         df = pd.DataFrame(logs)
         
-        # 🚨 THE SURGICAL FIX: Hardcode exact ML column names
         df['PTS'] = pd.to_numeric(df.get('points', 0))
         df['G'] = pd.to_numeric(df.get('goals', 0))
         df['A'] = pd.to_numeric(df.get('assists', 0))
@@ -515,7 +502,6 @@ def get_nhl_stats(player_label):
         df['ValidDate'] = pd.to_datetime(df['gameDate'])
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         
-        # 🧮 Time-Decay Math
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
@@ -523,6 +509,7 @@ def get_nhl_stats(player_label):
         
         return df.sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
+
 @st.cache_data(ttl=300)
 def get_mlb_stats(player_label):
     cn = player_label.split("(")[0].strip()
@@ -531,7 +518,6 @@ def get_mlb_stats(player_label):
         if not sr.get('people'): return pd.DataFrame(), 404, []
         pid = next((p['id'] for p in sr.get('people', []) if p.get('fullName','').lower() == cn.lower()), sr['people'][0]['id'] if sr.get('people') else None)
         
-        # 🕰️ The MLB Time Machine (Loop through last 3 years safely)
         curr_year = datetime.now().year
         seasons = [str(curr_year), str(curr_year-1), str(curr_year-2)]
         
@@ -539,7 +525,6 @@ def get_mlb_stats(player_label):
         for s in seasons:
             try:
                 log = requests.get(f"https://statsapi.mlb.com/api/v1/people/{pid}/stats?stats=gameLog&group=hitting,pitching&season={s}", timeout=5).json()
-                # 🚨 BUG FIX: Loop through ALL stat folders so Pitchers aren't ignored
                 if 'stats' in log:
                     for stat_group in log['stats']:
                         splits.extend(stat_group.get('splits', []))
@@ -552,7 +537,6 @@ def get_mlb_stats(player_label):
         df = pd.DataFrame(data)
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         
-        # 🧮 Time-Decay Math
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
@@ -576,7 +560,7 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
     return 5 * round(new_odds/5)
 
 # ==========================================
-# 🧠 SKYNET ML ENGINE (Phase 3)
+# 6. SKYNET ML ENGINE
 # ==========================================
 @st.cache_data(show_spinner=False, ttl=300)
 def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type):
@@ -669,8 +653,82 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, skynet_msg, skynet_color
 
 # ==========================================
-# 8. UI ENGINE
+# 7. SCANNERS (RADAR)
 # ==========================================
+@st.cache_data(ttl=3600)
+def run_nba_heaters():
+    try:
+        df = pd.DataFrame({"Message": ["NBA Scanner active. Cross-referencing top scorers with active slate."], "Status": ["Ready"]})
+        return df, "✅ NBA Scanner loaded."
+    except Exception as e: return None, f"API Error: {str(e)}"
+
+@st.cache_data(ttl=3600)
+def run_nhl_heaters():
+    try:
+        sched, _ = get_nhl_schedule()
+        if not sched: return None, "No NHL games scheduled today."
+        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+
+        r = requests.get("https://api-web.nhle.com/v1/skater-stats-leaders/current?gameTypes=2&limit=50", timeout=5).json()
+        heaters = [{"Player": f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip(), "Team": p.get('teamAbbrev'), "Category": "Points Leader", "Season Pts": p.get('points', 0), "Status": "🔥 Active Tonight"} for p in r.get('data', []) if p.get('teamAbbrev') in teams_today]
+
+        if not heaters: return None, "No top 50 league leaders playing tonight."
+        return pd.DataFrame(heaters), "✅ Found elite NHL scorers active on tonight's slate."
+    except Exception as e: return None, f"API Error: {str(e)}"
+
+@st.cache_data(ttl=3600)
+def run_barn_burner():
+    try:
+        schedule_data, _ = get_nhl_schedule()
+        if not schedule_data: return None, "No games scheduled today."
+        teams_today = []; team_to_opp = {}
+        for g in schedule_data: 
+            teams_today.extend([g['home'], g['away']])
+            team_to_opp[g['home']], team_to_opp[g['away']] = g['away'], g['home']
+            
+        r = requests.get("https://api.nhle.com/stats/rest/en/team/summary?sort=shotsAgainstPerGame&cayenneExp=seasonId=20252026", timeout=5).json()
+        bad_defenses = [t['teamAbbrev'] for t in r.get('data', []) if t.get('shotsAgainstPerGame', 0) > 31.0]
+        
+        targets = [{"Team": t, "Opp": team_to_opp[t], "Opp Status": "🧀 BAD DEFENSE (>31 SOG/G)"} for t in teams_today if team_to_opp[t] in bad_defenses]
+                
+        if not targets: return None, "No major defensive mismatches found on today's slate."
+        return pd.DataFrame(targets), "✅ Found optimal SOG matchups based on opponent weakness."
+    except Exception as e: return None, f"API Error: {str(e)}"
+
+@st.cache_data(ttl=3600)
+def run_mlb_heaters():
+    try:
+        sched, _ = get_mlb_schedule()
+        if not sched: return None, "No MLB games scheduled today."
+        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+
+        curr_year = datetime.now().year
+        r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year}&limit=50", timeout=5).json()
+        if not r.get('stats'): r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year-1}&limit=50", timeout=5).json()
+
+        heaters = []
+        for s in r.get('stats', []):
+            for p in s.get('splits', []):
+                team_name = p.get('team', {}).get('name', '').upper()
+                if any(t[:3].upper() in team_name for t in teams_today): 
+                    heaters.append({"Player": p.get('player', {}).get('fullName', ''), "Category": "Elite Hitter", "Season Hits": p.get('stat', {}).get('hits', 0), "Status": "🔥 Active Today"})
+
+        if not heaters: return None, "No top 50 hitters playing today."
+        return pd.DataFrame(heaters), "✅ Found elite MLB hitters active on today's slate."
+    except Exception as e: return None, f"API Error: {str(e)}"
+
+# ==========================================
+# 8. UI ENGINE & RENDERERS
+# ==========================================
+def render_scoreboard(sd):
+    if not sd: return
+    for i in range(0, len(sd), 5):
+        cols = st.columns(5)
+        for j, g in enumerate(sd[i:i+5]):
+            with cols[j]:
+                dt = f"{g['away']} <span style='color: #FFD700;'>{g['away_score']}</span> - <span style='color: #FFD700;'>{g['home_score']}</span> {g['home']}" if g['is_live_or_final'] else f"{g['away']} @ {g['home']}"
+                st.markdown(f'<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;"><div style="font-size: 14px; font-weight: bold; color: #fff;">{dt}</div><div style="font-size: 11px; color: #00E5FF; margin-top: 4px;">{g["status"]}</div></div>', unsafe_allow_html=True)
+
 def render_syndicate_board(league_key):
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
     teams = NBA_TEAMS if league_key == "NBA" else (MLB_TEAMS if league_key == "MLB" else NHL_TEAMS)
@@ -771,7 +829,6 @@ def render_syndicate_board(league_key):
                 elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
                 ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
 
-                # 🌟 Official AI Top Pick Banner
                 if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
                     st.markdown(f"""
                     <div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);">
@@ -845,77 +902,8 @@ def render_syndicate_board(league_key):
                         st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
         else: st.warning(f"🚨 **Warning:** No stats available for {target_player}.")
 
-# ==========================================
-# 9. SKYNET SCANNERS
-# ==========================================
-@st.cache_data(ttl=3600)
-def run_nba_heaters():
-    try:
-        # Simplified NBA Heater Proxy for speed
-        df = pd.DataFrame({"Message": ["NBA Scanner active. Cross-referencing top scorers with active slate."], "Status": ["Ready"]})
-        return df, "✅ NBA Scanner loaded."
-    except Exception as e: return None, f"API Error: {str(e)}"
-
-@st.cache_data(ttl=3600)
-def run_nhl_heaters():
-    try:
-        sched, _ = get_nhl_schedule()
-        if not sched: return None, "No NHL games scheduled today."
-        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
-
-        r = requests.get("https://api-web.nhle.com/v1/skater-stats-leaders/current?gameTypes=2&limit=50", timeout=5).json()
-        heaters = [{"Player": f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip(), "Team": p.get('teamAbbrev'), "Category": "Points Leader", "Season Pts": p.get('points', 0), "Status": "🔥 Active Tonight"} for p in r.get('data', []) if p.get('teamAbbrev') in teams_today]
-
-        if not heaters: return None, "No top 50 league leaders playing tonight."
-        return pd.DataFrame(heaters), "✅ Found elite NHL scorers active on tonight's slate."
-    except Exception as e: return None, f"API Error: {str(e)}"
-
-@st.cache_data(ttl=3600)
-def run_barn_burner():
-    try:
-        schedule_data, _ = get_nhl_schedule()
-        if not schedule_data: return None, "No games scheduled today."
-        teams_today = []; team_to_opp = {}
-        for g in schedule_data: 
-            teams_today.extend([g['home'], g['away']])
-            team_to_opp[g['home']], team_to_opp[g['away']] = g['away'], g['home']
-            
-        r = requests.get("https://api.nhle.com/stats/rest/en/team/summary?sort=shotsAgainstPerGame&cayenneExp=seasonId=20252026", timeout=5).json()
-        bad_defenses = [t['teamAbbrev'] for t in r.get('data', []) if t.get('shotsAgainstPerGame', 0) > 31.0]
-        
-        targets = [{"Team": t, "Opp": team_to_opp[t], "Opp Status": "🧀 BAD DEFENSE (>31 SOG/G)"} for t in teams_today if team_to_opp[t] in bad_defenses]
-                
-        if not targets: return None, "No major defensive mismatches found on today's slate."
-        return pd.DataFrame(targets), "✅ Found optimal SOG matchups based on opponent weakness."
-    except Exception as e: return None, f"API Error: {str(e)}"
-
-@st.cache_data(ttl=3600)
-def run_mlb_heaters():
-    try:
-        sched, _ = get_mlb_schedule()
-        if not sched: return None, "No MLB games scheduled today."
-        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
-
-        curr_year = datetime.now().year
-        r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year}&limit=50", timeout=5).json()
-        if not r.get('stats'): r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year-1}&limit=50", timeout=5).json()
-
-        heaters = []
-        for s in r.get('stats', []):
-            for p in s.get('splits', []):
-                team_name = p.get('team', {}).get('name', '').upper()
-                if any(t[:3].upper() in team_name for t in teams_today): 
-                    heaters.append({"Player": p.get('player', {}).get('fullName', ''), "Category": "Elite Hitter", "Season Hits": p.get('stat', {}).get('hits', 0), "Status": "🔥 Active Today"})
-
-        if not heaters: return None, "No top 50 hitters playing today."
-        return pd.DataFrame(heaters), "✅ Found elite MLB hitters active on today's slate."
-    except Exception as e: return None, f"API Error: {str(e)}"
-
-# ==========================================
-# 10. LEAGUE TAB RENDERER (NOW WITH EMBEDDED SCANNERS)
-# ==========================================
-def render_league_tab(league_name, schedule_func):
-    # 📡 THE EMBEDDED RADAR
+def render_league_tab(league_name, get_sched_func):
+    # Embedded Scanners
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
         if league_name == "NBA":
             if st.button("🏀 Scan NBA Heaters"):
@@ -943,82 +931,27 @@ def render_league_tab(league_name, schedule_func):
                     df, msg = run_mlb_heaters()
                     if df is not None: st.dataframe(df, use_container_width=True)
                     st.info(msg)
-                    
+    
     st.divider()
     
-    # Standard ML Board continues below...
+    c1, c2 = st.columns([8, 1])
+    with c1: st.markdown(f"### 📅 Today's {league_name} Slate")
+    with c2: 
+        if st.button("🔄 Refresh", key=f"ref_{league_name}"): st.rerun()
+    with st.spinner("Loading matchups..."): sched, msg = get_sched_func()
+    if sched: render_scoreboard(sched)
+    else: st.info(msg)
+    st.markdown("---")
     render_syndicate_board(league_name)
 
 # ==========================================
-# 11. MAIN APP ROUTING & UI
-# ==========================================
-st.sidebar.markdown(f"### 🏦 Liquid Bankroll: <span style='color:#00E676;'>${get_liquid_balance():.2f}</span>", unsafe_allow_html=True)
-roi_mode = st.sidebar.radio("Navigation", ["🎯 Syndicate Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger"])
-st.sidebar.markdown("---")
-if st.sidebar.button("🧹 Clear Skynet Cache (Reset API)"): st.cache_data.clear(); st.sidebar.success("Cache Cleared!")
-
-if roi_mode == "🎯 Syndicate Picks":
-    t_nba, t_nhl, t_mlb = st.tabs(["🏀 NBA", "🏒 NHL", "⚾ MLB"])
-    with t_nba: render_league_tab("NBA", get_nba_schedule)
-    with t_nhl: render_league_tab("NHL", get_nhl_schedule)
-    with t_mlb: render_league_tab("MLB", get_mlb_schedule)
-
-elif roi_mode == "🎟️ Parlay Tracker":
-    st.markdown("## 🎟️ Syndicate Parlay Builder")
-    ledger_df = load_ledger()
-    pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
-    
-    if pending_picks.empty: st.warning("No pending singles found. Go to 'Syndicate Picks' to build your slips!")
-    else:
-        pick_options = []
-        pick_odds_map, pick_prob_map = {}, {}
-        for _, r in pending_picks.iterrows():
-            o = int(pd.to_numeric(r['Odds'], errors='coerce'))
-            prob = float(r.get('Win_Prob', 0.55))
-            label = f"{r['Player']} ({r['Stat']} {r['Vote']} {r['Line']}) [{o:+d}]"
-            pick_options.append(label)
-            pick_odds_map[label] = o
-            pick_prob_map[label] = prob
-            
-        selected_picks = st.multiselect("🔗 Link Pending Picks into a Ticket", pick_options)
-        
-        calc_dec, c_prob = 1.0, 1.0 
-        for p in selected_picks:
-            o = pick_odds_map[p]
-            calc_dec *= ((o / 100.0) + 1.0) if o > 0 else ((100.0 / abs(o)) + 1.0)
-            c_prob *= pick_prob_map.get(p, 0.55)
-                
-        true_american = int(round((calc_dec - 1.0) * 100)) if calc_dec >= 2.0 else int(round(-100.0 / (calc_dec - 1.0))) if selected_picks else 150
-        
-        p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
-        with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68)
-        with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10)
-        with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0)
-        with p_col4: 
-            p_book = st.selectbox("Sportsbook", SPORTSBOOKS)
-            p_free = st.checkbox("🆓 Free Bet")
-            p_boost = st.checkbox("🚀 Odds Boost")
-            
-        proj_profit = (p_risk * (p_odds / 100) if p_odds > 0 else p_risk / (abs(p_odds) / 100)) if p_odds != 0 else 0.0
-        st.info(f"💸 **Projected Payout:** ${(proj_profit if p_free else p_risk + proj_profit):.2f} (Profit: ${proj_profit:.2f})")
-        
-        if st.button("➕ Add Bet to Tracker", type="primary"):
-            if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
-            else: st.error("Please enter a description.")
-
-elif roi_mode == "🏦 ROI Ledger":
-    st.markdown("## 🏦 The Syndicate Ledger")
-    # You can keep your standard ROI Ledger rendering logic here...
-    st.info("Your ROI auto-grader and slips are actively tracking in the background.")
-# ==========================================
-# 10. APP WRAPPER
+# 9. MAIN APP WRAPPER & ROUTING
 # ==========================================
 video_path = "delorean.mp4"
 if os.path.exists(video_path):
     with open(video_path, "rb") as video_file: video_base64 = base64.b64encode(video_file.read()).decode()
     html_code = f"""<!DOCTYPE html><html><head><style>@import url('https://fonts.googleapis.com/css2?family=Audiowide&display=swap');body {{margin: 0;padding: 0;background-color: #0f172a;overflow: hidden;font-family: 'Audiowide', sans-serif;}}.b2tf-header-container {{position: relative;overflow: hidden;border-radius: 12px;border: 3px solid #ff0055;text-align: center;background-color: #0f172a;box-shadow: 0 0 15px #ff0055;height: 274px; display: flex;align-items: center;justify-content: center;flex-direction: column;}}@keyframes fade-out-video {{0% {{ opacity: 0.6; }}100% {{ opacity: 0; }}}}.b2tf-video-bg {{position: absolute;top: 0;left: 0;width: 100%;height: 100%;z-index: 0;opacity: 0.6;object-fit: cover;animation: fade-out-video 2.3s ease-out 4.6s forwards; }}.b2tf-content {{position: relative;z-index: 1;opacity: 0;animation: fade-in-text 4.7s ease-out 4.5s forwards; }}@keyframes fade-in-text {{0% {{ opacity: 0; transform: translateY(15px) scale(0.9); }}100% {{ opacity: 1; transform: translateY(0) scale(1); }}}}h1 {{color: #ffcc00; font-size: 56px; font-weight: 900; margin: 0; text-shadow: 0 0 10px #ff6600, 0 0 20px #ff0000, 0 0 30px #ff0000; letter-spacing: 2px;}}.subtitle {{color: #00E5FF; font-size: 16px; font-weight: bold; letter-spacing: 3px; margin-top: 5px; text-shadow: 0 0 5px #00E5FF; background: rgba(15, 23, 42, 0.7); padding: 5px 15px; border-radius: 8px; display: inline-block;}}</style></head><body><div class="b2tf-header-container"><video id="delorean-vid" class="b2tf-video-bg" autoplay muted playsinline><source src="data:video/mp4;base64,{video_base64}" type="video/mp4"></video><div class="b2tf-content"><h1>B2TF ALMANAC</h1><div class="subtitle">ROADS? WHERE WE'RE GOING, WE DON'T NEED ROADS.</div></div></div><script>var video = document.getElementById('delorean-vid');video.addEventListener('loadedmetadata', function() {{video.currentTime = 1.0;}}, false);</script></body></html>"""
     components.html(html_code, height=280)
-else: st.error("⚠️ The system cannot find the video file.")
 
 with st.expander("⛽ System Diagnostics & API Fuel Gauge", expanded=False):
     diag_c1, diag_c2 = st.columns([1, 2])
@@ -1038,166 +971,35 @@ with st.expander("⛽ System Diagnostics & API Fuel Gauge", expanded=False):
                 else: st.caption("Sync a bet or hit 'Check' to load data.")
         else: st.warning("API Key missing.")
 
-def render_league_tab(league_name, get_sched_func):
-    c1, c2 = st.columns([8, 1])
-    with c1: st.markdown("### 📅 Today's Slate")
-    with c2: 
-        if st.button("🔄 Refresh", key=f"ref_{league_name}"): st.rerun()
-    with st.spinner("Loading matchups..."): sched, msg = get_sched_func()
-    if sched: render_scoreboard(sched)
-    else: st.info(msg)
-    st.markdown("---")
-    render_syndicate_board(league_name)
+# SIDEBAR NAVIGATION
+st.sidebar.markdown(f"### 🏦 Liquid Bankroll: <span style='color:#00E676;'>${get_liquid_balance():.2f}</span>", unsafe_allow_html=True)
+roi_mode = st.sidebar.radio("Navigation", ["🎯 Syndicate Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger", "💵 Wallet Manager"])
+st.sidebar.markdown("---")
+if st.sidebar.button("🧹 Clear Skynet Cache (Reset API)"): st.cache_data.clear(); st.sidebar.success("Cache Cleared!")
 
-tab_nba, tab_nhl, tab_mlb, tab_roi = st.tabs(["🏀 NBA Board", "🏒 NHL Board", "⚾ MLB Board", "🏦 ROI Ledger"])
+# PAGE ROUTING
+if roi_mode == "🎯 Syndicate Picks":
+    t_nba, t_nhl, t_mlb = st.tabs(["🏀 NBA", "🏒 NHL", "⚾ MLB"])
+    with t_nba: render_league_tab("NBA", get_nba_schedule)
+    with t_nhl: render_league_tab("NHL", get_nhl_schedule)
+    with t_mlb: render_league_tab("MLB", get_mlb_schedule)
 
-with tab_nba:
-    render_league_tab("NBA", get_nba_schedule)
-    st.markdown("---")
-    with st.expander("🔥 Launch NBA Heaters & Freezers Scanner", expanded=False):
-        nba_heat_c1, nba_heat_c2 = st.columns([1, 2])
-        with nba_heat_c1: target_stat_nba = st.selectbox("Select Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists"])
-        if st.button("🚀 Scan Today's NBA Slate", type="primary"):
-            with st.status(f"Scanning for {target_stat_nba} trends...", expanded=True) as status:
-                df_nba_heat, msg = run_nba_heaters(target_stat_nba)
-                status.update(label="Scan Complete!", state="complete", expanded=False)
-                if df_nba_heat is not None: st.success(msg); st.dataframe(df_nba_heat, use_container_width=True, hide_index=True)
-                else: st.warning(msg)
-
-with tab_nhl:
-    render_league_tab("NHL", get_nhl_schedule)
-
-with tab_mlb:
-    render_league_tab("MLB", get_mlb_schedule)
-
-with tab_roi:
-    roi_mode = st.sidebar.radio("Navigation", ["🎯 Individual Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger", "📡 Skynet Scanners"])
-    st.markdown("---")
+elif roi_mode == "🎟️ Parlay Tracker":
+    st.markdown("## 🎟️ Syndicate Parlay Builder")
+    ledger_df = load_ledger()
+    pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
     
-    if roi_mode == "💵 Wallet Manager":
-        st.markdown("### 💵 Multi-Sportsbook Wallet")
-        st.caption("Track balances across different apps.")
-        bw_c1, bw_c2 = st.columns([2, 1])
-        with bw_c1:
-            with st.form("bankroll_form"):
-                sc1, sc2 = st.columns(2)
-                t_book = sc1.selectbox("Sportsbook", SPORTSBOOKS)
-                t_type = sc2.selectbox("Transaction Type", ["Deposit (Out of Pocket)", "Withdrawal (Cash Out)", "Casino Win (House Money)", "Casino Loss (Bad Spins)"])
-                t_amount = st.number_input("Amount ($)", min_value=1.0, step=10.0)
-                if st.form_submit_button("Log Transaction"):
-                    save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
-                    st.success("Transaction Logged!"); time.sleep(1); st.rerun()
-                    
-        b_df, p_df, book_balances, total_liquid, tot_dep, tot_wit, tot_cas, tot_sports = load_bankroll(), load_parlay_ledger(), {}, 0.0, 0.0, 0.0, 0.0, 0.0
-        if not b_df.empty:
-            tot_dep = pd.to_numeric(b_df[b_df['Type'] == 'Deposit']['Amount'], errors='coerce').sum() if 'Deposit' in b_df['Type'].values else 0.0
-            tot_wit = abs(pd.to_numeric(b_df[b_df['Type'] == 'Withdrawal']['Amount'], errors='coerce').sum()) if 'Withdrawal' in b_df['Type'].values else 0.0
-            tot_cas = pd.to_numeric(b_df[b_df['Type'] == 'Casino']['Amount'], errors='coerce').sum() if 'Casino' in b_df['Type'].values else 0.0
-        
-        for book in SPORTSBOOKS:
-            bal, has_hist = 0.0, False
-            if not b_df.empty and book in b_df['Sportsbook'].values: bal += pd.to_numeric(b_df[b_df['Sportsbook'] == book]['Amount'], errors='coerce').sum(); has_hist = True
-            if not p_df.empty and book in p_df['Sportsbook'].values:
-                has_hist = True
-                for _, r in p_df[p_df['Sportsbook'] == book].iterrows():
-                    o, risk, is_f = pd.to_numeric(r['Odds'], errors='coerce'), pd.to_numeric(r['Risk'], errors='coerce'), r.get('Is_Free_Bet', False)
-                    if r['Result'] == 'Win': 
-                        prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof + (0 if is_f else risk); tot_sports += prof
-                    elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk); tot_sports -= ((0 if is_f else risk) if r['Result'] == 'Loss' else 0)
-            if has_hist or bal != 0.0: book_balances[book] = bal; total_liquid += bal
-                
-        with bw_c2:
-            st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;"><div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div><div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${max(total_liquid, 0.0):.2f}</div><div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;"><span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span><span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span><span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span></div></div>""", unsafe_allow_html=True)
-            
-        if book_balances:
-            st.markdown("#### 📱 Portfolio Breakdown")
-            port_cols = st.columns(min(len(book_balances), 4))
-            for i, (book, bal) in enumerate(book_balances.items()):
-                port_cols[i % 4].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal >= 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="font-size: 14px; font-weight: bold; color: #00E5FF; margin-bottom: 5px;">{book}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
-
-    elif roi_mode == "🎯 Individual Picks":
-        roi_col1, roi_col2 = st.columns([4, 1])
-        with roi_col1: st.markdown("### 🏦 The Bankroll (Single Units)")
-        with roi_col2:
-            if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
-                with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
-                st.success(grade_msg); time.sleep(1.5); st.rerun()
-                
-        ledger_df = load_ledger()
-        if not ledger_df.empty:
-            graded_df = ledger_df[ledger_df['Result'].isin(['Win', 'Loss'])]
-            wins, losses, profit = len(graded_df[graded_df['Result'] == 'Win']), len(graded_df[graded_df['Result'] == 'Loss']), 0.0
-            
-            for _, row in graded_df.iterrows():
-                o = pd.to_numeric(row['Odds'], errors='coerce')
-                profit += ((100 / (abs(o)/100)) if o < 0 else o) if row['Result'] == 'Win' else -100
-                    
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Total Graded Picks", f"{wins + losses}")
-            m2.metric("Win Rate", f"{(wins / (wins + losses) * 100) if (wins + losses) > 0 else 0.0:.1f}%")
-            m3.metric("Net Profit (from $100 bets)", f"${profit:+.2f}")
-            m4.metric("ROI (%)", f"{(profit / ((wins + losses) * 100) * 100) if (wins + losses) > 0 else 0.0:+.1f}%")
-            
-            st.markdown("#### 🎫 Your Bet Slips")
-            new_results = {}
-            for i, row in ledger_df.iloc[::-1].reset_index().iterrows():
-                orig_idx, o = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce'))
-                status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
-                
-                boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
-                
-                sc1, sc2 = st.columns([4, 1])
-                with sc1:
-                    st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">{row['League']} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 16px; font-weight: 900; color: #00E5FF;">{row['Player']}</div><div style="font-size: 14px; font-weight: bold; color: #f8fafc; margin-top: 2px;">{row['Stat']} <span style="color: #00E676;">{row['Vote']} {row['Line']}</span></div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">Risk: $100.00 &nbsp;|&nbsp; <span style="color: #00E5FF; font-weight: bold;">AI Prob: {float(row.get('Win_Prob', 0.55)) * 100:.1f}%</span></span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${(100 + ((100 * (o / 100)) if o > 0 else (100 / (abs(o) / 100)))):.2f}</span></div></div>""", unsafe_allow_html=True)
-                    if row['Result'] == 'Loss':
-                        if st.button("🔍 Run AI Autopsy", key=f"run_auto_{orig_idx}"):
-                            with st.spinner("Analyzing logs..."): st.session_state[f"autopsy_{orig_idx}"] = generate_ai_autopsy(row['League'], row['Player'], row['Stat'], row['Line'], row['Vote'], row['Date'])
-                        if st.session_state.get(f"autopsy_{orig_idx}"): st.markdown(f"""<div style="background-color: rgba(255, 0, 85, 0.1); border-left: 3px solid #ff0055; padding: 10px; margin-top: -5px; margin-bottom: 10px; font-size: 13px; color: #f8fafc;">{st.session_state[f"autopsy_{orig_idx}"]}</div>""", unsafe_allow_html=True)
-                with sc2:
-                    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
-                    opts = ["Pending", "Win", "Loss", "Push"]
-                    new_results[orig_idx] = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"s_res_{orig_idx}", label_visibility="collapsed")
-                    
-                    
-            if st.button("💾 Save All Single Grades", type="primary", use_container_width=True):
-                for orig_idx, res in new_results.items(): ledger_df.at[orig_idx, 'Result'] = res
-                overwrite_sheet("ROI_Ledger", ledger_df); st.success("Ledger Updated!"); time.sleep(1); st.rerun()
-
-    elif roi_mode == "🎟️ Parlay Tracker":
-        st.markdown("### 🎟️ Parlay Tracker")
-        single_df = load_ledger()
+    if pending_picks.empty: st.warning("No pending singles found. Go to 'Syndicate Picks' to build your slips!")
+    else:
         pick_options, pick_odds_map, pick_prob_map = [], {}, {}
-        
-        if not single_df.empty:
-            for _, row in single_df[single_df['Result'] == 'Pending'].iterrows():
-                desc_str = f"{row['Player']} - {row['Stat']} {row['Vote']} {row['Line']}"
-                pick_options.append(desc_str); pick_odds_map[desc_str] = float(row['Odds']); pick_prob_map[desc_str] = float(row.get('Win_Prob', 0.55))
-    elif roi_mode == "📡 Skynet Scanners":
-        st.markdown("### 📡 The Syndicate Radar")
-        scan_col1, scan_col2, scan_col3 = st.columns(3)
-        
-        with scan_col1:
-            if st.button("🏀 Run NBA Heaters"):
-                with st.spinner("Scanning NBA..."):
-                    df, msg = run_nba_heaters()
-                    if df is not None: st.dataframe(df, use_container_width=True)
-                    st.info(msg)
-                    
-        with scan_col2:
-            if st.button("🏒 Run NHL Heaters"):
-                with st.spinner("Scanning NHL..."):
-                    df, msg = run_nhl_heaters()
-                    if df is not None: st.dataframe(df, use_container_width=True)
-                    st.info(msg)
-                    
-        with scan_col3:
-            if st.button("⚾ Run MLB Heaters"):
-                with st.spinner("Scanning MLB..."):
-                    df, msg = run_mlb_heaters()
-                    if df is not None: st.dataframe(df, use_container_width=True)
-                    st.info(msg)   
-                    
-# Added unique memory keys to stabilize the UI and prevent freezing
+        for _, r in pending_picks.iterrows():
+            o = int(pd.to_numeric(r['Odds'], errors='coerce'))
+            prob = float(r.get('Win_Prob', 0.55))
+            label = f"{r['Player']} ({r['Stat']} {r['Vote']} {r['Line']}) [{o:+d}]"
+            pick_options.append(label)
+            pick_odds_map[label] = o
+            pick_prob_map[label] = prob
+            
         selected_picks = st.multiselect("🔗 Link Pending Picks into a Ticket", pick_options, key="parlay_picker")
         
         calc_dec, c_prob = 1.0, 1.0 
@@ -1238,41 +1040,128 @@ with tab_roi:
             if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
             else: st.error("Please enter a description.")
 
-        parlay_df = load_parlay_ledger()
-        if not parlay_df.empty:
-            st.markdown("---")
-            graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss'])]
-            p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
-            
-            for _, row in graded_p.iterrows():
-                o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
-                if not is_f: total_staked += r
-                if row['Result'] == 'Win': p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-                else: p_profit -= (0 if is_f else r)
-            
-            pm1, pm2, pm3, pm4 = st.columns(4)
-            pm1.metric("Total Graded Live/Parlays", f"{p_total}")
-            pm2.metric("Win Rate", f"{(p_wins / p_total * 100) if p_total > 0 else 0.0:.1f}%")
-            pm3.metric("Net Profit", f"${p_profit:+.2f}")
-            pm4.metric("ROI (%)", f"{(p_profit / total_staked * 100) if p_total > 0 and total_staked > 0 else 0.0:+.1f}%")
+    parlay_df = load_parlay_ledger()
+    if not parlay_df.empty:
+        st.markdown("---")
+        graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss'])]
+        p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
+        
+        for _, row in graded_p.iterrows():
+            o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
+            if not is_f: total_staked += r
+            if row['Result'] == 'Win': p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+            else: p_profit -= (0 if is_f else r)
+        
+        pm1, pm2, pm3, pm4 = st.columns(4)
+        pm1.metric("Total Graded Live/Parlays", f"{p_total}")
+        pm2.metric("Win Rate", f"{(p_wins / p_total * 100) if p_total > 0 else 0.0:.1f}%")
+        pm3.metric("Net Profit", f"${p_profit:+.2f}")
+        pm4.metric("ROI (%)", f"{(p_profit / total_staked * 100) if p_total > 0 and total_staked > 0 else 0.0:+.1f}%")
 
-            st.markdown("#### 🎫 Your Live / Parlay Slips")
-            new_p_results = {}
-            for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
-                orig_idx, o, r, is_f = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce')), float(pd.to_numeric(row['Risk'], errors='coerce')), row.get('Is_Free_Bet', False)
-                status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
-                legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
+        st.markdown("#### 🎫 Your Live / Parlay Slips")
+        new_p_results = {}
+        for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
+            orig_idx, o, r, is_f = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce')), float(pd.to_numeric(row['Risk'], errors='coerce')), row.get('Is_Free_Bet', False)
+            status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
+            legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
+            
+            boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
+            
+            pc1, pc2 = st.columns([4, 1])
+            with pc1: st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{row.get('Sportsbook', 'LIVE BET').upper()} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${( ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) if is_f else r + ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) ):.2f}</span></div></div>""", unsafe_allow_html=True)
+            with pc2:
+                st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+                opts = ["Pending", "Win", "Loss", "Push"]
+                new_p_results[orig_idx] = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
                 
-                # The Golden Boost Tag!
-                boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
+        if st.button("💾 Save All Live/Parlay Grades", type="primary", use_container_width=True):
+            for orig_idx, res in new_p_results.items(): parlay_df.at[orig_idx, 'Result'] = res
+            overwrite_sheet("Parlay_Ledger", parlay_df); st.success("Tracker Updated!"); time.sleep(1); st.rerun()
+
+elif roi_mode == "🏦 ROI Ledger":
+    roi_col1, roi_col2 = st.columns([4, 1])
+    with roi_col1: st.markdown("### 🏦 The Bankroll (Single Units)")
+    with roi_col2:
+        if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
+            with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
+            st.success(grade_msg); time.sleep(1.5); st.rerun()
+            
+    ledger_df = load_ledger()
+    if not ledger_df.empty:
+        graded_df = ledger_df[ledger_df['Result'].isin(['Win', 'Loss'])]
+        wins, losses, profit = len(graded_df[graded_df['Result'] == 'Win']), len(graded_df[graded_df['Result'] == 'Loss']), 0.0
+        
+        for _, row in graded_df.iterrows():
+            o = pd.to_numeric(row['Odds'], errors='coerce')
+            profit += ((100 / (abs(o)/100)) if o < 0 else o) if row['Result'] == 'Win' else -100
                 
-                pc1, pc2 = st.columns([4, 1])
-                with pc1: st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{row.get('Sportsbook', 'LIVE BET').upper()} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${( ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) if is_f else r + ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) ):.2f}</span></div></div>""", unsafe_allow_html=True)
-                with pc2:
-                    st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-                    opts = ["Pending", "Win", "Loss", "Push"]
-                    new_p_results[orig_idx] = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
-                    
-            if st.button("💾 Save All Live/Parlay Grades", type="primary", use_container_width=True):
-                for orig_idx, res in new_p_results.items(): parlay_df.at[orig_idx, 'Result'] = res
-                overwrite_sheet("Parlay_Ledger", parlay_df); st.success("Tracker Updated!"); time.sleep(1); st.rerun()
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Graded Picks", f"{wins + losses}")
+        m2.metric("Win Rate", f"{(wins / (wins + losses) * 100) if (wins + losses) > 0 else 0.0:.1f}%")
+        m3.metric("Net Profit (from $100 bets)", f"${profit:+.2f}")
+        m4.metric("ROI (%)", f"{(profit / ((wins + losses) * 100) * 100) if (wins + losses) > 0 else 0.0:+.1f}%")
+        
+        st.markdown("#### 🎫 Your Bet Slips")
+        new_results = {}
+        for i, row in ledger_df.iloc[::-1].reset_index().iterrows():
+            orig_idx, o = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce'))
+            status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
+            
+            boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
+            
+            sc1, sc2 = st.columns([4, 1])
+            with sc1:
+                st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">{row['League']} • {row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 16px; font-weight: 900; color: #00E5FF;">{row['Player']}</div><div style="font-size: 14px; font-weight: bold; color: #f8fafc; margin-top: 2px;">{row['Stat']} <span style="color: #00E676;">{row['Vote']} {row['Line']}</span></div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">Risk: $100.00 &nbsp;|&nbsp; <span style="color: #00E5FF; font-weight: bold;">AI Prob: {float(row.get('Win_Prob', 0.55)) * 100:.1f}%</span></span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${(100 + ((100 * (o / 100)) if o > 0 else (100 / (abs(o) / 100)))):.2f}</span></div></div>""", unsafe_allow_html=True)
+                if row['Result'] == 'Loss':
+                    if st.button("🔍 Run AI Autopsy", key=f"run_auto_{orig_idx}"):
+                        with st.spinner("Analyzing logs..."): st.session_state[f"autopsy_{orig_idx}"] = generate_ai_autopsy(row['League'], row['Player'], row['Stat'], row['Line'], row['Vote'], row['Date'])
+                    if st.session_state.get(f"autopsy_{orig_idx}"): st.markdown(f"""<div style="background-color: rgba(255, 0, 85, 0.1); border-left: 3px solid #ff0055; padding: 10px; margin-top: -5px; margin-bottom: 10px; font-size: 13px; color: #f8fafc;">{st.session_state[f"autopsy_{orig_idx}"]}</div>""", unsafe_allow_html=True)
+            with sc2:
+                st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+                opts = ["Pending", "Win", "Loss", "Push"]
+                new_results[orig_idx] = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"s_res_{orig_idx}", label_visibility="collapsed")
+                
+        if st.button("💾 Save All Single Grades", type="primary", use_container_width=True):
+            for orig_idx, res in new_results.items(): ledger_df.at[orig_idx, 'Result'] = res
+            overwrite_sheet("ROI_Ledger", ledger_df); st.success("Ledger Updated!"); time.sleep(1); st.rerun()
+
+elif roi_mode == "💵 Wallet Manager":
+    st.markdown("### 💵 Multi-Sportsbook Wallet")
+    st.caption("Track balances across different apps.")
+    bw_c1, bw_c2 = st.columns([2, 1])
+    with bw_c1:
+        with st.form("bankroll_form"):
+            sc1, sc2 = st.columns(2)
+            t_book = sc1.selectbox("Sportsbook", SPORTSBOOKS)
+            t_type = sc2.selectbox("Transaction Type", ["Deposit (Out of Pocket)", "Withdrawal (Cash Out)", "Casino Win (House Money)", "Casino Loss (Bad Spins)"])
+            t_amount = st.number_input("Amount ($)", min_value=1.0, step=10.0)
+            if st.form_submit_button("Log Transaction"):
+                save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
+                st.success("Transaction Logged!"); time.sleep(1); st.rerun()
+                
+    b_df, p_df, book_balances, total_liquid, tot_dep, tot_wit, tot_cas, tot_sports = load_bankroll(), load_parlay_ledger(), {}, 0.0, 0.0, 0.0, 0.0, 0.0
+    if not b_df.empty:
+        tot_dep = pd.to_numeric(b_df[b_df['Type'] == 'Deposit']['Amount'], errors='coerce').sum() if 'Deposit' in b_df['Type'].values else 0.0
+        tot_wit = abs(pd.to_numeric(b_df[b_df['Type'] == 'Withdrawal']['Amount'], errors='coerce').sum()) if 'Withdrawal' in b_df['Type'].values else 0.0
+        tot_cas = pd.to_numeric(b_df[b_df['Type'] == 'Casino']['Amount'], errors='coerce').sum() if 'Casino' in b_df['Type'].values else 0.0
+    
+    for book in SPORTSBOOKS:
+        bal, has_hist = 0.0, False
+        if not b_df.empty and book in b_df['Sportsbook'].values: bal += pd.to_numeric(b_df[b_df['Sportsbook'] == book]['Amount'], errors='coerce').sum(); has_hist = True
+        if not p_df.empty and book in p_df['Sportsbook'].values:
+            has_hist = True
+            for _, r in p_df[p_df['Sportsbook'] == book].iterrows():
+                o, risk, is_f = pd.to_numeric(r['Odds'], errors='coerce'), pd.to_numeric(r['Risk'], errors='coerce'), r.get('Is_Free_Bet', False)
+                if r['Result'] == 'Win': 
+                    prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof + (0 if is_f else risk); tot_sports += prof
+                elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk); tot_sports -= ((0 if is_f else risk) if r['Result'] == 'Loss' else 0)
+        if has_hist or bal != 0.0: book_balances[book] = bal; total_liquid += bal
+            
+    with bw_c2:
+        st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;"><div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div><div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${max(total_liquid, 0.0):.2f}</div><div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;"><span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span><span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span><span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span></div></div>""", unsafe_allow_html=True)
+        
+    if book_balances:
+        st.markdown("#### 📱 Portfolio Breakdown")
+        port_cols = st.columns(min(len(book_balances), 4))
+        for i, (book, bal) in enumerate(book_balances.items()):
+            port_cols[i % 4].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal >= 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="font-size: 14px; font-weight: bold; color: #00E5FF; margin-bottom: 5px;">{book}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
