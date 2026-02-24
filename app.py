@@ -769,6 +769,11 @@ def run_mlb_heaters():
 # ==========================================
 # 5. UI RENDERERS
 # ==========================================
+def init_state(key, default):
+    """Sleek helper to initialize and retrieve session state variables."""
+    if key not in st.session_state: st.session_state[key] = default
+    return st.session_state[key]
+    
 def render_scoreboard(sd):
     if not sd: return
     for i in range(0, len(sd), 5):
@@ -778,7 +783,78 @@ def render_scoreboard(sd):
                 dt = f"{g['away']} <span style='color: #FFD700;'>{g['away_score']}</span> - <span style='color: #FFD700;'>{g['home_score']}</span> {g['home']}" if g['is_live_or_final'] else f"{g['away']} @ {g['home']}"
                 st.markdown(f'<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;"><div style="font-size: 14px; font-weight: bold; color: #fff;">{dt}</div><div style="font-size: 11px; color: #00E5FF; margin-top: 4px;">{g["status"]}</div></div>', unsafe_allow_html=True)
 
+def render_league_scanners(league_name):
+    lk = league_name.lower()
+    with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
+        c1, c2 = st.columns(2)
+        if league_name == "NBA":
+            if c1.button("🏀 Scan NBA Heaters", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
+                with st.spinner("Scanning NBA..."):
+                    df, msg = run_nba_heaters()
+                    if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                    st.info(msg)
+        elif league_name == "NHL":
+            if c1.button("🏒 Scan NHL Heaters", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
+                with st.spinner("Scanning NHL Skaters..."):
+                    df, msg = run_nhl_heaters()
+                    if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                    st.info(msg)
+            if c2.button("🚨 Scan Barn Burners", type="primary", use_container_width=True, key=f"{lk}.btn.bb"):
+                with st.spinner("Hunting weak defenses..."):
+                    df, msg = run_barn_burner()
+                    if df is not None: st.session_state[f'{lk}.radar.bb'] = df
+                    st.info(msg)
+        elif league_name == "MLB":
+            if c1.button("⚾ Scan MLB Heaters", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
+                with st.spinner("Scanning Elite Hitters..."):
+                    df, msg = run_mlb_heaters()
+                    if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                    st.info(msg)
+        
+        # --- ⚡ THE SKYNET FAST-TRACK PIPELINE ---
+        if f'{lk}.radar.heaters' in st.session_state:
+            df_radar = st.session_state[f'{lk}.radar.heaters']
+            
+            st.dataframe(
+                df_radar, use_container_width=True, hide_index=True,
+                column_config={
+                    "Player": st.column_config.TextColumn("🔥 Player", width="medium"),
+                    "Team": st.column_config.TextColumn("🛡️ Team", width="small"),
+                    "Category": st.column_config.TextColumn("📊 Category", width="small"),
+                    "Season PPG": st.column_config.NumberColumn("🎯 Season PPG", format="%.1f", width="small"),
+                    "Season Pts": st.column_config.NumberColumn("🎯 Points", format="%d", width="small"),
+                    "Season Hits": st.column_config.NumberColumn("⚾ Hits", format="%d", width="small"),
+                    "Status": st.column_config.TextColumn("⚡ Status", width="medium")
+                }
+            )
+            
+            if 'Player' in df_radar.columns:
+                st.markdown("#### ⚡ Fast-Track to Analyzer")
+                ft_c1, ft_c2 = st.columns([3, 1])
+                with ft_c1: 
+                    formatted_options = ["-- Select --"] + [f"{row['Player']} ({row['Team']})" if 'Team' in row else row['Player'] for _, row in df_radar.iterrows()]
+                    selected_heater = st.selectbox("Select a target from the radar:", formatted_options, key=f"{lk}.ft_sel")
+                with ft_c2:
+                    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+                    if st.button("SEND TO BOARD 🚀", type="primary", use_container_width=True, key=f"{lk}.ft_btn"):
+                        if selected_heater != "-- Select --":
+                            st.session_state[f"{lk}.search_query"] = selected_heater.split('(')[0].strip() 
+                            st.session_state[f"{lk}.target_player"] = selected_heater 
+                            st.rerun()
+
+        if f'{lk}.radar.bb' in st.session_state:
+            st.markdown("#### 🚨 Weak Defenses Detected")
+            st.dataframe(
+                st.session_state[f'{lk}.radar.bb'], use_container_width=True, hide_index=True,
+                column_config={
+                    "Team": st.column_config.TextColumn("🛡️ Target Team", width="medium"),
+                    "Opp": st.column_config.TextColumn("🎯 Weak Opponent", width="medium"),
+                    "Opp Status": st.column_config.TextColumn("🚨 Defense Metric", width="large")
+                }
+            )
+
 def render_syndicate_board(league_key):
+    lk = league_key.lower() # ⚡ The Universal Namespace Prefix
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
     teams = NBA_TEAMS if league_key == "NBA" else (MLB_TEAMS if league_key == "MLB" else NHL_TEAMS)
     
@@ -793,11 +869,11 @@ def render_syndicate_board(league_key):
     with st.container():
         c1, c2, c3, c4 = st.columns([2, 1.5, 1, 1.5])
         with c1: 
-            search_query = st.text_input(f"🔍 1. Search Player", placeholder="e.g. Judge, LeBron", key=f"sq_{league_key}")
+            search_query = st.text_input(f"🔍 1. Search Player", placeholder="e.g. Judge, LeBron", key=f"{lk}.search_query")
             player_name = None
             if search_query:
                 matches = search_nba_players(search_query) if league_key == "NBA" else (search_mlb_players(search_query) if league_key == "MLB" else search_nhl_players(search_query))
-                if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"dd_{league_key}")
+                if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"{lk}.dropdown")
                 else: st.caption("No players found.")
                 
         # 🕵️‍♂️ SKYNET AUTO-DETECT MATCHUP LOGIC
@@ -810,25 +886,25 @@ def render_syndicate_board(league_key):
                     if g['home'].upper() == team_abbr: auto_opp = g['away'].upper(); auto_is_home = True; break
                     elif g['away'].upper() == team_abbr: auto_opp = g['home'].upper(); auto_is_home = False; break
 
-        # ⚡ STATE OVERRIDE: Force update UI when a NEW player is selected
-        if player_name and player_name != st.session_state.get(f"last_p_{league_key}"):
-            st.session_state[f"last_p_{league_key}"] = player_name
+        # ⚡ STATE OVERRIDE using init_state helper logic
+        if player_name and player_name != st.session_state.get(f"{lk}.last_player"):
+            st.session_state[f"{lk}.last_player"] = player_name
             if auto_opp and auto_opp in teams:
-                st.session_state[f"op_{league_key}"] = auto_opp
-                st.session_state[f"loc_{league_key}"] = auto_is_home
+                st.session_state[f"{lk}.opp"] = auto_opp
+                st.session_state[f"{lk}.is_home"] = auto_is_home
 
-        # Initialize defaults if not in state to prevent Streamlit errors
-        if f"sy_{league_key}" not in st.session_state: st.session_state[f"sy_{league_key}"] = False
-        if f"loc_{league_key}" not in st.session_state: st.session_state[f"loc_{league_key}"] = True
-        if f"op_{league_key}" not in st.session_state: st.session_state[f"op_{league_key}"] = teams[0]
+        # Clean initialization using your new helper
+        init_state(f"{lk}.sync", False)
+        init_state(f"{lk}.is_home", True)
+        init_state(f"{lk}.opp", teams[0])
 
         # Render top toggles dynamically based on Session State
-        sync = placeholder_sync.toggle("📡 Auto-Sync Vegas Odds", key=f"sy_{league_key}")
-        is_home_current = 1 if placeholder_home.toggle("🏠 Playing at Home?", key=f"loc_{league_key}") else 0
+        sync = placeholder_sync.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
+        is_home_current = 1 if placeholder_home.toggle("🏠 Playing at Home?", key=f"{lk}.is_home") else 0
             
         with c2: 
             opts = ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
-            stat_type = st.selectbox("Stat", opts, key=f"st_{league_key}")
+            stat_type = st.selectbox("Stat", opts, key=f"{lk}.stat")
             live_odds_display = st.empty()
 
         f_line, f_odds, msg, used, rem = None, None, "", None, None
@@ -842,23 +918,25 @@ def render_syndicate_board(league_key):
 
         with c3: 
             start_line = float(f_line) if (sync and f_line is not None) else 0.5
-            line = st.number_input("Line", value=start_line, step=0.5, key=f"ln_{league_key}")
-            if sync and f_line is not None and f_odds is not None: st.session_state[f"odds_{league_key}"] = estimate_alt_odds(float(f_line), int(f_odds), line, stat_type)
-            elif f"odds_{league_key}" not in st.session_state: st.session_state[f"odds_{league_key}"] = -110
-            odds = st.number_input("Odds", step=5, key=f"odds_{league_key}")
-            is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"boost_{league_key}")
+            line = st.number_input("Line", value=start_line, step=0.5, key=f"{lk}.line")
+            if sync and f_line is not None and f_odds is not None: st.session_state[f"{lk}.odds"] = estimate_alt_odds(float(f_line), int(f_odds), line, stat_type)
+            elif f"{lk}.odds" not in st.session_state: st.session_state[f"{lk}.odds"] = -110
+            odds = st.number_input("Odds", step=5, key=f"{lk}.odds")
+            is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"{lk}.boost")
                 
         with c4: 
-            opp = st.selectbox("Opponent", teams, key=f"op_{league_key}")
-            rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"rest_{league_key}")
+            opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
+            rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
 
     btn_c1, btn_c2, _ = st.columns([1, 1, 2])
-    with btn_c1: analyze_pressed = st.button(f"🚀 Analyze {league_key} Player", type="primary", use_container_width=True, key=f"btn_analyze_{league_key}")
+    with btn_c1: analyze_pressed = st.button(f"🚀 Analyze {league_key} Player", type="primary", use_container_width=True, key=f"{lk}.btn_analyze")
     
-    if analyze_pressed and player_name: st.session_state[f"target_player_{league_key}"] = player_name
-    target_player = st.session_state.get(f"target_player_{league_key}")
+    if analyze_pressed and player_name: st.session_state[f"{lk}.target_player"] = player_name
+    target_player = st.session_state.get(f"{lk}.target_player")
 
-    if target_player:
+    # (The rest of the rendering logic starting with `if target_player:` stays exactly the same!)
+
+    if target_player: key=f"{lk}.lock"
         with st.spinner(f"Scouting data for {target_player}..."):
             if league_key == "NBA": df, status_code, _ = get_nba_stats(target_player)
             elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
@@ -977,92 +1055,22 @@ def render_syndicate_board(league_key):
         else: st.warning(f"🚨 **Warning:** No stats available for {target_player}.")
 
 def render_league_tab(league_name, get_sched_func):
-    with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
-        if league_name == "NBA":
-            if st.button("🏀 Scan NBA Heaters", type="primary", use_container_width=True):
-                with st.spinner("Scanning NBA..."):
-                    df, msg = run_nba_heaters()
-                    if df is not None: st.session_state[f'radar_{league_name}'] = df
-                    st.info(msg)
-        elif league_name == "NHL":
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("🏒 Scan NHL Heaters", type="primary", use_container_width=True):
-                    with st.spinner("Scanning NHL Skaters..."):
-                        df, msg = run_nhl_heaters()
-                        if df is not None: st.session_state[f'radar_{league_name}'] = df
-                        st.info(msg)
-            with c2:
-                if st.button("🚨 Scan Barn Burners", type="primary", use_container_width=True):
-                    with st.spinner("Hunting weak defenses..."):
-                        df, msg = run_barn_burner()
-                        if df is not None: st.session_state[f'radar_bb_{league_name}'] = df
-                        st.info(msg)
-        elif league_name == "MLB":
-            if st.button("⚾ Scan MLB Heaters", type="primary", use_container_width=True):
-                with st.spinner("Scanning Elite Hitters..."):
-                    df, msg = run_mlb_heaters()
-                    if df is not None: st.session_state[f'radar_{league_name}'] = df
-                    st.info(msg)
-        
-        # --- ⚡ THE SKYNET FAST-TRACK PIPELINE ---
-        if f'radar_{league_name}' in st.session_state:
-            df_radar = st.session_state[f'radar_{league_name}']
-            
-            # 🎨 The "Prettified" Radar Table
-            st.dataframe(
-                df_radar, 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Player": st.column_config.TextColumn("🔥 Player", width="medium"),
-                    "Team": st.column_config.TextColumn("🛡️ Team", width="small"),
-                    "Category": st.column_config.TextColumn("📊 Category", width="small"),
-                    "Season PPG": st.column_config.NumberColumn("🎯 Season PPG", format="%.1f", width="small"),
-                    "Season Pts": st.column_config.NumberColumn("🎯 Points", format="%d", width="small"),
-                    "Season Hits": st.column_config.NumberColumn("⚾ Hits", format="%d", width="small"),
-                    "Status": st.column_config.TextColumn("⚡ Status", width="medium")
-                }
-            )
-            
-            if 'Player' in df_radar.columns:
-                st.markdown("#### ⚡ Fast-Track to Analyzer")
-                ft_c1, ft_c2 = st.columns([3, 1])
-                with ft_c1: 
-                    formatted_options = ["-- Select --"] + [f"{row['Player']} ({row['Team']})" if 'Team' in row else row['Player'] for _, row in df_radar.iterrows()]
-                    selected_heater = st.selectbox("Select a target from the radar:", formatted_options, key=f"ft_sel_{league_name}")
-                with ft_c2:
-                    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
-                    if st.button("SEND TO BOARD 🚀", type="primary", use_container_width=True, key=f"ft_btn_{league_name}"):
-                        if selected_heater != "-- Select --":
-                            st.session_state[f"sq_{league_name}"] = selected_heater.split('(')[0].strip() 
-                            st.session_state[f"target_player_{league_name}"] = selected_heater 
-                            st.rerun()
-
-        if f'radar_bb_{league_name}' in st.session_state:
-            st.markdown("#### 🚨 Weak Defenses Detected")
-            st.dataframe(
-                st.session_state[f'radar_bb_{league_name}'], 
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Team": st.column_config.TextColumn("🛡️ Target Team", width="medium"),
-                    "Opp": st.column_config.TextColumn("🎯 Weak Opponent", width="medium"),
-                    "Opp Status": st.column_config.TextColumn("🚨 Defense Metric", width="large")
-                }
-            )
-
+    lk = league_name.lower()
+    
+    render_league_scanners(league_name)
     st.divider()
+    
     c1, c2 = st.columns([8, 1])
     with c1: st.markdown(f"### 📅 Today's {league_name} Slate")
     with c2: 
-        if st.button("🔄 Refresh", key=f"ref_{league_name}"): st.rerun()
+        if st.button("🔄 Refresh", key=f"{lk}.ref_btn"): st.rerun()
+        
     with st.spinner("Loading matchups..."): sched, msg = get_sched_func()
     if sched: render_scoreboard(sched)
     else: st.info(msg)
+    
     st.markdown("---")
     render_syndicate_board(league_name)
-
 # ==========================================
 # 6. MAIN APP LAYOUT & ROUTING (CLEAN!)
 # ==========================================
