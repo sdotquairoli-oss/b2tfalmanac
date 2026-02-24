@@ -942,7 +942,7 @@ def render_syndicate_board(league_key):
             elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
             else: df, status_code, _ = get_nhl_stats(target_player)
             
-        if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
+    if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
         elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
         elif not df.empty:
             s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Power Play Points": "PPP", "Minutes Played": "MINS", "Threes Made": "FG3M", "Points + Rebounds": "PR", "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H", "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K", "Pitcher Earned Runs": "ER"}
