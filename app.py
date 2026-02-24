@@ -691,15 +691,29 @@ def run_mlb_heaters():
         sched, _ = get_mlb_schedule()
         if not sched: return None, "No MLB games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+
         curr_year = datetime.now().year
         r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year}&limit=50", timeout=5).json()
         if not r.get('stats'): r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year-1}&limit=50", timeout=5).json()
+
+        # The Exact Abbreviation Dictionary to sync the Scanner with the Board
+        m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
+
         heaters = []
         for s in r.get('stats', []):
             for p in s.get('splits', []):
-                team_name = p.get('team', {}).get('name', '').upper()
-                if any(t[:3].upper() in team_name for t in teams_today): 
-                    heaters.append({"Player": p.get('player', {}).get('fullName', ''), "Category": "Elite Hitter", "Season Hits": p.get('stat', {}).get('hits', 0), "Status": "🔥 Active Today"})
+                team_full = p.get('team', {}).get('name', '')
+                team_abbr = m_t.get(team_full, team_full.split()[-1][:3].upper() if team_full else "")
+                
+                if team_abbr in teams_today: 
+                    heaters.append({
+                        "Player": p.get('player', {}).get('fullName', ''), 
+                        "Team": team_abbr,
+                        "Category": "Elite Hitter", 
+                        "Season Hits": p.get('stat', {}).get('hits', 0), 
+                        "Status": "🔥 Active Today"
+                    })
+
         if not heaters: return None, "No top 50 hitters playing today."
         return pd.DataFrame(heaters), "✅ Found elite MLB hitters active on today's slate."
     except Exception as e: return None, f"API Error: {str(e)}"
