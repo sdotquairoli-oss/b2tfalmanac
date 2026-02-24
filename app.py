@@ -981,15 +981,52 @@ def render_league_tab(league_name, get_sched_func):
             st.dataframe(st.session_state[f'radar_bb_{league_name}'], use_container_width=True)
 
     st.divider()
-    c1, c2 = st.columns([8, 1])
-    with c1: st.markdown(f"### 📅 Today's {league_name} Slate")
-    with c2: 
-        if st.button("🔄 Refresh", key=f"ref_{league_name}"): st.rerun()
-    with st.spinner("Loading matchups..."): sched, msg = get_sched_func()
-    if sched: render_scoreboard(sched)
-    else: st.info(msg)
-    st.markdown("---")
-    render_syndicate_board(league_name)
+# --- ⚡ THE SKYNET FAST-TRACK PIPELINE ---
+        if f'radar_{league_name}' in st.session_state:
+            df_radar = st.session_state[f'radar_{league_name}']
+            
+            # 🎨 The "Prettified" Radar Table
+            st.dataframe(
+                df_radar, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Player": st.column_config.TextColumn("🔥 Player", width="medium"),
+                    "Team": st.column_config.TextColumn("🛡️ Team", width="small"),
+                    "Category": st.column_config.TextColumn("📊 Category", width="small"),
+                    "Season PPG": st.column_config.NumberColumn("🎯 Season PPG", format="%.1f", width="small"),
+                    "Season Pts": st.column_config.NumberColumn("🎯 Points", format="%d", width="small"),
+                    "Season Hits": st.column_config.NumberColumn("⚾ Hits", format="%d", width="small"),
+                    "Status": st.column_config.TextColumn("⚡ Status", width="medium")
+                }
+            )
+            
+            if 'Player' in df_radar.columns:
+                st.markdown("#### ⚡ Fast-Track to Analyzer")
+                ft_c1, ft_c2 = st.columns([3, 1])
+                with ft_c1: 
+                    formatted_options = ["-- Select --"] + [f"{row['Player']} ({row['Team']})" if 'Team' in row else row['Player'] for _, row in df_radar.iterrows()]
+                    selected_heater = st.selectbox("Select a target from the radar:", formatted_options, key=f"ft_sel_{league_name}")
+                with ft_c2:
+                    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+                    if st.button("SEND TO BOARD 🚀", type="primary", use_container_width=True, key=f"ft_btn_{league_name}"):
+                        if selected_heater != "-- Select --":
+                            st.session_state[f"sq_{league_name}"] = selected_heater.split('(')[0].strip() 
+                            st.session_state[f"target_player_{league_name}"] = selected_heater 
+                            st.rerun()
+
+        if f'radar_bb_{league_name}' in st.session_state:
+            st.markdown("#### 🚨 Weak Defenses Detected")
+            st.dataframe(
+                st.session_state[f'radar_bb_{league_name}'], 
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Team": st.column_config.TextColumn("🛡️ Target Team", width="medium"),
+                    "Opp": st.column_config.TextColumn("🎯 Weak Opponent", width="medium"),
+                    "Opp Status": st.column_config.TextColumn("🚨 Defense Metric", width="large")
+                }
+            )
 
 
 # ==========================================
