@@ -164,11 +164,15 @@ def auto_grade_ledger():
             stats, d_col = stats_cache[cache_key]
             if stats.empty: continue
             
-            s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K"}
+            s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K", "Double Double": "DD", "Triple Double": "TD"}
             s_col = s_map.get(r['Stat'], "PTS")
             if league == "NBA":
                 if s_col == "A": s_col = "AST"
                 if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
+                if s_col in ["DD", "TD"]:
+                    tens = (stats['PTS'] >= 10).astype(int) + (stats['TRB'] >= 10).astype(int) + (stats['AST'] >= 10).astype(int) + (stats.get('STL', 0) >= 10).astype(int) + (stats.get('BLK', 0) >= 10).astype(int)
+                    stats['DD'] = (tens >= 2).astype(int)
+                    stats['TD'] = (tens >= 3).astype(int)
             
             stats['td'] = pd.to_datetime(stats[d_col]).dt.date
             g_row = stats[stats['td'] == pd.to_datetime(r['Date']).date()]
@@ -190,11 +194,15 @@ def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
         else: df, _, _ = get_mlb_stats(player); dc = 'gameDate'
         if df.empty: return "No data."
         
-        s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K"}
-        s_col = s_map.get(stat, "PTS")
-        if league == "NBA":
-            if s_col == "A": s_col = "AST"
-            if s_col == "PRA" and 'PTS' in df: df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
+        s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K", "Double Double": "DD", "Triple Double": "TD"}
+            s_col = s_map.get(r['Stat'], "PTS")
+            if league == "NBA":
+                if s_col == "A": s_col = "AST"
+                if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
+                if s_col in ["DD", "TD"]:
+                    tens = (stats['PTS'] >= 10).astype(int) + (stats['TRB'] >= 10).astype(int) + (stats['AST'] >= 10).astype(int) + (stats.get('STL', 0) >= 10).astype(int) + (stats.get('BLK', 0) >= 10).astype(int)
+                    stats['DD'] = (tens >= 2).astype(int)
+                    stats['TD'] = (tens >= 3).astype(int)
             
         df['td'] = pd.to_datetime(df[dc]).dt.date
         g_df = df[df['td'] == dt]
@@ -344,7 +352,7 @@ def get_mlb_schedule():
 @st.cache_data(ttl=600)
 def get_live_line(player_label, stat_type, api_key, sport_path):
     if not api_key: return None, None, "API Key missing in secrets.toml", None, None
-    m_map = {"Points": "player_points", "Goals": "player_goals", "Assists": "player_assists", "Shots on Goal": "player_shots_on_goal", "Power Play Points": "player_power_play_points", "Rebounds": "player_rebounds", "PRA (Pts+Reb+Ast)": "player_points_rebounds_assists", "Threes Made": "player_threes", "Hits": "batter_hits", "Home Runs": "batter_home_runs", "Pitcher Strikeouts": "pitcher_strikeouts"}
+    m_map = {"Points": "player_points", "Goals": "player_goals", "Assists": "player_assists", "Shots on Goal": "player_shots_on_goal", "Power Play Points": "player_power_play_points", "Rebounds": "player_rebounds", "PRA (Pts+Reb+Ast)": "player_points_rebounds_assists", "Threes Made": "player_threes", "Hits": "batter_hits", "Home Runs": "batter_home_runs", "Pitcher Strikeouts": "pitcher_strikeouts", "Double Double": "player_double_double", "Triple Double": "player_triple_double"}
     market = m_map.get(stat_type, "player_points")
     clean_name = player_label.split("(")[0].strip().lower()
     team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
@@ -415,10 +423,11 @@ def get_nba_stats(player_label):
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        final_cols = ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'FG3M', 'Weight']
+        df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
+        # ⚡ Added STL and BLK for accurate DD/TD calculations
+        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
-    except: return pd.DataFrame(), 500, []
-
+        
 @st.cache_data(ttl=300)
 def get_nhl_stats(player_label):
     cn = player_label.split("(")[0].strip()
@@ -669,7 +678,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
         {"name": "⏱️ MIN Maximizer", "model": "Linear Regression", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"Projects {trend_proj:.1f} by weighting recent mins."},
         {"name": "📊 Statistician", "model": "Random Forest", "proj": stat_proj, "vote": get_raw_vote(stat_proj), "color": get_final_vote(stat_proj)[1], "quote": f"Deep Memory sets stable floor. Trees favor {get_raw_vote(stat_proj)}."},
         {"name": "🃏 Contrarian", "model": "Gradient Boosting", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"Flags variance {'regression' if con_proj < df_ml[s_col].mean() else 'spike'} from season norms."},
-        {"name": "🛡️ Baseline", "model": "Support Vector Machine", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": "Weighted multi-year mapping of minute/production correlation."},
+s{"name": "🛡️ Baseline", "model": "Support Vector Machine", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": "Weighted multi-year mapping of minute/production correlation."},
         {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors {mod_desc.split('(')[0].strip().replace('🛡️', '').replace('🏃', '').strip()}."}
     ]
     
@@ -903,7 +912,7 @@ def render_syndicate_board(league_key):
         is_home_current = 1 if placeholder_home.toggle("🏠 Playing at Home?", key=f"{lk}.is_home") else 0
             
         with c2: 
-            opts = ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
+            opts = ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Double Double", "Triple Double", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
             stat_type = st.selectbox("Stat", opts, key=f"{lk}.stat")
             live_odds_display = st.empty()
 
@@ -943,7 +952,7 @@ def render_syndicate_board(league_key):
         if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
         elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
         elif not df.empty:
-            s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Power Play Points": "PPP", "Minutes Played": "MINS", "Threes Made": "FG3M", "Points + Rebounds": "PR", "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H", "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K", "Pitcher Earned Runs": "ER"}
+            s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Power Play Points": "PPP", "Minutes Played": "MINS", "Threes Made": "FG3M", "Points + Rebounds": "PR", "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H", "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K", "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD"}
             s_col = s_map.get(stat_type, "PTS")
             
             if league_key == "NBA":
@@ -952,6 +961,11 @@ def render_syndicate_board(league_key):
                 if s_col == "PR": df['PR'] = df['PTS'] + df['TRB']
                 if s_col == "PA": df['PA'] = df['PTS'] + df['AST']
                 if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
+                if s_col in ["DD", "TD"]:
+                    # ⚡ Skynet counts how many categories hit double digits
+                    tens = (df['PTS'] >= 10).astype(int) + (df['TRB'] >= 10).astype(int) + (df['AST'] >= 10).astype(int) + (df.get('STL', pd.Series(0, index=df.index)) >= 10).astype(int) + (df.get('BLK', pd.Series(0, index=df.index)) >= 10).astype(int)
+                    df['DD'] = (tens >= 2).astype(int)
+                    df['TD'] = (tens >= 3).astype(int)
             
             df_with_ml, board, c_proj, c_vote, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, skynet_msg, skynet_color = run_ml_board(df, s_col, line, opp, league_key, rest, is_home_current, stat_type)
             
