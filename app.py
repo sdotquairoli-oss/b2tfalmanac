@@ -135,7 +135,7 @@ def get_liquid_balance():
         for _, r in p_df.iterrows():
             o, risk, is_f = pd.to_numeric(r['Odds'], errors='coerce'), pd.to_numeric(r['Risk'], errors='coerce'), r.get('Is_Free_Bet', False)
             if r['Result'] == 'Win': 
-                prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof + (0 if is_f else risk)
+                prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof
             elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk)
     return max(bal, 0.0)
 
