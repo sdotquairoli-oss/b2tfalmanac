@@ -32,13 +32,13 @@ NHL_TEAMS = sorted(["ANA", "BOS", "BUF", "CGY", "CAR", "CHI", "COL", "CBJ", "DAL
 MLB_TEAMS = sorted(["ARI", "ATL", "BAL", "BOS", "CHC", "CHW", "CIN", "CLE", "COL", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "OAK", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"])
 SPORTSBOOKS = ["FanDuel", "Fanatics", "DraftKings", "BetMGM", "Caesars", "ESPN Bet", "Hard Rock", "Other"]
 BOOK_LOGOS = {
-    "FanDuel": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Fanduel_logo.svg/512px-Fanduel_logo.svg.png",
-    "DraftKings": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/DraftKings_logo.svg/512px-DraftKings_logo.svg.png",
-    "BetMGM": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/BetMGM_logo.svg/512px-BetMGM_logo.svg.png",
-    "Caesars": "https://upload.wikimedia.org/wikipedia/en/thumb/8/87/Caesars_Sportsbook_logo.svg/512px-Caesars_Sportsbook_logo.svg.png",
-    "Fanatics": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Fanatics_logo.svg/512px-Fanatics_logo.svg.png",
-    "ESPN Bet": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/ESPN_Bet_logo.svg/512px-ESPN_Bet_logo.svg.png",
-    "Hard Rock": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Hard_Rock_Bet_logo.svg/512px-Hard_Rock_Bet_logo.svg.png"
+    "FanDuel": "https://www.google.com/s2/favicons?domain=fanduel.com&sz=128",
+    "DraftKings": "https://www.google.com/s2/favicons?domain=draftkings.com&sz=128",
+    "BetMGM": "https://www.google.com/s2/favicons?domain=betmgm.com&sz=128",
+    "Caesars": "https://www.google.com/s2/favicons?domain=caesars.com&sz=128",
+    "Fanatics": "https://www.google.com/s2/favicons?domain=sportsbook.fanatics.com&sz=128",
+    "ESPN Bet": "https://www.google.com/s2/favicons?domain=espnbet.com&sz=128",
+    "Hard Rock": "https://www.google.com/s2/favicons?domain=hardrock.bet&sz=128"
 }
 
 NBA_FULL_TO_ABBREV = {'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'Charlotte Hornets': 'CHA', 'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE', 'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN', 'Detroit Pistons': 'DET', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND', 'LA Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM', 'Miami Heat': 'MIA', 'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN', 'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK', 'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX', 'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'TOR', 'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS'}
@@ -1232,7 +1232,7 @@ with t_parlay:
             with pc1: 
                 book_name = row.get('Sportsbook', 'LIVE BET')
                 logo_img = BOOK_LOGOS.get(book_name, "")
-                book_html = f'<img src="{logo_img}" height="12" style="background-color: #f8fafc; padding: 2px 4px; border-radius: 2px; vertical-align: middle; margin-right: 6px;">' if logo_img else f"{book_name.upper()} • "
+                book_html = f'<img src="{logo_img}" width="16" height="16" style="border-radius: 50%; vertical-align: middle; margin-right: 6px;"> {book_name.upper()} • ' if logo_img else f"{book_name.upper()} • "
                 
                 st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{book_html}{row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${( ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) if is_f else r + ((r * (o / 100)) if o > 0 else (r / (abs(o) / 100))) ):.2f}</span></div></div>""", unsafe_allow_html=True)
             with pc2:
@@ -1330,6 +1330,6 @@ with t_wallet:
         port_cols = st.columns(min(len(book_balances), 4))
         for i, (book, bal) in enumerate(book_balances.items()):
             logo_img = BOOK_LOGOS.get(book, "")
-            logo_html = f'<div style="background-color: #f8fafc; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 5px;"><img src="{logo_img}" height="14"></div>' if logo_img else f'<div style="font-size: 14px; font-weight: bold; color: #00E5FF; margin-bottom: 5px;">{book}</div>'
+            logo_html = f'<img src="{logo_img}" width="20" height="20" style="border-radius: 50%; vertical-align: middle; margin-right: 8px;"> <span style="font-size: 15px; font-weight: bold; color: #00E5FF; vertical-align: middle;">{book}</span>' if logo_img else f'<span style="font-size: 15px; font-weight: bold; color: #00E5FF;">{book}</span>'
             
-            port_cols[i % 4].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal >= 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;">{logo_html}<div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
+            port_cols[i % 4].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal >= 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
