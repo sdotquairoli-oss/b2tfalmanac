@@ -32,7 +32,6 @@ NHL_TEAMS = sorted(["ANA", "BOS", "BUF", "CGY", "CAR", "CHI", "COL", "CBJ", "DAL
 MLB_TEAMS = sorted(["ARI", "ATL", "BAL", "BOS", "CHC", "CHW", "CIN", "CLE", "COL", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "OAK", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"])
 SPORTSBOOKS = ["FanDuel", "Fanatics", "DraftKings", "BetMGM", "Caesars", "ESPN Bet", "Hard Rock", "Other"]
 
-# Centralized Dictionaries for cleaner functions
 NBA_FULL_TO_ABBREV = {'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'Charlotte Hornets': 'CHA', 'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE', 'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN', 'Detroit Pistons': 'DET', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND', 'LA Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM', 'Miami Heat': 'MIA', 'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN', 'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK', 'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX', 'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'TOR', 'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS'}
 ODDS_MEGA_MAP = {**NBA_FULL_TO_ABBREV, "ANA": "Anaheim Ducks", "BUF": "Sabres", "CGY": "Flames", "CAR": "Hurricanes", "COL": "Avalanche", "CBJ": "Blue Jackets", "EDM": "Oilers", "FLA": "Panthers", "LAK": "Kings", "MTL": "Canadiens", "NSH": "Predators", "NJD": "Devils", "NYI": "Islanders", "NYR": "Rangers", "OTT": "Senators", "PIT": "Penguins", "SJS": "Sharks", "SEA": "Kraken", "STL": "Blues", "TBL": "Lightning", "VAN": "Canucks", "VGK": "Knights", "WPG": "Jets"}
 
@@ -101,9 +100,6 @@ def overwrite_sheet(sheet_name, df):
         load_sheet_df.clear() 
     except Exception as e: st.error(f"Failed to update database: {e}")
 
-# ==========================================
-# 2. LEDGER WRAPPERS
-# ==========================================
 def load_ledger(): 
     df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
@@ -118,7 +114,6 @@ def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
     if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False
     else: df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
-    
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     return df
@@ -145,7 +140,7 @@ def get_liquid_balance():
     return max(bal, 0.0)
 
 # ==========================================
-# 3. AUTO-GRADER & AI AUTOPSY
+# 2. AUTO-GRADER & AI AUTOPSY
 # ==========================================
 def auto_grade_ledger():
     df = load_ledger()
@@ -213,79 +208,7 @@ def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
     except: return "Failed to parse logs."
 
 # ==========================================
-# 4. AI PLAYER ARCHETYPE ENGINE & DEFENSE RADAR
-# ==========================================
-@st.cache_data(ttl=43200) 
-def get_live_nba_team_stats():
-    try:
-        from nba_api.stats.endpoints import leaguedashteamstats
-        stats = leaguedashteamstats.LeagueDashTeamStats(measure_type_detailed_defense='Advanced')
-        df = stats.get_data_frames()[0]
-        df['TEAM_ABBREV'] = df['TEAM_NAME'].map(NBA_FULL_TO_ABBREV)
-        df_clean = df[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
-        df_clean['DEF_RANK'] = df_clean['DEF_RATING'].rank(ascending=True) 
-        df_clean['PACE_RANK'] = df_clean['PACE'].rank(ascending=False)
-        return df_clean.to_dict('index')
-    except: return {}
-
-def get_player_archetype(df, league):
-    if df.empty or league != "NBA": return "Unknown Profile"
-    avg_mins = df['MINS'].mean()
-    if pd.isna(avg_mins) or avg_mins < 5: avg_mins = 15.0
-    
-    pts_36 = (df.get('PTS', pd.Series([0])).mean() / avg_mins) * 36
-    trb_36 = (df.get('TRB', pd.Series([0])).mean() / avg_mins) * 36
-    ast_36 = (df.get('AST', pd.Series([0])).mean() / avg_mins) * 36
-    fg3m_36 = (df.get('FG3M', pd.Series([0])).mean() / avg_mins) * 36
-    
-    clusters = {
-        "👑 Primary Playmaker (High USG)": [26.0, 6.0, 9.5, 2.5],
-        "🦍 Paint Beast / Rim Runner": [17.0, 13.5, 2.0, 0.1],
-        "🧬 Versatile Point-Forward": [21.0, 9.0, 6.0, 1.5],
-        "🎯 3&D Wing / Spot-Up Shooter": [15.0, 5.0, 2.0, 3.8],
-        "🛡️ Two-Way Connector": [13.0, 4.5, 5.5, 1.5]
-    }
-    player_vec = [[pts_36, trb_36, ast_36, fg3m_36]]
-    best_match, min_dist = "Unknown", float('inf')
-    
-    for name, centroid in clusters.items():
-        dist = euclidean_distances(player_vec, [centroid])[0][0]
-        if dist < min_dist: min_dist = dist; best_match = name
-    return best_match
-
-def get_archetype_defense_modifier(league, opp, archetype):
-    if league == "NBA":
-        live_stats = get_live_nba_team_stats()
-        if opp in live_stats:
-            def_rank, pace_rank = live_stats[opp]['DEF_RANK'], live_stats[opp]['PACE_RANK']
-            mod_val, mod_desc = 1.0, f"🛡️ Def Rank: #{int(def_rank)} | 🏃 Pace: #{int(pace_rank)} -> "
-            
-            if def_rank <= 10: mod_val *= 0.90; mod_desc += "Elite Def (-10%). "
-            elif def_rank >= 21: mod_val *= 1.10; mod_desc += "Weak Def (+10%). "
-            else: mod_desc += "Avg Def (Neutral). "
-                
-            if pace_rank <= 10: mod_val *= 1.05; mod_desc += "Fast Pace (+5%). "
-            elif pace_rank >= 21: mod_val *= 0.95; mod_desc += "Slow Pace (-5%). "
-                
-            if "Point-Forward" in archetype and def_rank >= 15: mod_val *= 1.05; mod_desc += "🚨 Exploit: Weak vs Forwards."
-            elif "Primary Playmaker" in archetype and def_rank <= 10: mod_val *= 0.95; mod_desc += "🛑 Fade: Elite Perimeter Def."
-            return mod_val, mod_desc
-        else:
-            if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]: return 0.90, "Elite Defense (-10%)"
-            elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]: return 1.10, "Weak Defense (+10%)"
-            return 1.00, "Average Def (Neutral)"
-            
-    elif league == "MLB":
-        if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]: return 0.90, "Elite Pitching (-10%)"
-        elif opp in ["COL", "OAK", "CHW", "KC", "WSH"]: return 1.10, "Weak Pitching (+10%)"
-        return 1.00, "Average Pitching (Neutral)"
-    else: 
-        if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"]: return 0.90, "Elite Goalie (-10%)"
-        elif opp in ["SJS", "ANA", "CBJ", "CHI", "MTL", "NYI"]: return 1.10, "Swiss Cheese Def (+10%)"
-        return 1.00, "Average Def (Neutral)"
-
-# ==========================================
-# 5. API DATA PULLS & PARSERS
+# 3. DATA PULLS & ML ENGINE
 # ==========================================
 def check_api_quota():
     if not ODDS_API_KEY: return
@@ -349,7 +272,6 @@ def get_nba_schedule():
                     if not home_row.empty and pd.notna(home_row['PTS'].iloc[0]): home_score = int(home_row['PTS'].iloc[0])
                     if not away_row.empty and pd.notna(away_row['PTS'].iloc[0]): away_score = int(away_row['PTS'].iloc[0])
                 except: pass
-                
             ds = f"Today - {status_text.replace(' ET', '').replace(' EST', '').upper()}" if status_id == 1 else status_text
             matchups.append({"home": home_abbrev, "away": away_abbrev, "status": ds, "home_score": home_score, "away_score": away_score, "is_live_or_final": is_live_or_final})
         return matchups, "Success"
@@ -392,29 +314,22 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
     market = m_map.get(stat_type, "player_points")
     clean_name = player_label.split("(")[0].strip().lower()
     team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
-    
     used, rem = None, None
     try:
         events_resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{sport_path}/events?apiKey={api_key}", timeout=10)
         events_data = events_resp.json()
         used, rem = events_resp.headers.get('x-requests-used'), events_resp.headers.get('x-requests-remaining')
         if not isinstance(events_data, list) or len(events_data) == 0: return None, None, "No active events", used, rem
-        
         target_team_name = ODDS_MEGA_MAP.get(team_abbr)
         target_event_id = None
         if target_team_name:
             for e in events_data:
-                if target_team_name in e.get('home_team', '') or target_team_name in e.get('away_team', ''):
-                    target_event_id = e['id']; break
-        
+                if target_team_name in e.get('home_team', '') or target_team_name in e.get('away_team', ''): target_event_id = e['id']; break
         events_to_check = [{'id': target_event_id}] if target_event_id else events_data[:5]
-        
         for event in events_to_check:
             odds_resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{sport_path}/events/{event['id']}/odds?apiKey={api_key}&regions=us&markets={market}&oddsFormat=american", timeout=10)
             odds_data = odds_resp.json()
-            used = odds_resp.headers.get('x-requests-used', used)
-            rem = odds_resp.headers.get('x-requests-remaining', rem)
-            
+            used, rem = odds_resp.headers.get('x-requests-used', used), odds_resp.headers.get('x-requests-remaining', rem)
             for b in odds_data.get('bookmakers', []):
                 for m in b.get('markets', []):
                     for o in m.get('outcomes', []):
@@ -430,11 +345,9 @@ def get_nba_stats(player_label):
     try:
         from nba_api.stats.static import players
         from nba_api.stats.endpoints import playergamelog
-        
         nba_players = players.get_players()
         player_dict = [p for p in nba_players if p['full_name'].lower() == cn.lower()]
         if not player_dict: return pd.DataFrame(), 404, []
-        
         pid = player_dict[0]['id']
         seasons = ['2025-26', '2024-25', '2023-24']
         df_list = []
@@ -444,30 +357,24 @@ def get_nba_stats(player_label):
                 df_list.append(log.get_data_frames()[0])
                 time.sleep(0.5) 
             except: pass
-            
         if not df_list: return pd.DataFrame(), 404, []
         df = pd.concat(df_list, ignore_index=True)
         if df.empty: return pd.DataFrame(), 404, []
-        
         df['Is_Home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in x else 0)
         df['MATCHUP'] = df['MATCHUP'].apply(lambda x: x.split(' ')[-1])
         df['ValidDate'] = pd.to_datetime(df['GAME_DATE'])
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        
         def parse_mins(x):
             try:
                 s = str(x)
                 return float(s.split(':')[0]) + float(s.split(':')[1])/60.0 if ':' in s else float(s)
             except: return 0.0
-            
         df['MINS'] = df['MIN'].apply(parse_mins)
         df = df.rename(columns={'REB': 'TRB'}) 
-        
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        
         final_cols = ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'FG3M', 'Weight']
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
@@ -478,7 +385,6 @@ def get_nhl_stats(player_label):
     try:
         r = requests.get(f"https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=25&q={requests.utils.quote(cn)}", timeout=5).json()
         pid = next((p.get('playerId', p.get('id')) for p in r if p.get('name','').lower() == cn.lower()), r[0].get('playerId', r[0].get('id')) if r else None)
-        
         seasons = ['20252026', '20242025', '20232024']
         logs = []
         for s in seasons:
@@ -486,27 +392,22 @@ def get_nhl_stats(player_label):
                 resp = requests.get(f"https://api-web.nhle.com/v1/player/{pid}/game-log/{s}/2", timeout=5).json()
                 if 'gameLog' in resp: logs.extend(resp['gameLog'])
             except: pass
-            
         if not logs: return pd.DataFrame(), 404, []
         df = pd.DataFrame(logs)
-        
         df['PTS'] = pd.to_numeric(df.get('points', 0))
         df['G'] = pd.to_numeric(df.get('goals', 0))
         df['A'] = pd.to_numeric(df.get('assists', 0))
         df['SOG'] = pd.to_numeric(df.get('shots', 0))
         df['PPP'] = pd.to_numeric(df.get('powerPlayPoints', 0))
-        
         df['Is_Home'] = np.where(df.get('homeRoadFlag', 'H') == 'H', 1, 0)
         df['MINS'] = df.get('toi', '15:00').apply(lambda x: int(str(x).split(':')[0]) + int(str(x).split(':')[1])/60.0 if ':' in str(x) else 0.0)
         df['MATCHUP'] = df['opponentAbbrev']
         df['ValidDate'] = pd.to_datetime(df['gameDate'])
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        
         return df.sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
 
@@ -517,33 +418,81 @@ def get_mlb_stats(player_label):
         sr = requests.get(f"https://statsapi.mlb.com/api/v1/people/search?names={requests.utils.quote(cn)}", timeout=5).json()
         if not sr.get('people'): return pd.DataFrame(), 404, []
         pid = next((p['id'] for p in sr.get('people', []) if p.get('fullName','').lower() == cn.lower()), sr['people'][0]['id'] if sr.get('people') else None)
-        
         curr_year = datetime.now().year
         seasons = [str(curr_year), str(curr_year-1), str(curr_year-2)]
-        
         splits = []
         for s in seasons:
             try:
                 log = requests.get(f"https://statsapi.mlb.com/api/v1/people/{pid}/stats?stats=gameLog&group=hitting,pitching&season={s}", timeout=5).json()
                 if 'stats' in log:
-                    for stat_group in log['stats']:
-                        splits.extend(stat_group.get('splits', []))
+                    for stat_group in log['stats']: splits.extend(stat_group.get('splits', []))
             except: pass
-            
         if not splits: return pd.DataFrame(), 404, []
-        
         data = [{'ValidDate': pd.to_datetime(s.get('date', '2025-01-01')), 'MATCHUP': s.get('opponent', {}).get('name', 'OPP').split(' ')[-1][:3].upper(), 'Is_Home': 1 if s.get('isHome', True) else 0, 'H': s.get('stat', {}).get('hits', 0), 'HR': s.get('stat', {}).get('homeRuns', 0), 'TB': s.get('stat', {}).get('totalBases', 0), 'K': s.get('stat', {}).get('strikeOuts', 0), 'ER': s.get('stat', {}).get('earnedRuns', 0), 'MINS': float(s.get('stat', {}).get('plateAppearances', s.get('stat', {}).get('battersFaced', 1)))} for s in splits]
-        
         df = pd.DataFrame(data)
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        
         return df.sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
+
+@st.cache_data(ttl=43200) 
+def get_live_nba_team_stats():
+    try:
+        from nba_api.stats.endpoints import leaguedashteamstats
+        stats = leaguedashteamstats.LeagueDashTeamStats(measure_type_detailed_defense='Advanced')
+        df = stats.get_data_frames()[0]
+        df['TEAM_ABBREV'] = df['TEAM_NAME'].map(NBA_FULL_TO_ABBREV)
+        df_clean = df[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
+        df_clean['DEF_RANK'] = df_clean['DEF_RATING'].rank(ascending=True) 
+        df_clean['PACE_RANK'] = df_clean['PACE'].rank(ascending=False)
+        return df_clean.to_dict('index')
+    except: return {}
+
+def get_player_archetype(df, league):
+    if df.empty or league != "NBA": return "Unknown Profile"
+    avg_mins = df['MINS'].mean()
+    if pd.isna(avg_mins) or avg_mins < 5: avg_mins = 15.0
+    pts_36 = (df.get('PTS', pd.Series([0])).mean() / avg_mins) * 36
+    trb_36 = (df.get('TRB', pd.Series([0])).mean() / avg_mins) * 36
+    ast_36 = (df.get('AST', pd.Series([0])).mean() / avg_mins) * 36
+    fg3m_36 = (df.get('FG3M', pd.Series([0])).mean() / avg_mins) * 36
+    clusters = {"👑 Primary Playmaker (High USG)": [26.0, 6.0, 9.5, 2.5], "🦍 Paint Beast / Rim Runner": [17.0, 13.5, 2.0, 0.1], "🧬 Versatile Point-Forward": [21.0, 9.0, 6.0, 1.5], "🎯 3&D Wing / Spot-Up Shooter": [15.0, 5.0, 2.0, 3.8], "🛡️ Two-Way Connector": [13.0, 4.5, 5.5, 1.5]}
+    player_vec = [[pts_36, trb_36, ast_36, fg3m_36]]
+    best_match, min_dist = "Unknown", float('inf')
+    for name, centroid in clusters.items():
+        dist = euclidean_distances(player_vec, [centroid])[0][0]
+        if dist < min_dist: min_dist = dist; best_match = name
+    return best_match
+
+def get_archetype_defense_modifier(league, opp, archetype):
+    if league == "NBA":
+        live_stats = get_live_nba_team_stats()
+        if opp in live_stats:
+            def_rank, pace_rank = live_stats[opp]['DEF_RANK'], live_stats[opp]['PACE_RANK']
+            mod_val, mod_desc = 1.0, f"🛡️ Def Rank: #{int(def_rank)} | 🏃 Pace: #{int(pace_rank)} -> "
+            if def_rank <= 10: mod_val *= 0.90; mod_desc += "Elite Def (-10%). "
+            elif def_rank >= 21: mod_val *= 1.10; mod_desc += "Weak Def (+10%). "
+            else: mod_desc += "Avg Def (Neutral). "
+            if pace_rank <= 10: mod_val *= 1.05; mod_desc += "Fast Pace (+5%). "
+            elif pace_rank >= 21: mod_val *= 0.95; mod_desc += "Slow Pace (-5%). "
+            if "Point-Forward" in archetype and def_rank >= 15: mod_val *= 1.05; mod_desc += "🚨 Exploit: Weak vs Forwards."
+            elif "Primary Playmaker" in archetype and def_rank <= 10: mod_val *= 0.95; mod_desc += "🛑 Fade: Elite Perimeter Def."
+            return mod_val, mod_desc
+        else:
+            if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]: return 0.90, "Elite Defense (-10%)"
+            elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]: return 1.10, "Weak Defense (+10%)"
+            return 1.00, "Average Def (Neutral)"
+    elif league == "MLB":
+        if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]: return 0.90, "Elite Pitching (-10%)"
+        elif opp in ["COL", "OAK", "CHW", "KC", "WSH"]: return 1.10, "Weak Pitching (+10%)"
+        return 1.00, "Average Pitching (Neutral)"
+    else: 
+        if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"]: return 0.90, "Elite Goalie (-10%)"
+        elif opp in ["SJS", "ANA", "CBJ", "CHI", "MTL", "NYI"]: return 1.10, "Swiss Cheese Def (+10%)"
+        return 1.00, "Average Def (Neutral)"
 
 def get_fatigue_modifier(rest_status):
     if "B2B" in rest_status: return 0.95, "Tired Legs (-5%)"
@@ -559,9 +508,6 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
     new_odds = int(round((-100*p_new)/(1-p_new))) if p_new > 0.50 else int(round((100*(1-p_new))/p_new))
     return 5 * round(new_odds/5)
 
-# ==========================================
-# 6. SKYNET ML ENGINE
-# ==========================================
 @st.cache_data(show_spinner=False, ttl=300)
 def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type):
     df_ml = df.copy()
@@ -653,7 +599,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, skynet_msg, skynet_color
 
 # ==========================================
-# 7. SCANNERS (RADAR)
+# 4. SCANNERS (RADAR)
 # ==========================================
 @st.cache_data(ttl=3600)
 def run_nba_heaters():
@@ -668,10 +614,8 @@ def run_nhl_heaters():
         sched, _ = get_nhl_schedule()
         if not sched: return None, "No NHL games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
-
         r = requests.get("https://api-web.nhle.com/v1/skater-stats-leaders/current?gameTypes=2&limit=50", timeout=5).json()
         heaters = [{"Player": f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip(), "Team": p.get('teamAbbrev'), "Category": "Points Leader", "Season Pts": p.get('points', 0), "Status": "🔥 Active Tonight"} for p in r.get('data', []) if p.get('teamAbbrev') in teams_today]
-
         if not heaters: return None, "No top 50 league leaders playing tonight."
         return pd.DataFrame(heaters), "✅ Found elite NHL scorers active on tonight's slate."
     except Exception as e: return None, f"API Error: {str(e)}"
@@ -685,12 +629,9 @@ def run_barn_burner():
         for g in schedule_data: 
             teams_today.extend([g['home'], g['away']])
             team_to_opp[g['home']], team_to_opp[g['away']] = g['away'], g['home']
-            
         r = requests.get("https://api.nhle.com/stats/rest/en/team/summary?sort=shotsAgainstPerGame&cayenneExp=seasonId=20252026", timeout=5).json()
         bad_defenses = [t['teamAbbrev'] for t in r.get('data', []) if t.get('shotsAgainstPerGame', 0) > 31.0]
-        
         targets = [{"Team": t, "Opp": team_to_opp[t], "Opp Status": "🧀 BAD DEFENSE (>31 SOG/G)"} for t in teams_today if team_to_opp[t] in bad_defenses]
-                
         if not targets: return None, "No major defensive mismatches found on today's slate."
         return pd.DataFrame(targets), "✅ Found optimal SOG matchups based on opponent weakness."
     except Exception as e: return None, f"API Error: {str(e)}"
@@ -701,24 +642,21 @@ def run_mlb_heaters():
         sched, _ = get_mlb_schedule()
         if not sched: return None, "No MLB games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
-
         curr_year = datetime.now().year
         r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year}&limit=50", timeout=5).json()
         if not r.get('stats'): r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year-1}&limit=50", timeout=5).json()
-
         heaters = []
         for s in r.get('stats', []):
             for p in s.get('splits', []):
                 team_name = p.get('team', {}).get('name', '').upper()
                 if any(t[:3].upper() in team_name for t in teams_today): 
                     heaters.append({"Player": p.get('player', {}).get('fullName', ''), "Category": "Elite Hitter", "Season Hits": p.get('stat', {}).get('hits', 0), "Status": "🔥 Active Today"})
-
         if not heaters: return None, "No top 50 hitters playing today."
         return pd.DataFrame(heaters), "✅ Found elite MLB hitters active on today's slate."
     except Exception as e: return None, f"API Error: {str(e)}"
 
 # ==========================================
-# 8. UI ENGINE & RENDERERS
+# 5. UI RENDERERS
 # ==========================================
 def render_scoreboard(sd):
     if not sd: return
@@ -806,7 +744,6 @@ def render_syndicate_board(league_key):
             else:
                 std_dev = df_with_ml[s_col].std()
                 if pd.isna(std_dev) or std_dev == 0: std_dev = 1.0
-                
                 sims = np.random.normal(loc=c_proj, scale=std_dev, size=10000)
                 if c_vote == "OVER": win_prob = np.sum(sims > line) / 10000.0
                 elif c_vote == "UNDER": win_prob = np.sum(sims < line) / 10000.0
@@ -865,7 +802,6 @@ def render_syndicate_board(league_key):
                     df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
                     df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
                     df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
-                    
                     bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
                         x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
                         y=alt.Y(s_col, title=stat_type),
@@ -889,7 +825,6 @@ def render_syndicate_board(league_key):
                         else:
                             st.caption(f"**🛡️ {opp} Defense Difficulty**")
                             st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
-                        
                         st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**⚔️ History vs {opp} (All Time)**")
                         df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
                         if not df_opp.empty:
@@ -903,7 +838,6 @@ def render_syndicate_board(league_key):
         else: st.warning(f"🚨 **Warning:** No stats available for {target_player}.")
 
 def render_league_tab(league_name, get_sched_func):
-    # Embedded Scanners
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
         if league_name == "NBA":
             if st.button("🏀 Scan NBA Heaters"):
@@ -931,9 +865,7 @@ def render_league_tab(league_name, get_sched_func):
                     df, msg = run_mlb_heaters()
                     if df is not None: st.dataframe(df, use_container_width=True)
                     st.info(msg)
-    
     st.divider()
-    
     c1, c2 = st.columns([8, 1])
     with c1: st.markdown(f"### 📅 Today's {league_name} Slate")
     with c2: 
@@ -944,18 +876,22 @@ def render_league_tab(league_name, get_sched_func):
     st.markdown("---")
     render_syndicate_board(league_name)
 
+
 # ==========================================
-# 9. MAIN APP WRAPPER & ROUTING
+# 6. MAIN APP LAYOUT & ROUTING (CLEAN!)
 # ==========================================
+
+# 1. RENDER HEADER FIRST
 video_path = "delorean.mp4"
 if os.path.exists(video_path):
     with open(video_path, "rb") as video_file: video_base64 = base64.b64encode(video_file.read()).decode()
     html_code = f"""<!DOCTYPE html><html><head><style>@import url('https://fonts.googleapis.com/css2?family=Audiowide&display=swap');body {{margin: 0;padding: 0;background-color: #0f172a;overflow: hidden;font-family: 'Audiowide', sans-serif;}}.b2tf-header-container {{position: relative;overflow: hidden;border-radius: 12px;border: 3px solid #ff0055;text-align: center;background-color: #0f172a;box-shadow: 0 0 15px #ff0055;height: 274px; display: flex;align-items: center;justify-content: center;flex-direction: column;}}@keyframes fade-out-video {{0% {{ opacity: 0.6; }}100% {{ opacity: 0; }}}}.b2tf-video-bg {{position: absolute;top: 0;left: 0;width: 100%;height: 100%;z-index: 0;opacity: 0.6;object-fit: cover;animation: fade-out-video 2.3s ease-out 4.6s forwards; }}.b2tf-content {{position: relative;z-index: 1;opacity: 0;animation: fade-in-text 4.7s ease-out 4.5s forwards; }}@keyframes fade-in-text {{0% {{ opacity: 0; transform: translateY(15px) scale(0.9); }}100% {{ opacity: 1; transform: translateY(0) scale(1); }}}}h1 {{color: #ffcc00; font-size: 56px; font-weight: 900; margin: 0; text-shadow: 0 0 10px #ff6600, 0 0 20px #ff0000, 0 0 30px #ff0000; letter-spacing: 2px;}}.subtitle {{color: #00E5FF; font-size: 16px; font-weight: bold; letter-spacing: 3px; margin-top: 5px; text-shadow: 0 0 5px #00E5FF; background: rgba(15, 23, 42, 0.7); padding: 5px 15px; border-radius: 8px; display: inline-block;}}</style></head><body><div class="b2tf-header-container"><video id="delorean-vid" class="b2tf-video-bg" autoplay muted playsinline><source src="data:video/mp4;base64,{video_base64}" type="video/mp4"></video><div class="b2tf-content"><h1>B2TF ALMANAC</h1><div class="subtitle">ROADS? WHERE WE'RE GOING, WE DON'T NEED ROADS.</div></div></div><script>var video = document.getElementById('delorean-vid');video.addEventListener('loadedmetadata', function() {{video.currentTime = 1.0;}}, false);</script></body></html>"""
     components.html(html_code, height=280)
 
+# 2. RENDER DIAGNOSTICS SECOND
 with st.expander("⛽ System Diagnostics & API Fuel Gauge", expanded=False):
     diag_c1, diag_c2 = st.columns([1, 2])
-    with diag_c1: st.markdown("**⚙️ Module Status**\n<br><span style='color:#94a3b8; font-size:12px;'>✅ Odds API (Live)<br>✅ NBA Core (Active)<br>✅ NHL/MLB (Active)<br>✅ Archetype Engine (Online)<br>🟣 Skynet Self-Correction (Online)<br>☁️ Google DB (Online)</span>", unsafe_allow_html=True)
+    with diag_c1: st.markdown("**⚙️ Module Status**\n<br><span style='color:#94a3b8; font-size:12px;'>✅ Odds API (Live)<br>✅ Core DB (Active)<br>✅ MLB/NHL (Active)<br>✅ Archetype Engine (Online)<br>🟣 Skynet Correction (Online)<br>☁️ Google Sheets (Online)</span>", unsafe_allow_html=True)
     with diag_c2:
         st.markdown("**🔋 Odds API Fuel Level**")
         if ODDS_API_KEY:
@@ -969,15 +905,14 @@ with st.expander("⛽ System Diagnostics & API Fuel Gauge", expanded=False):
                     color = "#00E676" if fuel_pct > 0.3 else ("#FFD700" if fuel_pct > 0.1 else "#ff0055")
                     st.markdown(f'<div style="background-color: #1e293b; border-radius: 5px; width: 100%; height: 20px; border: 1px solid #334155; margin-top: 5px;"><div style="background-color: {color}; width: {fuel_pct*100}%; height: 100%; border-radius: 4px; transition: width 0.5s;"></div></div><div style="font-size: 12px; color: #94a3b8; margin-top: 5px; text-align: right;">{rem} / {total} Requests Remaining</div>', unsafe_allow_html=True)
                 else: st.caption("Sync a bet or hit 'Check' to load data.")
-        else: st.warning("API Key missing.")
 
-# SIDEBAR NAVIGATION
+# 3. RENDER SIDEBAR NAVIGATION THIRD
 st.sidebar.markdown(f"### 🏦 Liquid Bankroll: <span style='color:#00E676;'>${get_liquid_balance():.2f}</span>", unsafe_allow_html=True)
 roi_mode = st.sidebar.radio("Navigation", ["🎯 Syndicate Picks", "🎟️ Parlay Tracker", "🏦 ROI Ledger", "💵 Wallet Manager"])
 st.sidebar.markdown("---")
 if st.sidebar.button("🧹 Clear Skynet Cache (Reset API)"): st.cache_data.clear(); st.sidebar.success("Cache Cleared!")
 
-# PAGE ROUTING
+# 4. RENDER PAGE BASED ON SIDEBAR SELECTION
 if roi_mode == "🎯 Syndicate Picks":
     t_nba, t_nhl, t_mlb = st.tabs(["🏀 NBA", "🏒 NHL", "⚾ MLB"])
     with t_nba: render_league_tab("NBA", get_nba_schedule)
@@ -1064,7 +999,6 @@ elif roi_mode == "🎟️ Parlay Tracker":
             orig_idx, o, r, is_f = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce')), float(pd.to_numeric(row['Risk'], errors='coerce')), row.get('Is_Free_Bet', False)
             status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
             legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
-            
             boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
             
             pc1, pc2 = st.columns([4, 1])
@@ -1106,7 +1040,6 @@ elif roi_mode == "🏦 ROI Ledger":
         for i, row in ledger_df.iloc[::-1].reset_index().iterrows():
             orig_idx, o = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce'))
             status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
-            
             boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
             
             sc1, sc2 = st.columns([4, 1])
