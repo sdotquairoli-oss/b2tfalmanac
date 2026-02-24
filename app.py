@@ -155,7 +155,7 @@ def auto_grade_ledger():
             
             # Check local memory before burning an API call
             if cache_key not in stats_cache:
-                time.sleep(1) # Protect against rate limits on fresh pulls
+                time.sleep(1) # Protect against rate limits
                 if league == "NBA": stats, _, _ = get_nba_stats(player); d_col = 'ValidDate'
                 elif league == "NHL": stats, _, _ = get_nhl_stats(player); d_col = 'gameDate'
                 else: stats, _, _ = get_mlb_stats(player); d_col = 'gameDate'
@@ -166,6 +166,7 @@ def auto_grade_ledger():
             
             s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K", "Double Double": "DD", "Triple Double": "TD"}
             s_col = s_map.get(r['Stat'], "PTS")
+            
             if league == "NBA":
                 if s_col == "A": s_col = "AST"
                 if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
@@ -195,14 +196,15 @@ def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
         if df.empty: return "No data."
         
         s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K", "Double Double": "DD", "Triple Double": "TD"}
-            s_col = s_map.get(r['Stat'], "PTS")
-            if league == "NBA":
-                if s_col == "A": s_col = "AST"
-                if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
-                if s_col in ["DD", "TD"]:
-                    tens = (stats['PTS'] >= 10).astype(int) + (stats['TRB'] >= 10).astype(int) + (stats['AST'] >= 10).astype(int) + (stats.get('STL', 0) >= 10).astype(int) + (stats.get('BLK', 0) >= 10).astype(int)
-                    stats['DD'] = (tens >= 2).astype(int)
-                    stats['TD'] = (tens >= 3).astype(int)
+        s_col = s_map.get(stat, "PTS")
+        
+        if league == "NBA":
+            if s_col == "A": s_col = "AST"
+            if s_col == "PRA" and 'PTS' in df: df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
+            if s_col in ["DD", "TD"]:
+                tens = (df['PTS'] >= 10).astype(int) + (df['TRB'] >= 10).astype(int) + (df['AST'] >= 10).astype(int) + (df.get('STL', 0) >= 10).astype(int) + (df.get('BLK', 0) >= 10).astype(int)
+                df['DD'] = (tens >= 2).astype(int)
+                df['TD'] = (tens >= 3).astype(int)
             
         df['td'] = pd.to_datetime(df[dc]).dt.date
         g_df = df[df['td'] == dt]
