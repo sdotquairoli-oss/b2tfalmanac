@@ -736,14 +736,25 @@ def render_syndicate_board(league_key):
         if player_name and sched:
             if "(" in player_name and ")" in player_name:
                 team_abbr = player_name.split("(")[1].split(")")[0].strip().upper()
-                # Search today's schedule for the player's team
                 for g in sched:
                     if g['home'].upper() == team_abbr: auto_opp = g['away'].upper(); auto_is_home = True; break
                     elif g['away'].upper() == team_abbr: auto_opp = g['home'].upper(); auto_is_home = False; break
 
-        # Render top toggles dynamically based on findings
-        sync = placeholder_sync.toggle("📡 Auto-Sync Vegas Odds", value=False, key=f"sy_{league_key}")
-        is_home_current = 1 if placeholder_home.toggle("🏠 Playing at Home?", value=auto_is_home, key=f"loc_{league_key}") else 0
+        # ⚡ STATE OVERRIDE: Force update UI when a NEW player is selected
+        if player_name and player_name != st.session_state.get(f"last_p_{league_key}"):
+            st.session_state[f"last_p_{league_key}"] = player_name
+            if auto_opp and auto_opp in teams:
+                st.session_state[f"op_{league_key}"] = auto_opp
+                st.session_state[f"loc_{league_key}"] = auto_is_home
+
+        # Initialize defaults if not in state to prevent Streamlit errors
+        if f"sy_{league_key}" not in st.session_state: st.session_state[f"sy_{league_key}"] = False
+        if f"loc_{league_key}" not in st.session_state: st.session_state[f"loc_{league_key}"] = True
+        if f"op_{league_key}" not in st.session_state: st.session_state[f"op_{league_key}"] = teams[0]
+
+        # Render top toggles dynamically based on Session State
+        sync = placeholder_sync.toggle("📡 Auto-Sync Vegas Odds", key=f"sy_{league_key}")
+        is_home_current = 1 if placeholder_home.toggle("🏠 Playing at Home?", key=f"loc_{league_key}") else 0
             
         with c2: 
             opts = ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
@@ -768,8 +779,7 @@ def render_syndicate_board(league_key):
             is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"boost_{league_key}")
                 
         with c4: 
-            opp_idx = teams.index(auto_opp) if auto_opp in teams else 0
-            opp = st.selectbox("Opponent", teams, index=opp_idx, key=f"op_{league_key}")
+            opp = st.selectbox("Opponent", teams, key=f"op_{league_key}")
             rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"rest_{league_key}")
 
     btn_c1, btn_c2, _ = st.columns([1, 1, 2])
