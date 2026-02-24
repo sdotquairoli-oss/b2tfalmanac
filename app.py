@@ -604,10 +604,29 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
 @st.cache_data(ttl=3600)
 def run_nba_heaters():
     try:
-        df = pd.DataFrame({"Message": ["NBA Scanner active. Cross-referencing top scorers with active slate."], "Status": ["Ready"]})
-        return df, "✅ NBA Scanner loaded."
-    except Exception as e: return None, f"API Error: {str(e)}"
+        from nba_api.stats.endpoints import leagueleaders
+        sched, _ = get_nba_schedule()
+        if not sched: return None, "No NBA games scheduled today."
+        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
 
+        # Instantly pull the Top 50 Scorers in the NBA
+        leaders = leagueleaders.LeagueLeaders(stat_category_abbreviation='PTS', per_mode48='PerGame').get_data_frames()[0]
+        
+        heaters = []
+        for _, r in leaders.head(50).iterrows():
+            team_abbrev = r['TEAM']
+            if team_abbrev in teams_today:
+                heaters.append({
+                    "Player": r['PLAYER'],
+                    "Team": team_abbrev,
+                    "Category": "Scoring Leader",
+                    "Season PPG": round(r['PTS'], 1),
+                    "Status": "🔥 Active Tonight"
+                })
+
+        if not heaters: return None, "No top 50 scorers playing tonight."
+        return pd.DataFrame(heaters), "✅ Found elite NBA scorers active on tonight's slate."
+    except Exception as e: return None, f"API Error: {str(e)}"
 @st.cache_data(ttl=3600)
 def run_nhl_heaters():
     try:
@@ -840,7 +859,7 @@ def render_syndicate_board(league_key):
 def render_league_tab(league_name, get_sched_func):
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
         if league_name == "NBA":
-            if st.button("🏀 Scan NBA Heaters"):
+            if st.button("🏀 Scan NBA Heaters", type="primary"):
                 with st.spinner("Scanning NBA..."):
                     df, msg = run_nba_heaters()
                     if df is not None: st.dataframe(df, use_container_width=True)
@@ -848,19 +867,19 @@ def render_league_tab(league_name, get_sched_func):
         elif league_name == "NHL":
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("🏒 Scan NHL Heaters"):
+                if st.button("🏒 Scan NHL Heaters", type="primary", use_container_width=True):
                     with st.spinner("Scanning NHL Skaters..."):
                         df, msg = run_nhl_heaters()
                         if df is not None: st.dataframe(df, use_container_width=True)
                         st.info(msg)
             with c2:
-                if st.button("🚨 Scan Barn Burners (SOG)"):
+                if st.button("🚨 Scan Barn Burners", type="primary", use_container_width=True):
                     with st.spinner("Hunting weak defenses..."):
                         df, msg = run_barn_burner()
                         if df is not None: st.dataframe(df, use_container_width=True)
                         st.info(msg)
         elif league_name == "MLB":
-            if st.button("⚾ Scan MLB Heaters"):
+            if st.button("⚾ Scan MLB Heaters", type="primary"):
                 with st.spinner("Scanning Elite Hitters..."):
                     df, msg = run_mlb_heaters()
                     if df is not None: st.dataframe(df, use_container_width=True)
