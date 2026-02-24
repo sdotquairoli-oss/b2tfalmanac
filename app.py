@@ -261,9 +261,12 @@ def get_nba_schedule():
     try:
         from nba_api.stats.endpoints import scoreboardv2
         from nba_api.stats.static import teams
-        board = scoreboardv2.ScoreboardV2()
+        
+        # ⏱️ Force Strict Eastern Time Date
+        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+        board = scoreboardv2.ScoreboardV2(game_date=today_str)
         games = board.get_data_frames()[0]
-        if games.empty: return None, "No games scheduled."
+        if games.empty: return None, "No games scheduled today."
             
         team_dict = {t['id']: t['abbreviation'] for t in teams.get_teams()}
         matchups = []
@@ -290,22 +293,31 @@ def get_nba_schedule():
 @st.cache_data(ttl=60)
 def get_nhl_schedule():
     try:
-        r = requests.get("https://api-web.nhle.com/v1/schedule/now", timeout=5).json()
-        if not r.get('gameWeek') or not r['gameWeek'][0].get('games'): return None, "No games scheduled."
+        # ⏱️ Force Strict Eastern Time Date
+        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+        r = requests.get(f"https://api-web.nhle.com/v1/schedule/{today_str}", timeout=5).json()
+        if not r.get('gameWeek'): return None, "No games scheduled today."
+        
         matchups = []
-        for g in r['gameWeek'][0]['games']:
-            state = g.get('gameState', 'FUT') 
-            il = state in ['LIVE', 'CRIT', 'FINAL', 'OFF']
-            ds = "Final" if state in ['FINAL', 'OFF'] else "LIVE" if state in ['LIVE', 'CRIT'] else pd.to_datetime(g['startTimeUTC']).tz_convert('US/Eastern').strftime("%I:%M %p").lstrip("0")
-            matchups.append({"home": g['homeTeam']['abbrev'], "away": g['awayTeam']['abbrev'], "status": ds, "home_score": g.get('homeTeam', {}).get('score', 0), "away_score": g.get('awayTeam', {}).get('score', 0), "is_live_or_final": il})
+        for day_data in r['gameWeek']:
+            if day_data.get('date') == today_str:
+                for g in day_data.get('games', []):
+                    state = g.get('gameState', 'FUT') 
+                    il = state in ['LIVE', 'CRIT', 'FINAL', 'OFF']
+                    ds = "Final" if state in ['FINAL', 'OFF'] else "LIVE" if state in ['LIVE', 'CRIT'] else pd.to_datetime(g['startTimeUTC']).tz_convert('US/Eastern').strftime("%I:%M %p").lstrip("0")
+                    matchups.append({"home": g['homeTeam']['abbrev'], "away": g['awayTeam']['abbrev'], "status": ds, "home_score": g.get('homeTeam', {}).get('score', 0), "away_score": g.get('awayTeam', {}).get('score', 0), "is_live_or_final": il})
+        
+        if not matchups: return None, "No games scheduled today."
         return matchups, "Success"
     except: return None, "Failed to connect to NHL API."
 
 @st.cache_data(ttl=60)
 def get_mlb_schedule():
     try:
-        r = requests.get("https://statsapi.mlb.com/api/v1/schedule?sportId=1", timeout=5).json()
-        if not r.get('dates') or not r['dates'][0].get('games'): return None, "No games scheduled."
+        # ⏱️ Force Strict Eastern Time Date
+        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+        r = requests.get(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}", timeout=5).json()
+        if not r.get('dates') or not r['dates'][0].get('games'): return None, "No games scheduled today."
         matchups = []
         for g in r['dates'][0]['games']:
             home = g['teams']['home']['team']['name'].split()[-1][:3].upper()
