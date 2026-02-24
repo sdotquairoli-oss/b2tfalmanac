@@ -700,9 +700,13 @@ def render_syndicate_board(league_key):
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
     teams = NBA_TEAMS if league_key == "NBA" else (MLB_TEAMS if league_key == "MLB" else NHL_TEAMS)
     
+    # Invisibly pull today's schedule to cross-reference matchups
+    sched_func = get_nba_schedule if league_key == "NBA" else (get_mlb_schedule if league_key == "MLB" else get_nhl_schedule)
+    sched, _ = sched_func()
+
     top_c1, top_c2, _ = st.columns([1, 1, 2])
-    with top_c1: sync = st.toggle("📡 Auto-Sync Vegas Odds", value=False, key=f"sy_{league_key}")
-    with top_c2: is_home_current = 1 if st.toggle("🏠 Playing at Home?", value=True, key=f"loc_{league_key}") else 0
+    placeholder_sync = top_c1.empty()
+    placeholder_home = top_c2.empty()
     
     with st.container():
         c1, c2, c3, c4 = st.columns([2, 1.5, 1, 1.5])
@@ -714,6 +718,21 @@ def render_syndicate_board(league_key):
                 if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"dd_{league_key}")
                 else: st.caption("No players found.")
                 
+        # 🕵️‍♂️ SKYNET AUTO-DETECT MATCHUP LOGIC
+        auto_opp = None
+        auto_is_home = True
+        if player_name and sched:
+            if "(" in player_name and ")" in player_name:
+                team_abbr = player_name.split("(")[1].split(")")[0].strip().upper()
+                # Search today's schedule for the player's team
+                for g in sched:
+                    if g['home'].upper() == team_abbr: auto_opp = g['away'].upper(); auto_is_home = True; break
+                    elif g['away'].upper() == team_abbr: auto_opp = g['home'].upper(); auto_is_home = False; break
+
+        # Render top toggles dynamically based on findings
+        sync = placeholder_sync.toggle("📡 Auto-Sync Vegas Odds", value=False, key=f"sy_{league_key}")
+        is_home_current = 1 if placeholder_home.toggle("🏠 Playing at Home?", value=auto_is_home, key=f"loc_{league_key}") else 0
+            
         with c2: 
             opts = ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
             stat_type = st.selectbox("Stat", opts, key=f"st_{league_key}")
@@ -724,10 +743,8 @@ def render_syndicate_board(league_key):
             with st.spinner("Syncing Odds..."): f_line, f_odds, msg, used, rem = get_live_line(player_name, stat_type, ODDS_API_KEY, sport_path)
             if used and rem: st.session_state['api_used'], st.session_state['api_remaining'] = int(used), int(rem)
             
-            if f_line is not None and f_odds is not None:
-                live_odds_display.markdown(f'<div style="background-color: rgba(0, 230, 118, 0.1); border: 1px solid #00E676; padding: 10px; border-radius: 6px; margin-top: 10px;"><div style="font-size: 11px; font-weight: 900; color: #00E676; letter-spacing: 1px;">📡 LIVE MARKET SYNCED</div><div style="font-size: 16px; font-weight: bold; color: #fff;">{stat_type} O/U {f_line} <span style="color: #94a3b8; font-size: 14px;">({"+"+str(f_odds) if f_odds>0 else f_odds})</span></div></div>', unsafe_allow_html=True)
-            elif f_odds is not None:
-                live_odds_display.markdown(f'<div style="background-color: rgba(255, 215, 0, 0.1); border: 1px solid #FFD700; padding: 10px; border-radius: 6px; margin-top: 10px;"><div style="font-size: 11px; font-weight: 900; color: #FFD700; letter-spacing: 1px;">🟡 MARKET PARTIAL SYNC</div><div style="font-size: 16px; font-weight: bold; color: #fff;">{stat_type} Odds <span style="color: #94a3b8; font-size: 14px;">({"+"+str(f_odds) if f_odds>0 else f_odds})</span></div></div>', unsafe_allow_html=True)
+            if f_line is not None and f_odds is not None: live_odds_display.markdown(f'<div style="background-color: rgba(0, 230, 118, 0.1); border: 1px solid #00E676; padding: 10px; border-radius: 6px; margin-top: 10px;"><div style="font-size: 11px; font-weight: 900; color: #00E676; letter-spacing: 1px;">📡 LIVE MARKET SYNCED</div><div style="font-size: 16px; font-weight: bold; color: #fff;">{stat_type} O/U {f_line} <span style="color: #94a3b8; font-size: 14px;">({"+"+str(f_odds) if f_odds>0 else f_odds})</span></div></div>', unsafe_allow_html=True)
+            elif f_odds is not None: live_odds_display.markdown(f'<div style="background-color: rgba(255, 215, 0, 0.1); border: 1px solid #FFD700; padding: 10px; border-radius: 6px; margin-top: 10px;"><div style="font-size: 11px; font-weight: 900; color: #FFD700; letter-spacing: 1px;">🟡 MARKET PARTIAL SYNC</div><div style="font-size: 16px; font-weight: bold; color: #fff;">{stat_type} Odds <span style="color: #94a3b8; font-size: 14px;">({"+"+str(f_odds) if f_odds>0 else f_odds})</span></div></div>', unsafe_allow_html=True)
             else: live_odds_display.caption(f"🟡 {msg}")
 
         with c3: 
@@ -739,7 +756,8 @@ def render_syndicate_board(league_key):
             is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"boost_{league_key}")
                 
         with c4: 
-            opp = st.selectbox("Opponent", teams, key=f"op_{league_key}")
+            opp_idx = teams.index(auto_opp) if auto_opp in teams else 0
+            opp = st.selectbox("Opponent", teams, index=opp_idx, key=f"op_{league_key}")
             rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"rest_{league_key}")
 
     btn_c1, btn_c2, _ = st.columns([1, 1, 2])
