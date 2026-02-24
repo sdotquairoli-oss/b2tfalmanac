@@ -11,7 +11,7 @@ import gspread
 from datetime import datetime
 import pytz
 from io import StringIO
-import streamlit.components.v1 as components 
+import streamlit.components.v1 as components
 
 # --- ML IMPORTS ---
 from sklearn.linear_model import LinearRegression
@@ -222,7 +222,6 @@ def check_api_quota():
 def search_nba_players(query):
     if not query: return []
     try:
-        # The BDL API panics on spaces. We extract the last name, ping the API, and filter locally.
         search_term = query.split()[-1] if " " in query else query
         r = requests.get("https://api.balldontlie.io/v1/players", headers={"Authorization": BDL_API_KEY}, params={"search": search_term, "per_page": 100}, timeout=5)
         if r.status_code == 200: 
@@ -230,7 +229,6 @@ def search_nba_players(query):
             for p in r.json().get('data', []):
                 if p.get('team'):
                     full_name = f"{p['first_name']} {p['last_name']}"
-                    # Ensure the user's exact full name query matches the result
                     if query.lower() in full_name.lower():
                         matches.append(f"{full_name} ({p['team']['abbreviation']})")
             return matches
@@ -262,7 +260,6 @@ def get_nba_schedule():
         from nba_api.stats.endpoints import scoreboardv2
         from nba_api.stats.static import teams
         
-        # ⏱️ Force Strict Eastern Time Date
         today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
         board = scoreboardv2.ScoreboardV2(game_date=today_str)
         games = board.get_data_frames()[0]
@@ -293,7 +290,6 @@ def get_nba_schedule():
 @st.cache_data(ttl=60)
 def get_nhl_schedule():
     try:
-        # ⏱️ Force Strict Eastern Time Date
         today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
         r = requests.get(f"https://api-web.nhle.com/v1/schedule/{today_str}", timeout=5).json()
         if not r.get('gameWeek'): return None, "No games scheduled today."
@@ -314,12 +310,10 @@ def get_nhl_schedule():
 @st.cache_data(ttl=60)
 def get_mlb_schedule():
     try:
-        # ⏱️ Force Strict Eastern Time Date
         today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
         r = requests.get(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}", timeout=5).json()
         if not r.get('dates') or not r['dates'][0].get('games'): return None, "No games scheduled today."
         
-        # ⚾ Exact Abbreviation Dictionary for Perfect Snapping
         m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
 
         matchups = []
@@ -538,95 +532,132 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
     new_odds = int(round((-100*p_new)/(1-p_new))) if p_new > 0.50 else int(round((100*(1-p_new))/p_new))
     return 5 * round(new_odds/5)
 
-@st.cache_data(show_spinner=False, ttl=300)
-def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type):
-    df_ml = df.copy()
-    archetype = get_player_archetype(df_ml, league)
-    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
+# --- ⚡ ML REFACTOR HELPERS ---
 
-    if len(df_ml) < 5: 
-        return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data", "#94a3b8"
+def build_models(df_ml, s_col, weights):
+    mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
+    df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
     
-    y = df_ml[s_col].values
+    y = df_ml[s_col].fillna(0).values
     X = np.arange(len(df_ml)).reshape(-1, 1)
-    weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
     
-    df_ml['Per_Min'] = df_ml[s_col] / df_ml['MINS'].replace(0, 1)
     expected_mins = df_ml['MINS'].tail(5).mean()
+    if pd.isna(expected_mins) or expected_mins == 0: expected_mins = 15.0
+
     lr = LinearRegression().fit(X, df_ml['Per_Min'].values, sample_weight=weights)
     trend_proj = lr.predict([[len(X)]])[0] * expected_mins
     
-    df_ml['Roll3'] = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean())
-    X_rf = df_ml[['Roll3', 'MINS']].values
+    df_ml['Roll3'] = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
+    X_rf = df_ml[['Roll3', 'MINS']].fillna(0).values
     rf = RandomForestRegressor(n_estimators=50, random_state=42).fit(X_rf, y, sample_weight=weights)
     stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins]])[0]
     
-    df_ml['Dev'] = df_ml[s_col] - df_ml[s_col].mean()
-    X_gb = df_ml[['MINS', 'Dev']].values
+    s_mean = df_ml[s_col].mean()
+    if pd.isna(s_mean): s_mean = 0.0
+    df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
+    X_gb = df_ml[['MINS', 'Dev']].fillna(0).values
     gb = GradientBoostingRegressor(n_estimators=50, random_state=42).fit(X_gb, y, sample_weight=weights)
-    con_proj = gb.predict([[expected_mins, trend_proj - df_ml[s_col].mean()]])[0]
+    con_proj = gb.predict([[expected_mins, trend_proj - s_mean]])[0]
 
     scaler = StandardScaler()
     X_svm_scaled = scaler.fit_transform(X_rf)
     svm = SVR(kernel='rbf', C=10).fit(X_svm_scaled, y, sample_weight=weights)
     base_proj = svm.predict(scaler.transform([[df_ml['Roll3'].iloc[-1], expected_mins]]))[0]
     
-    season_avg = df_ml[s_col].mean() if df_ml[s_col].mean() != 0 else 1 
-    home_avg = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
-    away_avg = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
-    if pd.isna(home_avg): home_avg = season_avg
-    if pd.isna(away_avg): away_avg = season_avg
+    return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, svm, X, X_rf, X_gb, X_svm_scaled, expected_mins
+
+def apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype):
+    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
+    fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
     
-    home_mod, away_mod = np.clip(home_avg / season_avg, 0.80, 1.20), np.clip(away_avg / season_avg, 0.80, 1.20)
+    season_avg = df_ml[s_col].mean()
+    if pd.isna(season_avg) or season_avg == 0:
+        season_avg = 1.0 
+        home_avg, away_avg = 1.0, 1.0
+    else:
+        home_avg = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
+        away_avg = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
+        if pd.isna(home_avg): home_avg = season_avg
+        if pd.isna(away_avg): away_avg = season_avg
+        
+    home_mod = np.clip(home_avg / season_avg, 0.80, 1.20)
+    away_mod = np.clip(away_avg / season_avg, 0.80, 1.20)
+    
     current_split_mod = home_mod if is_home_current == 1 else away_mod
     split_text = "Home" if is_home_current == 1 else "Road"
     split_desc = f"+{((current_split_mod-1)*100):.0f}%" if current_split_mod > 1 else f"{((current_split_mod-1)*100):.0f}%"
     
-    fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
-    guru_proj = ((trend_proj + stat_proj) / 2) * mod_val * fatigue_val * current_split_mod
+    return mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod
 
+def apply_skynet(raw_vote, stat_type):
+    if raw_vote == "PASS": return {"mod": 1.0, "msg": "🟣 Skynet: Market is efficient. Pass.", "color": "#94a3b8"}
+    try:
+        ledger = load_ledger()
+        if not ledger.empty and 'Result' in ledger.columns:
+            graded = ledger[ledger['Result'].isin(['Win', 'Loss'])]
+            subset = graded[(graded['Stat'] == stat_type) & (graded['Vote'] == raw_vote)]
+            total_graded = len(subset)
+            if total_graded >= 3:
+                wins = len(subset[subset['Result'] == 'Win'])
+                win_rate = wins / total_graded
+                if win_rate <= 0.35: return {"mod": (0.85 if raw_vote == "OVER" else 1.15), "msg": f"🛑 SKYNET TAX: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Applying penalty.", "color": "#ff0055"}
+                elif win_rate >= 0.60: return {"mod": (1.05 if raw_vote == "OVER" else 0.95), "msg": f"🔥 SKYNET BOOST: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Trusting edge.", "color": "#00E676"}
+                else: return {"mod": 1.0, "msg": f"⚖️ SKYNET AUDIT: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s.", "color": "#FFD700"}
+            else: return {"mod": 1.0, "msg": f"🟣 Skynet: Gathering data on {stat_type} {raw_vote}s ({total_graded}/3).", "color": "#94a3b8"}
+    except: pass
+    return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
+
+# --- ⚡ THE SLEEK COORDINATOR ---
+
+@st.cache_data(show_spinner=False, ttl=300)
+def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type):
+    df_ml = df.copy()
+    archetype = get_player_archetype(df_ml, league)
+
+    if len(df_ml) < 5: 
+        return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data", "#94a3b8"
+    
+    weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
+    
+    # 1. Build Models
+    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, svm, X, X_rf, X_gb, X_svm_scaled, expected_mins = build_models(df_ml, s_col, weights)
+    
+    # 2. Context Modifiers
+    mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod = apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype)
+
+    # 3. Consensus Math
+    guru_proj = ((trend_proj + stat_proj) / 2) * mod_val * fatigue_val * current_split_mod
     raw_consensus = (trend_proj + stat_proj + con_proj + base_proj + guru_proj) / 5
     def get_raw_vote(p): return "OVER" if p >= line + 0.3 else ("UNDER" if p <= line - 0.3 else "PASS")
     raw_vote = get_raw_vote(raw_consensus)
     
-    skynet_mod, skynet_msg, skynet_color = 1.0, "🟣 Skynet: Awaiting enough ledger data.", "#94a3b8"
-    if raw_vote != "PASS":
-        try:
-            ledger = load_ledger()
-            if not ledger.empty and 'Result' in ledger.columns:
-                graded = ledger[ledger['Result'].isin(['Win', 'Loss'])]
-                subset = graded[(graded['Stat'] == stat_type) & (graded['Vote'] == raw_vote)]
-                total_graded = len(subset)
-                if total_graded >= 3:
-                    wins = len(subset[subset['Result'] == 'Win']); win_rate = wins / total_graded
-                    if win_rate <= 0.35: skynet_mod, skynet_msg, skynet_color = (0.85 if raw_vote == "OVER" else 1.15), f"🛑 SKYNET TAX: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Applying penalty.", "#ff0055"
-                    elif win_rate >= 0.60: skynet_mod, skynet_msg, skynet_color = (1.05 if raw_vote == "OVER" else 0.95), f"🔥 SKYNET BOOST: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Trusting edge.", "#00E676"
-                    else: skynet_msg, skynet_color = f"⚖️ SKYNET AUDIT: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s.", "#FFD700"
-                else: skynet_msg = f"🟣 Skynet: Gathering data on {stat_type} {raw_vote}s ({total_graded}/3)."
-        except: pass
-
-    final_consensus = raw_consensus * skynet_mod
+    # 4. Skynet Injection
+    skynet_data = apply_skynet(raw_vote, stat_type)
+    final_consensus = raw_consensus * skynet_data["mod"]
+    
     def get_final_vote(p): return ("OVER", "#00c853") if p >= line + 0.3 else (("UNDER", "#d50000") if p <= line - 0.3 else ("PASS", "#94a3b8"))
     f_vote, f_color = get_final_vote(final_consensus)
     
-    lr_hist = lr.predict(X) * df_ml['MINS'].values
+    # 5. Build Historical Plot Baseline
+    lr_hist = lr.predict(X) * df_ml['MINS'].replace(0, 1.0).values
     rf_hist = rf.predict(X_rf)
     gb_hist = gb.predict(X_gb)
     svm_hist = svm.predict(X_svm_scaled)
     mods = df_ml['MATCHUP'].apply(lambda x: get_archetype_defense_modifier(league, x, archetype)[0]).values
     hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
     guru_hist = ((lr_hist + rf_hist) / 2) * mods * 1.0 * hist_split_mods
-    
-    df_ml['AI_Proj'] = ((lr_hist + rf_hist + gb_hist + svm_hist + guru_hist) / 5) * skynet_mod
+    df_ml['AI_Proj'] = ((lr_hist + rf_hist + gb_hist + svm_hist + guru_hist) / 5) * skynet_data["mod"]
 
+    # 6. UI Payload
     board = [
         {"name": "⏱️ MIN Maximizer", "model": "Linear Regression", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"Projects {trend_proj:.1f} by weighting recent mins."},
         {"name": "📊 Statistician", "model": "Random Forest", "proj": stat_proj, "vote": get_raw_vote(stat_proj), "color": get_final_vote(stat_proj)[1], "quote": f"Deep Memory sets stable floor. Trees favor {get_raw_vote(stat_proj)}."},
-        {"name": "🃏 Contrarian", "model": "Gradient Boosting", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"Flags variance {'regression' if con_proj < season_avg else 'spike'} from season norms."},
+        {"name": "🃏 Contrarian", "model": "Gradient Boosting", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"Flags variance {'regression' if con_proj < df_ml[s_col].mean() else 'spike'} from season norms."},
         {"name": "🛡️ Baseline", "model": "Support Vector Machine", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": "Weighted multi-year mapping of minute/production correlation."},
         {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors {mod_desc.split('(')[0].strip().replace('🛡️', '').replace('🏃', '').strip()}."}
     ]
-    return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, skynet_msg, skynet_color
+    
+    return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, skynet_data["msg"], skynet_data["color"]
 
 # ==========================================
 # 4. SCANNERS (RADAR)
@@ -657,6 +688,7 @@ def run_nba_heaters():
         if not heaters: return None, "No top 50 scorers playing tonight."
         return pd.DataFrame(heaters), "✅ Found elite NBA scorers active on tonight's slate."
     except Exception as e: return None, f"API Error: {str(e)}"
+    
 @st.cache_data(ttl=3600)
 def run_nhl_heaters():
     try:
