@@ -1050,49 +1050,8 @@ def render_syndicate_board(league_key):
                         st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🏟️ Venue Advantage ({split_text})**")
                         st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
                         st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🔋 Energy Levels**")
-                        st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
-                    
-                st.markdown("#### 📊 L10 Performance vs Line")
-                chart_col, side_col = st.columns([3.2, 1.2])
-                with chart_col:
-                    df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
-                    df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
-                    df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
-                    bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
-                        x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
-                        y=alt.Y(s_col, title=stat_type),
-                        color=alt.condition(alt.datum[s_col] > line, alt.value('#00c853'), alt.value('#d50000')),
-                        stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
-                        strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
-                        tooltip=[alt.Tooltip('ShortDate', title='Date'), alt.Tooltip('Matchup_Formatted', title='Opponent'), alt.Tooltip(s_col, title='Actual Stats'), alt.Tooltip('AI_Proj', title='AI Projection', format='.2f')]
-                    ).properties(height=350)
-                    vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
-                    ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
-                    text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
-                    st.altair_chart((bars + vegas_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
-                    st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
-                with side_col:
-                    with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
-                        st.markdown(f"<div style='text-align:center; font-weight:900; font-size:16px; color:#00E5FF;'>{(target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else 'Team')} vs {opp}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
-                        if league_key == "NBA":
-                            st.caption("**🧬 AI Player Archetype**")
-                            st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
-                            if "Exploit" in mod_desc or "Fade" in mod_desc: st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:2px; font-style:italic;'>{mod_desc}</div>", unsafe_allow_html=True)
-                        else:
-                            st.caption(f"**🛡️ {opp} Defense Difficulty**")
-                            st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
-                        st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**⚔️ History vs {opp} (All Time)**")
-                        df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
-                        if not df_opp.empty:
-                            opp_hits, opp_total = int((df_opp[s_col] > line).sum()), len(df_opp); opp_win_pct = (opp_hits / opp_total) * 100
-                            st.markdown(f"<div style='font-size:22px; font-weight:900; color:{'#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
-                        else: st.markdown("<div style='font-size:14px; color:#94a3b8;'>No recent data vs this team.</div>", unsafe_allow_html=True)
-                        st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🏟️ Venue Advantage ({split_text})**")
-                        st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
-                        st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🔋 Energy Levels**")
-                        st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
-        else: st.warning(f"🚨 **Warning:** No stats available for {target_player}.")
-
+                        st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)    
+                
 def render_league_tab(league_name, get_sched_func):
     lk = league_name.lower()
     
