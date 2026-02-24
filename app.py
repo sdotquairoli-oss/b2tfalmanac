@@ -858,32 +858,54 @@ def render_syndicate_board(league_key):
 
 def render_league_tab(league_name, get_sched_func):
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
+        c1, c2 = st.columns(2)
         if league_name == "NBA":
-            if st.button("🏀 Scan NBA Heaters", type="primary"):
+            if c1.button("🏀 Scan NBA Heaters", type="primary", use_container_width=True):
                 with st.spinner("Scanning NBA..."):
                     df, msg = run_nba_heaters()
-                    if df is not None: st.dataframe(df, use_container_width=True)
+                    if df is not None: st.session_state[f'radar_{league_name}'] = df
                     st.info(msg)
         elif league_name == "NHL":
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("🏒 Scan NHL Heaters", type="primary", use_container_width=True):
-                    with st.spinner("Scanning NHL Skaters..."):
-                        df, msg = run_nhl_heaters()
-                        if df is not None: st.dataframe(df, use_container_width=True)
-                        st.info(msg)
-            with c2:
-                if st.button("🚨 Scan Barn Burners", type="primary", use_container_width=True):
-                    with st.spinner("Hunting weak defenses..."):
-                        df, msg = run_barn_burner()
-                        if df is not None: st.dataframe(df, use_container_width=True)
-                        st.info(msg)
+            if c1.button("🏒 Scan NHL Heaters", type="primary", use_container_width=True):
+                with st.spinner("Scanning NHL Skaters..."):
+                    df, msg = run_nhl_heaters()
+                    if df is not None: st.session_state[f'radar_{league_name}'] = df
+                    st.info(msg)
+            if c2.button("🚨 Scan Barn Burners", type="primary", use_container_width=True):
+                with st.spinner("Hunting weak defenses..."):
+                    df, msg = run_barn_burner()
+                    if df is not None: st.session_state[f'radar_bb_{league_name}'] = df
+                    st.info(msg)
         elif league_name == "MLB":
-            if st.button("⚾ Scan MLB Heaters", type="primary"):
+            if c1.button("⚾ Scan MLB Heaters", type="primary", use_container_width=True):
                 with st.spinner("Scanning Elite Hitters..."):
                     df, msg = run_mlb_heaters()
-                    if df is not None: st.dataframe(df, use_container_width=True)
+                    if df is not None: st.session_state[f'radar_{league_name}'] = df
                     st.info(msg)
+        
+        # --- ⚡ THE SKYNET FAST-TRACK PIPELINE ---
+        if f'radar_{league_name}' in st.session_state:
+            df_radar = st.session_state[f'radar_{league_name}']
+            st.dataframe(df_radar, use_container_width=True)
+            
+            if 'Player' in df_radar.columns:
+                st.markdown("#### ⚡ Fast-Track to Analyzer")
+                ft_c1, ft_c2 = st.columns([3, 1])
+                with ft_c1: 
+                    selected_heater = st.selectbox("Select a target from the radar:", ["-- Select --"] + df_radar['Player'].tolist(), key=f"ft_sel_{league_name}")
+                with ft_c2:
+                    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+                    if st.button("SEND TO BOARD 🚀", type="primary", use_container_width=True, key=f"ft_btn_{league_name}"):
+                        if selected_heater != "-- Select --":
+                            # Injects the name into the search bar AND triggers the ML model instantly!
+                            st.session_state[f"sq_{league_name}"] = selected_heater
+                            st.session_state[f"target_player_{league_name}"] = selected_heater
+                            st.rerun()
+
+        if f'radar_bb_{league_name}' in st.session_state:
+            st.markdown("#### 🚨 Weak Defenses Detected")
+            st.dataframe(st.session_state[f'radar_bb_{league_name}'], use_container_width=True)
+
     st.divider()
     c1, c2 = st.columns([8, 1])
     with c1: st.markdown(f"### 📅 Today's {league_name} Slate")
