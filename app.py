@@ -395,8 +395,16 @@ def get_nba_stats(player_label):
     try:
         from nba_api.stats.static import players
         from nba_api.stats.endpoints import playergamelog
+        import unicodedata
+        
+        # ⚡ Skynet International Translation Matrix
+        def clean_name(name):
+            return unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
+            
         nba_players = players.get_players()
-        player_dict = [p for p in nba_players if p['full_name'].lower() == cn.lower()]
+        # Force both the API and the user's query into basic English characters before matching
+        player_dict = [p for p in nba_players if clean_name(p['full_name']) == clean_name(cn)]
+        
         if not player_dict: return pd.DataFrame(), 404, []
         pid = player_dict[0]['id']
         seasons = ['2025-26', '2024-25', '2023-24']
@@ -426,7 +434,6 @@ def get_nba_stats(player_label):
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
         
-        # ⚡ Upgraded Columns for DD/TD Calculation
         final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
