@@ -982,7 +982,7 @@ def render_league_tab(league_name, get_sched_func):
 
     st.divider()
 # --- ⚡ THE SKYNET FAST-TRACK PIPELINE ---
-        if f'radar_{league_name}' in st.session_state:
+    if f'radar_{league_name}' in st.session_state:
             df_radar = st.session_state[f'radar_{league_name}']
             
             # 🎨 The "Prettified" Radar Table
