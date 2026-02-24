@@ -318,10 +318,18 @@ def get_mlb_schedule():
         today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
         r = requests.get(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}", timeout=5).json()
         if not r.get('dates') or not r['dates'][0].get('games'): return None, "No games scheduled today."
+        
+        # ⚾ Exact Abbreviation Dictionary for Perfect Snapping
+        m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
+
         matchups = []
         for g in r['dates'][0]['games']:
-            home = g['teams']['home']['team']['name'].split()[-1][:3].upper()
-            away = g['teams']['away']['team']['name'].split()[-1][:3].upper()
+            home_full = g['teams']['home']['team'].get('name', '')
+            away_full = g['teams']['away']['team'].get('name', '')
+            
+            home = m_t.get(home_full, home_full.split()[-1][:3].upper() if home_full else "HOME")
+            away = m_t.get(away_full, away_full.split()[-1][:3].upper() if away_full else "AWAY")
+            
             sr = g['status']['detailedState']
             il = sr in ['In Progress', 'Final', 'Game Over', 'Completed Early']
             ds = pd.to_datetime(g['gameDate']).tz_convert('US/Eastern').strftime("%I:%M %p").lstrip("0") if not il and sr in ['Scheduled', 'Pre-Game', 'Warmup'] else sr
