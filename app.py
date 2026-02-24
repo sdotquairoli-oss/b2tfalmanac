@@ -1015,7 +1015,7 @@ def render_league_tab(league_name, get_sched_func):
                             st.session_state[f"target_player_{league_name}"] = selected_heater 
                             st.rerun()
 
-        if f'radar_bb_{league_name}' in st.session_state:
+         if f'radar_bb_{league_name}' in st.session_state:
             st.markdown("#### 🚨 Weak Defenses Detected")
             st.dataframe(
                 st.session_state[f'radar_bb_{league_name}'], 
