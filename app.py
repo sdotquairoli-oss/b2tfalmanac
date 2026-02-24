@@ -1069,7 +1069,7 @@ with t_wallet:
             sc1, sc2 = st.columns(2)
             t_book = sc1.selectbox("Sportsbook", SPORTSBOOKS)
             t_type = sc2.selectbox("Transaction Type", ["Deposit (Out of Pocket)", "Withdrawal (Cash Out)", "Casino Win (House Money)", "Casino Loss (Bad Spins)"])
-            t_amount = st.number_input("Amount ($)", min_value=1.0, step=10.0)
+            t_amount = st.number_input("Amount ($)", min_value=0.01, step=1.00, format="%.2f")
             if st.form_submit_button("Log Transaction"):
                 save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
                 st.success("Transaction Logged!"); time.sleep(1); st.rerun()
