@@ -425,10 +425,11 @@ def get_nba_stats(player_label):
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        # ⚡ Added STL and BLK for accurate DD/TD calculations
+        
+        # ⚡ Upgraded Columns for DD/TD Calculation
         final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
+    except: return pd.DataFrame(), 500, []
         
 @st.cache_data(ttl=300)
 def get_nhl_stats(player_label):
