@@ -146,17 +146,27 @@ def auto_grade_ledger():
     df = load_ledger()
     if not (df['Result'] == 'Pending').any(): return df, "No pending bets."
     updated = 0
+    stats_cache = {} # 🧠 Skynet Local Memory Cache
+    
     for idx, r in df[df['Result'] == 'Pending'].iterrows():
         try:
-            time.sleep(1) 
-            if r['League'] == "NBA": stats, _, _ = get_nba_stats(r['Player']); d_col = 'ValidDate'
-            elif r['League'] == "NHL": stats, _, _ = get_nhl_stats(r['Player']); d_col = 'gameDate'
-            else: stats, _, _ = get_mlb_stats(r['Player']); d_col = 'gameDate'
+            league, player = r['League'], r['Player']
+            cache_key = (league, player)
+            
+            # Check local memory before burning an API call
+            if cache_key not in stats_cache:
+                time.sleep(1) # Protect against rate limits on fresh pulls
+                if league == "NBA": stats, _, _ = get_nba_stats(player); d_col = 'ValidDate'
+                elif league == "NHL": stats, _, _ = get_nhl_stats(player); d_col = 'gameDate'
+                else: stats, _, _ = get_mlb_stats(player); d_col = 'gameDate'
+                stats_cache[cache_key] = (stats, d_col)
+            
+            stats, d_col = stats_cache[cache_key]
             if stats.empty: continue
             
             s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K"}
             s_col = s_map.get(r['Stat'], "PTS")
-            if r['League'] == "NBA":
+            if league == "NBA":
                 if s_col == "A": s_col = "AST"
                 if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
             
@@ -344,12 +354,18 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         events_data = events_resp.json()
         used, rem = events_resp.headers.get('x-requests-used'), events_resp.headers.get('x-requests-remaining')
         if not isinstance(events_data, list) or len(events_data) == 0: return None, None, "No active events", used, rem
+        
         target_team_name = ODDS_MEGA_MAP.get(team_abbr)
-        target_event_id = None
+        events_to_check = []
+        
+        # 🛑 Strict Filtering: Only check events containing the player's team
         if target_team_name:
-            for e in events_data:
-                if target_team_name in e.get('home_team', '') or target_team_name in e.get('away_team', ''): target_event_id = e['id']; break
-        events_to_check = [{'id': target_event_id}] if target_event_id else events_data[:5]
+            events_to_check = [e for e in events_data if target_team_name in e.get('home_team', '') or target_team_name in e.get('away_team', '')]
+        
+        # If blindly searching (no team string found), limit the damage to max 2 event checks, not 5.
+        if not events_to_check: 
+            events_to_check = events_data[:2]
+
         for event in events_to_check:
             odds_resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{sport_path}/events/{event['id']}/odds?apiKey={api_key}&regions=us&markets={market}&oddsFormat=american", timeout=10)
             odds_data = odds_resp.json()
