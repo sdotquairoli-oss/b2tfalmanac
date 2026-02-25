@@ -177,14 +177,34 @@ def save_bankroll_transaction(book, trans_type, amount):
     row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
     append_to_sheet("Bankroll_Ledger", row, ["Date", "Sportsbook", "Type", "Amount"])
 
-def get_liquid_balance():
-    b_df, p_df, bal = load_bankroll(), load_parlay_ledger(), 0.0
+def get_wallet_breakdown():
+    b_df, p_df = load_bankroll(), load_parlay_ledger()
+    book_balances = {book: 0.0 for book in SPORTSBOOKS}
+    tot_dep, tot_wit, tot_cas, tot_sports = 0.0, 0.0, 0.0, 0.0
     
-    if not b_df.empty: 
-        bal += pd.to_numeric(b_df['Amount'], errors='coerce').fillna(0).sum()
-        
+    if not b_df.empty:
+        b_df['Amount'] = pd.to_numeric(b_df['Amount'], errors='coerce').fillna(0)
+        for _, r in b_df.iterrows():
+            amt = r['Amount']
+            bk = str(r.get('Sportsbook', '')).strip() # 🚨 Strips accidental spaces
+            t = str(r.get('Type', ''))
+            
+            if bk in book_balances: book_balances[bk] += amt
+            elif bk: book_balances[bk] = amt  # Dynamically catches new books!
+            
+            if 'Deposit' in t: tot_dep += amt
+            elif 'Withdrawal' in t: tot_wit += abs(amt)
+            elif 'Casino' in t: tot_cas += amt
+
     if not p_df.empty:
-        for _, r in p_df.iterrows():
+        processed_slips = set() 
+        for orig_idx, r in p_df.iterrows():
+            # 🚨 Added DataFrame index to the ID so identical bets aren't skipped
+            slip_id = f"{r.get('Date', '')}_{r.get('Sportsbook', '')}_{r.get('Risk', 0)}_{orig_idx}"
+            if slip_id in processed_slips: continue
+            processed_slips.add(slip_id)
+            
+            bk = str(r.get('Sportsbook', '')).strip()
             o = pd.to_numeric(r.get('Odds', 0), errors='coerce')
             risk = pd.to_numeric(r.get('Risk', 0), errors='coerce')
             is_f = r.get('Is_Free_Bet', False)
@@ -192,13 +212,22 @@ def get_liquid_balance():
             
             if pd.isna(o) or pd.isna(risk): continue
             
-            if res == 'Win': 
-                prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
-                bal += prof
-            elif res in ['Loss', 'Pending']:
-                bal -= (0 if is_f else risk)
+            prof = 0.0
+            if res == 'Win': prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
+            elif res in ['Loss', 'Pending']: prof = -(0 if is_f else risk)
+            
+            if bk in book_balances: book_balances[bk] += prof
+            elif bk: book_balances[bk] = prof
+            
+            tot_sports += prof
+            
+    # Clean up empty accounts
+    book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
+    total_liquid = sum(book_balances.values())
+    return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
 
-    return max(bal, 0.0)
+def get_liquid_balance():
+    return get_wallet_breakdown()[0] # The Top Bar now safely calls the Unified Engine!
 
 # ==========================================
 # 2. AUTO-GRADER & AI AUTOPSY
