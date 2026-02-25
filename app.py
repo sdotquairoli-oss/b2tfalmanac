@@ -200,7 +200,13 @@ def auto_grade_ledger():
                     stats['TD'] = (tens >= 3).astype(int)
             
             stats['td'] = pd.to_datetime(stats[d_col]).dt.date
-            g_row = stats[stats['td'] == pd.to_datetime(r['Date']).date()]
+            bet_date = pd.to_datetime(r['Date']).date()
+            next_date = bet_date + pd.Timedelta(days=1)
+            g_row = stats[stats['td'].isin([bet_date, next_date])]
+            if len(g_row) > 1:
+                g_row = g_row[g_row['td'] == bet_date]
+            if g_row.empty:
+                g_row = stats[stats['td'] == next_date]
             if not g_row.empty:
                 val, line_val = g_row.iloc[0][s_col], float(r['Line'])
                 if r['Vote'] == "OVER": df.at[idx, 'Result'] = 'Win' if val > line_val else 'Loss' if val < line_val else 'Push'
