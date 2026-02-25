@@ -434,12 +434,10 @@ def get_nba_stats(player_label):
         from nba_api.stats.endpoints import playergamelog
         import unicodedata
         
-        # ⚡ Skynet International Translation Matrix
         def clean_name(name):
             return unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
             
         nba_players = players.get_players()
-        # Force both the API and the user's query into basic English characters before matching
         player_dict = [p for p in nba_players if clean_name(p['full_name']) == clean_name(cn)]
         
         if not player_dict: return pd.DataFrame(), 404, []
@@ -451,34 +449,36 @@ def get_nba_stats(player_label):
                 log = playergamelog.PlayerGameLog(player_id=pid, season=s)
                 df_list.append(log.get_data_frames()[0])
                 time.sleep(0.5) 
-            except: pass
+            except:
+                pass
         if not df_list: return pd.DataFrame(), 404, []
         df = pd.concat(df_list, ignore_index=True)
         if df.empty: return pd.DataFrame(), 404, []
+        
         df['Is_Home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in x else 0)
         df['MATCHUP'] = df['MATCHUP'].apply(lambda x: x.split(' ')[-1])
         df['ValidDate'] = pd.to_datetime(df['GAME_DATE'])
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
+        
         def parse_mins(x):
             try:
                 s = str(x)
                 return float(s.split(':')[0]) + float(s.split(':')[1])/60.0 if ':' in s else float(s)
-            except: return 0.0
-            
+            except:
+                return 0.0
+        
         df['MINS'] = df['MIN'].apply(parse_mins)
-
-# Rename REB → TRB before the final column filter (not after)
-df = df.rename(columns={'REB': 'TRB'})
-
-today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
-df['Days_Ago'] = (today - df['ValidDate']).dt.days
-df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
-df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-
-# Safe filter: only keep columns that actually exist
-final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
-return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
-    except: return pd.DataFrame(), 500, []
+        df = df.rename(columns={'REB': 'TRB'})
+        
+        today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
+        df['Days_Ago'] = (today - df['ValidDate']).dt.days
+        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
+        df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
+        
+        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
+        return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
+    except:
+        return pd.DataFrame(), 500, []
         
 @st.cache_data(ttl=300)
 def get_nhl_stats(player_label):
