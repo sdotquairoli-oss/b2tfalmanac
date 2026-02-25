@@ -466,20 +466,18 @@ def get_nba_stats(player_label):
             except: return 0.0
             
         df['MINS'] = df['MIN'].apply(parse_mins)
-        
-        # 1. Rename ONLY the rebounding columns so we don't overwrite our clean MINS
-        df = df.rename(columns={'REB': 'TRB', 'reb': 'TRB'}) 
 
-        # 2. Filter the clean columns SECOND
-        df = df[['Date', 'Matchup', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK']]
-        
-        today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
-        df['Days_Ago'] = (today - df['ValidDate']).dt.days
-        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
-        df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        
-        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
-        return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
+# Rename REB → TRB before the final column filter (not after)
+df = df.rename(columns={'REB': 'TRB'})
+
+today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
+df['Days_Ago'] = (today - df['ValidDate']).dt.days
+df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
+df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
+
+# Safe filter: only keep columns that actually exist
+final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
+return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
         
 @st.cache_data(ttl=300)
