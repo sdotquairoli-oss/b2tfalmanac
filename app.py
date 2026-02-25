@@ -20,7 +20,10 @@ from sklearn.metrics.pairwise import euclidean_distances
 
 # --- CONFIGURATION & GLOBAL CONSTANTS ---
 st.set_page_config(page_title="B2TF Almanac", layout="wide", page_icon="⚡", initial_sidebar_state="collapsed")
-BDL_API_KEY = "b148807a-bbf0-45ee-b051-0a6d94a01ff9"
+
+# 🔒 SECURE VAULT EXTRACTION
+try: BDL_API_KEY = st.secrets["BDL_API_KEY"]
+except: BDL_API_KEY = None
 
 try: ODDS_API_KEY = st.secrets["ODDS_API_KEY"]
 except: ODDS_API_KEY = None
