@@ -721,7 +721,7 @@ def build_models(df_ml, s_col, weights, league):
 
 def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
-    fatigue_val, fatigue_desc = apply_fatigue_modifier(rest)
+    fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
     
     # Safe defaults — always defined no matter what
     home_mod = 1.0
