@@ -1074,36 +1074,45 @@ def render_league_scanners(league_name):
     lk = league_name.lower()
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
         
-        # --- ⚡ THE STAT SELECTOR ---
-        if league_name == "NBA": scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made"], key=f"{lk}.scan_stat")
-        elif league_name == "NHL": scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Goals", "Assists"], key=f"{lk}.scan_stat")
-        elif league_name == "MLB": scan_stat = st.selectbox("🎯 Target Stat", ["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts"], key=f"{lk}.scan_stat")
-        else: scan_stat = "Points"
-        
-        c1, c2 = st.columns(2)
         if league_name == "NBA":
-            if c1.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
-                with st.spinner(f"Scanning {scan_stat} Leaders..."):
-                    df, msg = run_nba_heaters(scan_stat)
-                    if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
-                    st.info(msg)
+            c1, c2 = st.columns([1, 1.5])
+            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made"], key=f"{lk}.scan_stat")
+            with c2: 
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) # ⚡ Aligns button with input!
+                if st.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
+                    with st.spinner(f"Scanning {scan_stat} Leaders..."):
+                        df, msg = run_nba_heaters(scan_stat)
+                        if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                        st.info(msg)
+                        
         elif league_name == "NHL":
-            if c1.button(f"🏒 Scan NHL {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
-                with st.spinner(f"Scanning {scan_stat} Leaders..."):
-                    df, msg = run_nhl_heaters(scan_stat)
-                    if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
-                    st.info(msg)
-            if c2.button("🚨 Scan Barn Burners", type="primary", use_container_width=True, key=f"{lk}.btn.bb"):
-                with st.spinner("Hunting weak defenses..."):
-                    df, msg = run_barn_burner()
-                    if df is not None: st.session_state[f'{lk}.radar.bb'] = df
-                    st.info(msg)
+            c1, c2, c3 = st.columns([1.2, 1, 1])
+            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Goals", "Assists"], key=f"{lk}.scan_stat")
+            with c2:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button(f"🏒 Scan NHL {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
+                    with st.spinner(f"Scanning {scan_stat} Leaders..."):
+                        df, msg = run_nhl_heaters(scan_stat)
+                        if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                        st.info(msg)
+            with c3:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("🚨 Scan Barn Burners", type="primary", use_container_width=True, key=f"{lk}.btn.bb"):
+                    with st.spinner("Hunting weak defenses..."):
+                        df, msg = run_barn_burner()
+                        if df is not None: st.session_state[f'{lk}.radar.bb'] = df
+                        st.info(msg)
+                        
         elif league_name == "MLB":
-            if c1.button(f"⚾ Scan MLB {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
-                with st.spinner(f"Scanning Elite {scan_stat}..."):
-                    df, msg = run_mlb_heaters(scan_stat)
-                    if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
-                    st.info(msg)
+            c1, c2 = st.columns([1, 1.5])
+            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts"], key=f"{lk}.scan_stat")
+            with c2:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button(f"⚾ Scan MLB {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
+                    with st.spinner(f"Scanning Elite {scan_stat}..."):
+                        df, msg = run_mlb_heaters(scan_stat)
+                        if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                        st.info(msg)
         
         # --- ⚡ THE SKYNET FAST-TRACK PIPELINE ---
         if f'{lk}.radar.heaters' in st.session_state:
