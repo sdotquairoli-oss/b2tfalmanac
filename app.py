@@ -1372,9 +1372,23 @@ with t_wallet:
         
     if book_balances:
         st.markdown("#### 📱 Portfolio Breakdown")
+        
+        # 📊 1. The Dynamic Donut Chart Visualizer
+        import altair as alt
+        df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
+        df_pie = df_pie[df_pie['Balance'] > 0] # Automatically hide empty accounts
+        
+        if not df_pie.empty:
+            chart = alt.Chart(df_pie).mark_arc(innerRadius=70, cornerRadius=4).encode(
+                theta=alt.Theta(field="Balance", type="quantitative"),
+                color=alt.Color(field="Sportsbook", type="nominal", scale=alt.Scale(scheme='tableau20'), legend=alt.Legend(title="Liquidity Location", orient="right", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=14, labelFontSize=12)),
+                tooltip=[alt.Tooltip('Sportsbook', title='Book'), alt.Tooltip('Balance', format='$.2f')]
+            ).properties(height=280).configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
+            st.altair_chart(chart, use_container_width=True)
+
+        # 📱 2. The Portfolio Cards (from earlier!)
         port_cols = st.columns(min(len(book_balances), 4))
         for i, (book, bal) in enumerate(book_balances.items()):
             logo_img = BOOK_LOGOS.get(book, "")
             logo_html = f'<img src="{logo_img}" width="20" height="20" style="border-radius: 50%; vertical-align: middle; margin-right: 8px;"> <span style="font-size: 15px; font-weight: bold; color: #00E5FF; vertical-align: middle;">{book}</span>' if logo_img else f'<span style="font-size: 15px; font-weight: bold; color: #00E5FF;">{book}</span>'
-            
-            port_cols[i % 4].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal >= 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
+            port_cols[i % 4].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal > 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
