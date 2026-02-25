@@ -897,130 +897,97 @@ def run_nba_heaters(stat_choice="Points"):
     except Exception as e: return None, f"API Error: {str(e)}"
 
 @st.cache_data(ttl=3600)
-def run_nhl_heaters(stat_choice="Points"):
+def get_nhl_roster(team_abbr):
     try:
-        sched, _ = get_nhl_schedule()
-        if not sched: return None, "No NHL games scheduled today."
-        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+        r = requests.get(f"https://api-web.nhle.com/v1/roster/{team_abbr}/current", timeout=5).json()
+        players = []
+        for cat in ['forwards', 'defensemen']:
+            for p in r.get(cat, []):
+                players.append({
+                    'Name': f"{p['firstName']['default']} {p['lastName']['default']}",
+                    'ID': p['id']
+                })
+        return players[:12]
+    except: return []
+
+@st.cache_data(ttl=3600)
+def analyze_nhl_shooter(player_id, player_name, opponent, bad_defenses):
+    try:
+        r = requests.get(f"https://api-web.nhle.com/v1/player/{player_id}/landing", timeout=5).json()
+        last_5 = r.get('last5Games', [])
+        if not last_5: return None
         
-        s_col = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG"}.get(stat_choice, "PTS")
-        filtered_players = []
+        sogs = [g.get('shots', 0) for g in last_5]
+        l5_avg = sum(sogs) / len(sogs)
+        if l5_avg < 2.5: return None
         
-        # 🚨 THE FIX: Dual-API Routing
-        if stat_choice == "Shots on Goal":
-            # The Leaderboard API rejects SOG, so we route to the massive Stats API!
-            y = datetime.now().year
-            curr_season = f"{y-1}{y}" if datetime.now().month < 9 else f"{y}{y+1}"
-            
-            r = requests.get(f"https://api.nhle.com/stats/rest/en/skater/summary?sort=shots&cayenneExp=seasonId={curr_season}", timeout=5)
-            if r.status_code == 200:
-                for p in r.json().get('data', []):
-                    team_abbrev = p.get('teamAbbrevs', '').split(',')[0].strip()
-                    if team_abbrev in teams_today:
-                        filtered_players.append({
-                            "name": p.get('skaterFullName', ''),
-                            "team": team_abbrev,
-                            "val": p.get('shots', 0)
-                        })
-        else:
-            # Standard routing for Points, Goals, and Assists
-            api_cat = {"Points": "points", "Goals": "goals", "Assists": "assists"}.get(stat_choice, "points")
-            r = requests.get(f"https://api-web.nhle.com/v1/skater-stats-leaders/current?categories={api_cat}&limit=100", timeout=5)
-            if r.status_code == 200:
-                r_json = r.json()
-                if isinstance(r_json, list): active_players = r_json
-                elif api_cat in r_json: active_players = r_json[api_cat]
-                else: active_players = r_json.get('data', [])
-                
-                for p in active_players:
-                    team_abbrev = p.get('teamAbbrev', '').strip()
-                    if team_abbrev in teams_today:
-                        filtered_players.append({
-                            "name": f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip(),
-                            "team": team_abbrev,
-                            "val": p.get(api_cat, 0)
-                        })
-                        
-        # ⚡ Sort and take the top 50 active players for tonight!
-        filtered_players = sorted(filtered_players, key=lambda x: x['val'], reverse=True)[:50]
+        rating = "---"
+        is_diamond = False
         
-        heaters = []
-        for p in filtered_players:
-            player_name = p['name']
-            team_abbrev = p['team']
-            season_val = p['val']
-            
-            opp, is_home = "OPP", True
-            for g in sched:
-                if g['home'] == team_abbrev: opp = g['away']; is_home = True; break
-                elif g['away'] == team_abbrev: opp = g['home']; is_home = False; break
-            
-            ai_proj = 0.0
-            matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
-            df, status, _ = get_nhl_stats(player_name)
-            
-            if status != 429 and not df.empty and len(df) >= 5:
-                last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
-                today_est = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
-                days_out = (today_est - last_played).days
-                if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
-                    
-                _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
-                    df, s_col, 0.5, opp, "NHL", "Rested (1+ Days)", is_home, stat_choice 
-                )
-                ai_proj = round(c_proj, 2)
-                
-            time.sleep(0.5)
-            
-            heaters.append({
-                "Player": player_name,
-                "Team": team_abbrev,
-                "Season Stat": season_val,
-                "AI Proj": ai_proj,
-                "Status": matchup_status
-            })
-            
-        if not heaters: return None, f"No top {stat_choice} leaders playing tonight."
-        return pd.DataFrame(heaters), f"✅ Deep Scan Complete: NHL {stat_choice} Projections loaded."
-    except Exception as e: return None, f"API Error: {str(e)}"
+        if l5_avg >= 4.0: rating = "🔥 VOLUME KING"
+        elif l5_avg >= 3.0: rating = "✅ SOLID"
+        
+        if opponent in bad_defenses:
+            sog_allowed = bad_defenses[opponent]
+            rating += f" + 🧀 BAD DEF ({sog_allowed} SOG/G)"
+            if l5_avg >= 3.5: is_diamond = True
+        
+        return {
+            'Player': player_name,
+            'Opp': opponent,
+            'L5 SOG Avg': round(l5_avg, 1),
+            'Recent Log': str(sogs),
+            'Rating': rating,
+            'Diamond': is_diamond
+        }
+    except: return None
+        
 @st.cache_data(ttl=3600)
 def run_barn_burner():
     try:
         schedule_data, _ = get_nhl_schedule()
         if not schedule_data: return None, "No games scheduled today."
-        teams_today = []; team_to_opp = {}
-        for g in schedule_data: 
-            teams_today.extend([g['home'], g['away']])
-            team_to_opp[g['home']], team_to_opp[g['away']] = g['away'], g['home']
-            
-        r = requests.get("https://api.nhle.com/stats/rest/en/team/summary?sort=shotsAgainstPerGame&cayenneExp=seasonId=20252026", timeout=5).json()
         
-        # 🚨 THE FIX: A universal translation dictionary so the API can never crash us!
-        nhl_map = {'Anaheim Ducks': 'ANA', 'Boston Bruins': 'BOS', 'Buffalo Sabres': 'BUF', 'Calgary Flames': 'CGY', 'Carolina Hurricanes': 'CAR', 'Chicago Blackhawks': 'CHI', 'Colorado Avalanche': 'COL', 'Columbus Blue Jackets': 'CBJ', 'Dallas Stars': 'DAL', 'Detroit Red Wings': 'DET', 'Edmonton Oilers': 'EDM', 'Florida Panthers': 'FLA', 'Los Angeles Kings': 'LAK', 'Minnesota Wild': 'MIN', 'Montréal Canadiens': 'MTL', 'Montreal Canadiens': 'MTL', 'Nashville Predators': 'NSH', 'New Jersey Devils': 'NJD', 'New York Islanders': 'NYI', 'New York Rangers': 'NYR', 'Ottawa Senators': 'OTT', 'Philadelphia Flyers': 'PHI', 'Pittsburgh Penguins': 'PIT', 'San Jose Sharks': 'SJS', 'Seattle Kraken': 'SEA', 'St. Louis Blues': 'STL', 'Tampa Bay Lightning': 'TBL', 'Toronto Maple Leafs': 'TOR', 'Utah Hockey Club': 'UTA', 'Vancouver Canucks': 'VAN', 'Vegas Golden Knights': 'VGK', 'Washington Capitals': 'WSH', 'Winnipeg Jets': 'WPG'}
+        bad_defenses = get_nhl_bad_defenses()
         
-        bad_def_map = {}
-        for t in r.get('data', []):
-            if t.get('shotsAgainstPerGame', 0) > 31.0:
-                # Uses .get() safely so if a key is completely missing, it just skips it instead of exploding!
-                t_abbr = t.get('teamAbbrev', nhl_map.get(t.get('teamFullName', '')))
-                if t_abbr:
-                    bad_def_map[t_abbr] = t.get('shotsAgainstPerGame')
+        results = []
+        for g in schedule_data:
+            home, away = g['home'], g['away']
+            for p in get_nhl_roster(home):
+                data = analyze_nhl_shooter(p['ID'], p['Name'], away, bad_defenses)
+                if data: results.append(data)
+                time.sleep(0.05)
+            for p in get_nhl_roster(away):
+                data = analyze_nhl_shooter(p['ID'], p['Name'], home, bad_defenses)
+                if data: results.append(data)
+                time.sleep(0.05)
         
-        targets = []
-        for t in teams_today:
-            opp = team_to_opp[t]
-            if opp in bad_def_map:
-                sog_allowed = bad_def_map[opp]
-                targets.append({
-                    "Team": t, 
-                    "Opp": opp, 
-                    "Opp Status": f"🧀 BLEEDING SHOTS ({sog_allowed:.1f} SOG/G)"
-                })
-                
-        if not targets: return None, "No major defensive mismatches found on today's slate."
-        return pd.DataFrame(targets), "✅ Found optimal SOG matchups based on opponent weakness."
+        if not results: return None, "No high-volume shooters found tonight."
+        
+        df = pd.DataFrame(results)
+        df['Rank'] = df.apply(lambda x: 1 if x['Diamond'] else (2 if "VOLUME" in x['Rating'] else 3), axis=1)
+        df = df.sort_values(by=['Rank', 'L5 SOG Avg'], ascending=[True, False]).head(15).drop(columns=['Diamond', 'Rank'])
+        
+        return df, f"✅ Found optimal SOG targets. Bad defenses this season: {', '.join(bad_defenses.keys())}"
     except Exception as e: return None, f"API Error: {str(e)}"
-
+        
+@st.cache_data(ttl=43200)
+def get_nhl_bad_defenses():
+    try:
+        y = datetime.now().year
+        curr_season = f"{y-1}{y}" if datetime.now().month < 9 else f"{y}{y+1}"
+        r = requests.get(f"https://api.nhle.com/stats/rest/en/team/summary?sort=shotsAgainstPerGame&cayenneExp=seasonId={curr_season}", timeout=5).json()
+        nhl_map = {'Anaheim Ducks': 'ANA', 'Boston Bruins': 'BOS', 'Buffalo Sabres': 'BUF', 'Calgary Flames': 'CGY', 'Carolina Hurricanes': 'CAR', 'Chicago Blackhawks': 'CHI', 'Colorado Avalanche': 'COL', 'Columbus Blue Jackets': 'CBJ', 'Dallas Stars': 'DAL', 'Detroit Red Wings': 'DET', 'Edmonton Oilers': 'EDM', 'Florida Panthers': 'FLA', 'Los Angeles Kings': 'LAK', 'Minnesota Wild': 'MIN', 'Montréal Canadiens': 'MTL', 'Montreal Canadiens': 'MTL', 'Nashville Predators': 'NSH', 'New Jersey Devils': 'NJD', 'New York Islanders': 'NYI', 'New York Rangers': 'NYR', 'Ottawa Senators': 'OTT', 'Philadelphia Flyers': 'PHI', 'Pittsburgh Penguins': 'PIT', 'San Jose Sharks': 'SJS', 'Seattle Kraken': 'SEA', 'St. Louis Blues': 'STL', 'Tampa Bay Lightning': 'TBL', 'Toronto Maple Leafs': 'TOR', 'Utah Hockey Club': 'UTA', 'Vancouver Canucks': 'VAN', 'Vegas Golden Knights': 'VGK', 'Washington Capitals': 'WSH', 'Winnipeg Jets': 'WPG'}
+        bad = {}
+        for t in r.get('data', []):
+            sog_against = t.get('shotsAgainstPerGame', 0)
+            if sog_against > 31.0:
+                abbr = t.get('teamAbbrev') or nhl_map.get(t.get('teamFullName', ''))
+                if abbr: bad[abbr] = round(sog_against, 1)
+        return bad if bad else {'SJS': 33.0, 'ANA': 32.5, 'CBJ': 32.0, 'CHI': 31.5, 'MTL': 31.2, 'NYI': 31.1}
+    except:
+        return {'SJS': 33.0, 'ANA': 32.5, 'CBJ': 32.0, 'CHI': 31.5, 'MTL': 31.2, 'NYI': 31.1}
+        
 @st.cache_data(ttl=3600)
 def run_mlb_heaters(stat_choice="Hits"):
     try:
