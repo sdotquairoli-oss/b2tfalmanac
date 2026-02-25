@@ -1370,34 +1370,37 @@ with t_wallet:
     with bw_c2:
         st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;"><div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div><div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${max(total_liquid, 0.0):.2f}</div><div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;"><span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span><span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span><span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span></div></div>""", unsafe_allow_html=True)
         
-    if book_balances:
+if book_balances:
         st.markdown("#### 📱 Portfolio Breakdown")
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        # 📊 1. The Dynamic Donut Chart Visualizer (Polished)
-        import altair as alt
-        df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
-        df_pie = df_pie[df_pie['Balance'] > 0] 
+        # ⚖️ Split the section: Cards on the Left (66%), Chart on the Right (33%)
+        breakdown_left, breakdown_right = st.columns([2, 1])
         
-        if not df_pie.empty:
-            chart = alt.Chart(df_pie).mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6).encode(
-                theta=alt.Theta(field="Balance", type="quantitative"),
-                color=alt.Color(field="Sportsbook", type="nominal", legend=alt.Legend(title="Liquidity Location", orient="right", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=12, labelFontSize=11)),
-                tooltip=[alt.Tooltip('Sportsbook', title='Book'), alt.Tooltip('Balance', format='$.2f')]
-            ).properties(
-                height=260,
-                background='transparent'
-            ).configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
+        with breakdown_right:
+            # 📊 1. The Dynamic Donut Chart Visualizer (Right Side)
+            import altair as alt
+            df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
+            df_pie = df_pie[df_pie['Balance'] > 0] 
             
-            # Center the chart in the middle of the screen so it doesn't stretch massively
-            donut_col1, donut_col2, donut_col3 = st.columns([1, 2, 1])
-            with donut_col2:
+            if not df_pie.empty:
+                # We moved the legend to the bottom so it fits perfectly in the right column
+                chart = alt.Chart(df_pie).mark_arc(innerRadius=60, outerRadius=100, cornerRadius=6).encode(
+                    theta=alt.Theta(field="Balance", type="quantitative"),
+                    color=alt.Color(field="Sportsbook", type="nominal", legend=alt.Legend(title="Liquidity Location", orient="bottom", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=12, labelFontSize=11)),
+                    tooltip=[alt.Tooltip('Sportsbook', title='Book'), alt.Tooltip('Balance', format='$.2f')]
+                ).properties(
+                    height=280,
+                    background='transparent'
+                ).configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
+                
                 st.altair_chart(chart, use_container_width=True, theme="streamlit")
         
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # 📱 2. The Portfolio Cards
-        port_cols = st.columns(min(len(book_balances), 4))
-        for i, (book, bal) in enumerate(book_balances.items()):
-            logo_img = BOOK_LOGOS.get(book, "")
-            logo_html = f'<img src="{logo_img}" width="20" height="20" style="border-radius: 50%; vertical-align: middle; margin-right: 8px;"> <span style="font-size: 15px; font-weight: bold; color: #00E5FF; vertical-align: middle;">{book}</span>' if logo_img else f'<span style="font-size: 15px; font-weight: bold; color: #00E5FF;">{book}</span>'
-            port_cols[i % 4].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal > 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
+        with breakdown_left:
+            # 📱 2. The Portfolio Cards (Left Side)
+            # We use 2 columns here so the cards don't get squished in their new space
+            port_cols = st.columns(min(len(book_balances), 2) if len(book_balances) > 1 else 1)
+            for i, (book, bal) in enumerate(book_balances.items()):
+                logo_img = BOOK_LOGOS.get(book, "")
+                logo_html = f'<img src="{logo_img}" width="20" height="20" style="border-radius: 50%; vertical-align: middle; margin-right: 8px;"> <span style="font-size: 15px; font-weight: bold; color: #00E5FF; vertical-align: middle;">{book}</span>' if logo_img else f'<span style="font-size: 15px; font-weight: bold; color: #00E5FF;">{book}</span>'
+                port_cols[i % len(port_cols)].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal > 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
