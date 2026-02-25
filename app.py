@@ -1018,9 +1018,18 @@ def render_syndicate_board(league_key):
             
             if len(board) == 0: st.warning(f"⚠️ **Insufficient Data:** {target_player} has played fewer than 5 games this season.")
             else:
-                std_dev = df_with_ml[s_col].std()
-                if pd.isna(std_dev) or std_dev == 0: std_dev = 1.0
-                sims = np.random.normal(loc=c_proj, scale=std_dev, size=10000)
+                # 🧠 Residual Monte Carlo: Calculate the AI's actual historical error margin
+                df_with_ml['Residual'] = df_with_ml[s_col] - df_with_ml['AI_Proj']
+                residual_std = df_with_ml['Residual'].std()
+                
+                # Fallback safety net for tiny samples or zero-variance bugs
+                if pd.isna(residual_std) or residual_std == 0: 
+                    residual_std = df_with_ml[s_col].std()
+                    if pd.isna(residual_std) or residual_std == 0: residual_std = 1.0
+                
+                # Simulate 10,000 futures based on the model's true accuracy
+                sims = np.random.normal(loc=c_proj, scale=residual_std, size=10000)
+                
                 if c_vote == "OVER": win_prob = np.sum(sims > line) / 10000.0
                 elif c_vote == "UNDER": win_prob = np.sum(sims < line) / 10000.0
                 else: win_prob = 0.50
