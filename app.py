@@ -1087,7 +1087,7 @@ def render_league_scanners(league_name):
             c1, c2 = st.columns([1, 1.5])
             with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made"], key=f"{lk}.scan_stat")
             with c2: 
-                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True) # ⚡ Aligns button with input!
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
                     with st.spinner(f"Scanning {scan_stat} Leaders..."):
                         df, msg = run_nba_heaters(scan_stat)
@@ -1096,11 +1096,21 @@ def render_league_scanners(league_name):
                         
         elif league_name == "NHL":
             c1, c2, c3 = st.columns([1.2, 1, 1])
-            # 🚨 ADDED "Shots on Goal" TO THE DROPDOWN
             with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Goals", "Assists", "Shots on Goal"], key=f"{lk}.scan_stat")
             with c2:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏒 Scan NHL {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
+                    with st.spinner(f"Scanning {scan_stat} Leaders..."):
+                        df, msg = run_nhl_heaters(scan_stat)
+                        if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                        st.info(msg)
+            with c3:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("🚨 Scan Barn Burners", type="primary", use_container_width=True, key=f"{lk}.btn.bb"):
+                    with st.spinner("Hunting weak defenses..."):
+                        df, msg = run_barn_burner()
+                        if df is not None: st.session_state[f'{lk}.radar.bb'] = df
+                        st.info(msg)
                         
         elif league_name == "MLB":
             c1, c2 = st.columns([1, 1.5])
