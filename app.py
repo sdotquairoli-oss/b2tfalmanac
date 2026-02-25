@@ -1496,31 +1496,15 @@ with t_wallet:
 
     for book in SPORTSBOOKS:
         bal, has_hist = 0.0, False
-        if not b_df.empty and book in b_df['Sportsbook'].values: 
-            bal += pd.to_numeric(b_df[b_df['Sportsbook'] == book]['Amount'], errors='coerce').sum()
-            has_hist = True
-            
-        if not p_df.empty and book in p_df['Sportsbook'].values:
-            has_hist = True
-            for _, r in p_df[p_df['Sportsbook'] == book].iterrows():
-                # Prevent Parlays from bleeding phantom money out of the individual sportsbooks
-                slip_id = f"{r.get('Date', '')}_{r.get('Sportsbook', '')}_{r.get('Risk', 0)}"
-                if slip_id in processed_wallet_slips: continue
-                processed_wallet_slips.add(slip_id)
-                
-                o, risk, is_f = pd.to_numeric(r['Odds'], errors='coerce'), pd.to_numeric(r['Risk'], errors='coerce'), r.get('Is_Free_Bet', False)
-                if pd.isna(o) or pd.isna(risk): continue
-                
-                if r['Result'] == 'Win': 
-                    prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
-                    bal += prof
-                    tot_sports += prof
-                elif r['Result'] in ['Loss', 'Pending']: 
-                    bal -= (0 if is_f else risk)
-                    tot_sports -= (0 if is_f else risk)
+        if st.form_submit_button("Log Transaction"):
+                    save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
+                    st.success("Transaction Logged!"); time.sleep(1); st.rerun()
                     
-        if has_hist or bal != 0.0: 
-            book_balances[book] = bal
+        # ⚡ ONE LINE: The Wallet now shares the exact same math as the Top Bar
+        total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
+            
+        with bw_c2:
+            st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155...
             
     with bw_c2:
         st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;"><div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div><div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${get_liquid_balance():.2f}</div><div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;"><span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span><span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span><span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span></div></div>""", unsafe_allow_html=True)
