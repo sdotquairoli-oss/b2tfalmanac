@@ -673,18 +673,18 @@ def apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archety
         home_avg, away_avg = 1.0, 1.0
     else:
         home_games = df_ml[df_ml['Is_Home'] == 1][s_col]
-away_games = df_ml[df_ml['Is_Home'] == 0][s_col]
+        away_games = df_ml[df_ml['Is_Home'] == 0][s_col]
 
-# Weight the split toward season average when sample is small
-# At 1 game it's 90% season avg, at 10+ games it's mostly the split
-home_weight = min(len(home_games) / 10.0, 1.0)
-away_weight = min(len(away_games) / 10.0, 1.0)
+        # Weight the split toward season average when sample is small
+        # At 1 game it's 90% season avg, at 10+ games it's mostly the split
+        home_weight = min(len(home_games) / 10.0, 1.0)
+        away_weight = min(len(away_games) / 10.0, 1.0)
 
-home_avg = (home_games.mean() * home_weight + season_avg * (1 - home_weight)) if len(home_games) > 0 else season_avg
-away_avg = (away_games.mean() * away_weight + season_avg * (1 - away_weight)) if len(away_games) > 0 else season_avg
+        home_avg = (home_games.mean() * home_weight + season_avg * (1 - home_weight)) if len(home_games) > 0 else season_avg
+        away_avg = (away_games.mean() * away_weight + season_avg * (1 - away_weight)) if len(away_games) > 0 else season_avg
 
-home_mod = np.clip(home_avg / season_avg, 0.80, 1.20)
-away_mod = np.clip(away_avg / season_avg, 0.80, 1.20)
+        home_mod = np.clip(home_avg / season_avg, 0.80, 1.20)
+        away_mod = np.clip(away_avg / season_avg, 0.80, 1.20)
     
     current_split_mod = home_mod if is_home_current == 1 else away_mod
     split_text = "Home" if is_home_current == 1 else "Road"
