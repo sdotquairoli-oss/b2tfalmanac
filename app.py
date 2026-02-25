@@ -852,16 +852,47 @@ def run_nba_heaters():
         for _, r in leaders.head(50).iterrows():
             team_abbrev = r['TEAM']
             if team_abbrev in teams_today:
+                player_name = r['PLAYER']
+                
+                # 1. 🕵️‍♂️ Auto-Detect Matchup
+                opp, is_home = "OPP", True
+                for g in sched:
+                    if g['home'] == team_abbrev: opp = g['away']; is_home = True; break
+                    elif g['away'] == team_abbrev: opp = g['home']; is_home = False; break
+                
+                # 2. 🧠 Fetch Stats & Run AI Math
+                ai_proj = 0.0
+                matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
+                df, status, _ = get_nba_stats(player_name)
+                
+                if status != 429 and not df.empty and len(df) >= 5:
+                    # 🏥 INJURY FLAG: Did they play in the last 6 days?
+                    last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
+                    today_est = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
+                    days_out = (today_est - last_played).days
+                    
+                    if days_out >= 6:
+                        matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
+                        
+                    # ⚡ Deep Scan: Run the 5-Model Suite to get the AI Projection
+                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                        df, "PTS", float(r['PTS']), opp, "NBA", "Rested (1+ Days)", is_home, "Points"
+                    )
+                    ai_proj = round(c_proj, 1)
+                
+                time.sleep(0.5) # 🚨 Speed Limit: Prevents NBA API ban!
+                
                 heaters.append({
-                    "Player": r['PLAYER'],
+                    "Player": player_name,
                     "Team": team_abbrev,
                     "Category": "Scoring Leader",
                     "Season PPG": round(r['PTS'], 1),
-                    "Status": "🔥 Active Tonight"
+                    "AI Proj": ai_proj,
+                    "Status": matchup_status
                 })
 
         if not heaters: return None, "No top 50 scorers playing tonight."
-        return pd.DataFrame(heaters), "✅ Found elite NBA scorers active on tonight's slate."
+        return pd.DataFrame(heaters), "✅ Deep Scan Complete: AI Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
     
 @st.cache_data(ttl=3600)
@@ -870,12 +901,56 @@ def run_nhl_heaters():
         sched, _ = get_nhl_schedule()
         if not sched: return None, "No NHL games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+        
         r = requests.get("https://api-web.nhle.com/v1/skater-stats-leaders/current?gameTypes=2&limit=50", timeout=5).json()
-        heaters = [{"Player": f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip(), "Team": p.get('teamAbbrev'), "Category": "Points Leader", "Season Pts": p.get('points', 0), "Status": "🔥 Active Tonight"} for p in r.get('data', []) if p.get('teamAbbrev') in teams_today]
-        if not heaters: return None, "No top 50 league leaders playing tonight."
-        return pd.DataFrame(heaters), "✅ Found elite NHL scorers active on tonight's slate."
+        raw_leaders = [p for p in r.get('data', []) if p.get('teamAbbrev') in teams_today]
+        
+        heaters = []
+        for p in raw_leaders:
+            player_name = f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip()
+            team_abbrev = p.get('teamAbbrev')
+            season_pts = p.get('points', 0)
+            
+            # 1. 🕵️‍♂️ Auto-Detect Matchup
+            opp, is_home = "OPP", True
+            for g in sched:
+                if g['home'] == team_abbrev: opp = g['away']; is_home = True; break
+                elif g['away'] == team_abbrev: opp = g['home']; is_home = False; break
+            
+            # 2. 🧠 Fetch Stats & Run AI Math
+            ai_proj = 0.0
+            matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
+            df, status, _ = get_nhl_stats(player_name)
+            
+            if status != 429 and not df.empty and len(df) >= 5:
+                # 🏥 INJURY FLAG: Did they play in the last 6 days?
+                last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
+                today_est = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
+                days_out = (today_est - last_played).days
+                
+                if days_out >= 6:
+                    matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
+                    
+                # ⚡ Deep Scan: Run the 5-Model Suite (NHL Maps Points to 'PTS')
+                _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                    df, "PTS", 0.5, opp, "NHL", "Rested (1+ Days)", is_home, "Points" 
+                )
+                ai_proj = round(c_proj, 2)
+                
+            time.sleep(0.5) # 🚨 Speed Limit
+            
+            heaters.append({
+                "Player": player_name,
+                "Team": team_abbrev,
+                "Category": "Points Leader",
+                "Season Pts": season_pts,
+                "AI Proj": ai_proj,
+                "Status": matchup_status
+            })
+            
+        if not heaters: return None, "No top league leaders playing tonight."
+        return pd.DataFrame(heaters), "✅ Deep Scan Complete: NHL AI Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
-
 @st.cache_data(ttl=3600)
 def run_barn_burner():
     try:
@@ -885,9 +960,23 @@ def run_barn_burner():
         for g in schedule_data: 
             teams_today.extend([g['home'], g['away']])
             team_to_opp[g['home']], team_to_opp[g['away']] = g['away'], g['home']
+            
         r = requests.get("https://api.nhle.com/stats/rest/en/team/summary?sort=shotsAgainstPerGame&cayenneExp=seasonId=20252026", timeout=5).json()
-        bad_defenses = [t['teamAbbrev'] for t in r.get('data', []) if t.get('shotsAgainstPerGame', 0) > 31.0]
-        targets = [{"Team": t, "Opp": team_to_opp[t], "Opp Status": "🧀 BAD DEFENSE (>31 SOG/G)"} for t in teams_today if team_to_opp[t] in bad_defenses]
+        
+        # Create a dictionary to map the exact SOG allowed
+        bad_def_map = {t['teamAbbrev']: t.get('shotsAgainstPerGame', 0) for t in r.get('data', []) if t.get('shotsAgainstPerGame', 0) > 31.0}
+        
+        targets = []
+        for t in teams_today:
+            opp = team_to_opp[t]
+            if opp in bad_def_map:
+                sog_allowed = bad_def_map[opp]
+                targets.append({
+                    "Team": t, 
+                    "Opp": opp, 
+                    "Opp Status": f"🧀 BLEEDING SHOTS ({sog_allowed:.1f} SOG/G)" # ⚡ Exact stat injected!
+                })
+                
         if not targets: return None, "No major defensive mismatches found on today's slate."
         return pd.DataFrame(targets), "✅ Found optimal SOG matchups based on opponent weakness."
     except Exception as e: return None, f"API Error: {str(e)}"
@@ -903,26 +992,60 @@ def run_mlb_heaters():
         r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year}&limit=50", timeout=5).json()
         if not r.get('stats'): r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&playerPool=ALL&season={curr_year-1}&limit=50", timeout=5).json()
 
-        # The Exact Abbreviation Dictionary to sync the Scanner with the Board
         m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
 
-        heaters = []
+        raw_leaders = []
         for s in r.get('stats', []):
             for p in s.get('splits', []):
                 team_full = p.get('team', {}).get('name', '')
                 team_abbr = m_t.get(team_full, team_full.split()[-1][:3].upper() if team_full else "")
+                if team_abbr in teams_today:
+                    raw_leaders.append((p, team_abbr))
+                    
+        heaters = []
+        for p, team_abbr in raw_leaders:
+            player_name = p.get('player', {}).get('fullName', '')
+            season_hits = p.get('stat', {}).get('hits', 0)
+            
+            # 1. 🕵️‍♂️ Auto-Detect Matchup
+            opp, is_home = "OPP", True
+            for g in sched:
+                if g['home'] == team_abbr: opp = g['away']; is_home = True; break
+                elif g['away'] == team_abbr: opp = g['home']; is_home = False; break
                 
-                if team_abbr in teams_today: 
-                    heaters.append({
-                        "Player": p.get('player', {}).get('fullName', ''), 
-                        "Team": team_abbr,
-                        "Category": "Elite Hitter", 
-                        "Season Hits": p.get('stat', {}).get('hits', 0), 
-                        "Status": "🔥 Active Today"
-                    })
+            # 2. 🧠 Fetch Stats & Run AI Math
+            ai_proj = 0.0
+            matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
+            df, status, _ = get_mlb_stats(player_name)
+            
+            if status != 429 and not df.empty and len(df) >= 5:
+                # 🏥 INJURY FLAG: Did they play in the last 6 days?
+                last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
+                today_est = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
+                days_out = (today_est - last_played).days
+                
+                if days_out >= 6:
+                    matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
+                    
+                # ⚡ Deep Scan: Run the 5-Model Suite (MLB Maps Hits to 'H')
+                _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                    df, "H", 0.5, opp, "MLB", "Rested (1+ Days)", is_home, "Hits"
+                )
+                ai_proj = round(c_proj, 2)
+                
+            time.sleep(0.5) # 🚨 Speed Limit
+            
+            heaters.append({
+                "Player": player_name,
+                "Team": team_abbr,
+                "Category": "Elite Hitter",
+                "Season Hits": season_hits,
+                "AI Proj": ai_proj,
+                "Status": matchup_status
+            })
 
         if not heaters: return None, "No top 50 hitters playing today."
-        return pd.DataFrame(heaters), "✅ Found elite MLB hitters active on today's slate."
+        return pd.DataFrame(heaters), "✅ Deep Scan Complete: MLB AI Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
 
 # ==========================================
@@ -981,9 +1104,10 @@ def render_league_scanners(league_name):
                     "Team": st.column_config.TextColumn("🛡️ Team", width="small"),
                     "Category": st.column_config.TextColumn("📊 Category", width="small"),
                     "Season PPG": st.column_config.NumberColumn("🎯 Season PPG", format="%.1f", width="small"),
+                    "AI Proj": st.column_config.NumberColumn("🤖 AI Proj", format="%.1f", width="small"),
                     "Season Pts": st.column_config.NumberColumn("🎯 Points", format="%d", width="small"),
                     "Season Hits": st.column_config.NumberColumn("⚾ Hits", format="%d", width="small"),
-                    "Status": st.column_config.TextColumn("⚡ Status", width="medium")
+                    "Status": st.column_config.TextColumn("⚡ Matchup", width="medium")
                 }
             )
             
