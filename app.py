@@ -898,8 +898,9 @@ def run_nhl_heaters(stat_choice="Points"):
         if not sched: return None, "No NHL games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
         
-        sort_key = {"Points": "points", "Goals": "goals", "Assists": "assists"}.get(stat_choice, "points")
-        s_col = {"Points": "PTS", "Goals": "G", "Assists": "A"}.get(stat_choice, "PTS")
+        # 🚨 THE NEW MAPPING: Translates "Shots on Goal" to 'shots' for the API and 'SOG' for our Math Engine
+        sort_key = {"Points": "points", "Goals": "goals", "Assists": "assists", "Shots on Goal": "shots"}.get(stat_choice, "points")
+        s_col = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG"}.get(stat_choice, "PTS")
         
         r_json = requests.get(f"https://api-web.nhle.com/v1/skater-stats-leaders/current?categories={sort_key}&limit=100", timeout=5).json()
         
@@ -1095,21 +1096,11 @@ def render_league_scanners(league_name):
                         
         elif league_name == "NHL":
             c1, c2, c3 = st.columns([1.2, 1, 1])
-            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Goals", "Assists"], key=f"{lk}.scan_stat")
+            # 🚨 ADDED "Shots on Goal" TO THE DROPDOWN
+            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Goals", "Assists", "Shots on Goal"], key=f"{lk}.scan_stat")
             with c2:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏒 Scan NHL {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
-                    with st.spinner(f"Scanning {scan_stat} Leaders..."):
-                        df, msg = run_nhl_heaters(scan_stat)
-                        if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
-                        st.info(msg)
-            with c3:
-                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                if st.button("🚨 Scan Barn Burners", type="primary", use_container_width=True, key=f"{lk}.btn.bb"):
-                    with st.spinner("Hunting weak defenses..."):
-                        df, msg = run_barn_burner()
-                        if df is not None: st.session_state[f'{lk}.radar.bb'] = df
-                        st.info(msg)
                         
         elif league_name == "MLB":
             c1, c2 = st.columns([1, 1.5])
