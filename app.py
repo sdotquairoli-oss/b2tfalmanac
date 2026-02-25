@@ -723,28 +723,27 @@ def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype)
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
     fatigue_val, fatigue_desc = apply_fatigue_modifier(rest)
     
-    # 🚨 THE FIX: Initialize default values so they ALWAYS exist!
+    # 🚨 BULLETPROOF INIT: These variables now mathematically exist no matter what.
     home_mod = 1.0
     away_mod = 1.0
     current_split_mod = 1.0
     split_text = "Home" if is_home_current else "Away"
-    split_desc = f"{split_text} Split: 1.00x"
     
-    home_df = df[df['Is_Home'] == 1]
-    away_df = df[df['Is_Home'] == 0]
-    overall_avg = df[s_col].mean()
-    
-    # Safely calculate splits ONLY if there is actual data for them
-    if overall_avg > 0:
-        if len(home_df) > 0:
-            home_mod = home_df[s_col].mean() / overall_avg
-        if len(away_df) > 0:
-            away_mod = away_df[s_col].mean() / overall_avg
+    # Safely handle the splits only if the column and data exist
+    if s_col in df.columns and len(df) > 0:
+        overall_avg = df[s_col].mean()
+        if overall_avg > 0:
+            home_df = df[df['Is_Home'] == 1]
+            away_df = df[df['Is_Home'] == 0]
             
-        current_split_mod = home_mod if is_home_current else away_mod
-        split_desc = f"{split_text} Split: {current_split_mod:.2f}x"
-        
+            if len(home_df) > 0: home_mod = home_df[s_col].mean() / overall_avg
+            if len(away_df) > 0: away_mod = away_df[s_col].mean() / overall_avg
+            
+    current_split_mod = home_mod if is_home_current else away_mod
+    split_desc = f"{split_text} Split: {current_split_mod:.2f}x"
+    
     return mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod
+    
 def apply_skynet(raw_vote, stat_type, league):
     if raw_vote == "PASS": return {"mod": 1.0, "msg": "🟣 Skynet: Market is efficient. Pass.", "color": "#94a3b8"}
     try:
