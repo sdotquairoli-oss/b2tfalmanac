@@ -576,6 +576,8 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
 
 # --- ⚡ ML REFACTOR HELPERS ---
 
+# --- ⚡ ML REFACTOR HELPERS ---
+
 def build_models(df_ml, s_col, weights):
     mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
     df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
@@ -611,6 +613,47 @@ def build_models(df_ml, s_col, weights):
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
     
     return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins
+
+def apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype):
+    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
+    fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
+    
+    season_avg = df_ml[s_col].mean()
+    if pd.isna(season_avg) or season_avg == 0:
+        season_avg = 1.0 
+        home_avg, away_avg = 1.0, 1.0
+    else:
+        home_avg = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
+        away_avg = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
+        if pd.isna(home_avg): home_avg = season_avg
+        if pd.isna(away_avg): away_avg = season_avg
+        
+    home_mod = np.clip(home_avg / season_avg, 0.80, 1.20)
+    away_mod = np.clip(away_avg / season_avg, 0.80, 1.20)
+    
+    current_split_mod = home_mod if is_home_current == 1 else away_mod
+    split_text = "Home" if is_home_current == 1 else "Road"
+    split_desc = f"+{((current_split_mod-1)*100):.0f}%" if current_split_mod > 1 else f"{((current_split_mod-1)*100):.0f}%"
+    
+    return mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod
+
+def apply_skynet(raw_vote, stat_type):
+    if raw_vote == "PASS": return {"mod": 1.0, "msg": "🟣 Skynet: Market is efficient. Pass.", "color": "#94a3b8"}
+    try:
+        ledger = load_ledger()
+        if not ledger.empty and 'Result' in ledger.columns:
+            graded = ledger[ledger['Result'].isin(['Win', 'Loss'])]
+            subset = graded[(graded['Stat'] == stat_type) & (graded['Vote'] == raw_vote)]
+            total_graded = len(subset)
+            if total_graded >= 3:
+                wins = len(subset[subset['Result'] == 'Win'])
+                win_rate = wins / total_graded
+                if win_rate <= 0.35: return {"mod": (0.85 if raw_vote == "OVER" else 1.15), "msg": f"🛑 SKYNET TAX: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Applying penalty.", "color": "#ff0055"}
+                elif win_rate >= 0.60: return {"mod": (1.05 if raw_vote == "OVER" else 0.95), "msg": f"🔥 SKYNET BOOST: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Trusting edge.", "color": "#00E676"}
+                else: return {"mod": 1.0, "msg": f"⚖️ SKYNET AUDIT: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s.", "color": "#FFD700"}
+            else: return {"mod": 1.0, "msg": f"🟣 Skynet: Gathering data on {stat_type} {raw_vote}s ({total_graded}/3).", "color": "#94a3b8"}
+    except: pass
+    return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
 
 # --- ⚡ THE SLEEK COORDINATOR ---
 
