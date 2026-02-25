@@ -719,35 +719,32 @@ def build_models(df_ml, s_col, weights, league):
     
     return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins
 
-def apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype):
+def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
-    fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
+    fatigue_val, fatigue_desc = apply_fatigue_modifier(rest)
     
-    season_avg = df_ml[s_col].mean()
-    if pd.isna(season_avg) or season_avg == 0:
-        season_avg = 1.0 
-        home_avg, away_avg = 1.0, 1.0
-    else:
-        home_games = df_ml[df_ml['Is_Home'] == 1][s_col]
-        away_games = df_ml[df_ml['Is_Home'] == 0][s_col]
-
-        # Weight the split toward season average when sample is small
-        # At 1 game it's 90% season avg, at 10+ games it's mostly the split
-        home_weight = min(len(home_games) / 10.0, 1.0)
-        away_weight = min(len(away_games) / 10.0, 1.0)
-
-        home_avg = (home_games.mean() * home_weight + season_avg * (1 - home_weight)) if len(home_games) > 0 else season_avg
-        away_avg = (away_games.mean() * away_weight + season_avg * (1 - away_weight)) if len(away_games) > 0 else season_avg
-
-        home_mod = np.clip(home_avg / season_avg, 0.80, 1.20)
-        away_mod = np.clip(away_avg / season_avg, 0.80, 1.20)
+    # 🚨 THE FIX: Initialize default values so they ALWAYS exist!
+    home_mod = 1.0
+    away_mod = 1.0
+    current_split_mod = 1.0
+    split_text = "Home" if is_home_current else "Away"
+    split_desc = f"{split_text} Split: 1.00x"
     
-    current_split_mod = home_mod if is_home_current == 1 else away_mod
-    split_text = "Home" if is_home_current == 1 else "Road"
-    split_desc = f"+{((current_split_mod-1)*100):.0f}%" if current_split_mod > 1 else f"{((current_split_mod-1)*100):.0f}%"
+    home_df = df[df['Is_Home'] == 1]
+    away_df = df[df['Is_Home'] == 0]
+    overall_avg = df[s_col].mean()
     
+    # Safely calculate splits ONLY if there is actual data for them
+    if overall_avg > 0:
+        if len(home_df) > 0:
+            home_mod = home_df[s_col].mean() / overall_avg
+        if len(away_df) > 0:
+            away_mod = away_df[s_col].mean() / overall_avg
+            
+        current_split_mod = home_mod if is_home_current else away_mod
+        split_desc = f"{split_text} Split: {current_split_mod:.2f}x"
+        
     return mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod
-
 def apply_skynet(raw_vote, stat_type, league):
     if raw_vote == "PASS": return {"mod": 1.0, "msg": "🟣 Skynet: Market is efficient. Pass.", "color": "#94a3b8"}
     try:
