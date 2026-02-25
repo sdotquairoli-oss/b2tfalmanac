@@ -1472,9 +1472,9 @@ with t_roi:
         st.markdown("#### 🎫 Your Bet Slips")
 
 with t_wallet:
-    _true_balance = get_liquid_balance()  # Single source of truth
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
+    
     bw_c1, bw_c2 = st.columns([2, 1])
     with bw_c1:
         with st.form("bankroll_form"):
@@ -1482,32 +1482,19 @@ with t_wallet:
             t_book = sc1.selectbox("Sportsbook", SPORTSBOOKS)
             t_type = sc2.selectbox("Transaction Type", ["Deposit (Out of Pocket)", "Withdrawal (Cash Out)", "Casino Win (House Money)", "Casino Loss (Bad Spins)"])
             t_amount = st.number_input("Amount ($)", min_value=0.01, step=1.00, format="%.2f")
+            
             if st.form_submit_button("Log Transaction"):
                 save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
                 st.success("Transaction Logged!"); time.sleep(1); st.rerun()
                 
-    b_df, p_df, book_balances, total_liquid, tot_dep, tot_wit, tot_cas, tot_sports = load_bankroll(), load_parlay_ledger(), {}, 0.0, 0.0, 0.0, 0.0, 0.0
-    if not b_df.empty:
-        tot_dep = pd.to_numeric(b_df[b_df['Type'] == 'Deposit']['Amount'], errors='coerce').sum() if 'Deposit' in b_df['Type'].values else 0.0
-        tot_wit = abs(pd.to_numeric(b_df[b_df['Type'] == 'Withdrawal']['Amount'], errors='coerce').sum()) if 'Withdrawal' in b_df['Type'].values else 0.0
-        tot_cas = pd.to_numeric(b_df[b_df['Type'] == 'Casino']['Amount'], errors='coerce').sum() if 'Casino' in b_df['Type'].values else 0.0
-    
-    processed_wallet_slips = set() # 🚨 The Missing Shield for the Visualizer!
-
-    for book in SPORTSBOOKS:
-        bal, has_hist = 0.0, False
-        if st.form_submit_button("Log Transaction"):
-                    save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
-                    st.success("Transaction Logged!"); time.sleep(1); st.rerun()
-                    
-        # ⚡ ONE LINE: The Wallet now shares the exact same math as the Top Bar
-        total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
+    # ⚡ ONE LINE: The Wallet now shares the exact same math as the Top Bar Engine!
+    total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
+        
+    with bw_c2:
+        st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;"><div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div><div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${get_liquid_balance():.2f}</div><div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;"><span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span><span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span><span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span></div></div>""", unsafe_allow_html=True)
             
         with bw_c2:
             st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155...
-            
-    with bw_c2:
-        st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;"><div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div><div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${get_liquid_balance():.2f}</div><div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;"><span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span><span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span><span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span></div></div>""", unsafe_allow_html=True)
         
     if book_balances:
         st.markdown("#### 📱 Portfolio Breakdown")
