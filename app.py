@@ -963,8 +963,16 @@ def run_barn_burner():
             
         r = requests.get("https://api.nhle.com/stats/rest/en/team/summary?sort=shotsAgainstPerGame&cayenneExp=seasonId=20252026", timeout=5).json()
         
-        # Create a dictionary to map the exact SOG allowed
-        bad_def_map = {t['teamAbbrev']: t.get('shotsAgainstPerGame', 0) for t in r.get('data', []) if t.get('shotsAgainstPerGame', 0) > 31.0}
+        # 🚨 THE FIX: A universal translation dictionary so the API can never crash us!
+        nhl_map = {'Anaheim Ducks': 'ANA', 'Boston Bruins': 'BOS', 'Buffalo Sabres': 'BUF', 'Calgary Flames': 'CGY', 'Carolina Hurricanes': 'CAR', 'Chicago Blackhawks': 'CHI', 'Colorado Avalanche': 'COL', 'Columbus Blue Jackets': 'CBJ', 'Dallas Stars': 'DAL', 'Detroit Red Wings': 'DET', 'Edmonton Oilers': 'EDM', 'Florida Panthers': 'FLA', 'Los Angeles Kings': 'LAK', 'Minnesota Wild': 'MIN', 'Montréal Canadiens': 'MTL', 'Montreal Canadiens': 'MTL', 'Nashville Predators': 'NSH', 'New Jersey Devils': 'NJD', 'New York Islanders': 'NYI', 'New York Rangers': 'NYR', 'Ottawa Senators': 'OTT', 'Philadelphia Flyers': 'PHI', 'Pittsburgh Penguins': 'PIT', 'San Jose Sharks': 'SJS', 'Seattle Kraken': 'SEA', 'St. Louis Blues': 'STL', 'Tampa Bay Lightning': 'TBL', 'Toronto Maple Leafs': 'TOR', 'Utah Hockey Club': 'UTA', 'Vancouver Canucks': 'VAN', 'Vegas Golden Knights': 'VGK', 'Washington Capitals': 'WSH', 'Winnipeg Jets': 'WPG'}
+        
+        bad_def_map = {}
+        for t in r.get('data', []):
+            if t.get('shotsAgainstPerGame', 0) > 31.0:
+                # Uses .get() safely so if a key is completely missing, it just skips it instead of exploding!
+                t_abbr = t.get('teamAbbrev', nhl_map.get(t.get('teamFullName', '')))
+                if t_abbr:
+                    bad_def_map[t_abbr] = t.get('shotsAgainstPerGame')
         
         targets = []
         for t in teams_today:
@@ -974,7 +982,7 @@ def run_barn_burner():
                 targets.append({
                     "Team": t, 
                     "Opp": opp, 
-                    "Opp Status": f"🧀 BLEEDING SHOTS ({sog_allowed:.1f} SOG/G)" # ⚡ Exact stat injected!
+                    "Opp Status": f"🧀 BLEEDING SHOTS ({sog_allowed:.1f} SOG/G)"
                 })
                 
         if not targets: return None, "No major defensive mismatches found on today's slate."
