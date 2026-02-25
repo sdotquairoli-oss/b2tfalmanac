@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+import pytz
 import altair as alt
 import requests
 import numpy as np
@@ -117,7 +119,7 @@ def load_ledger():
     return df
 
 def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False):
-    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob), "Is_Boosted": is_boosted}
+    row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob), "Is_Boosted": is_boosted}
     append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
 
 def load_parlay_ledger():
@@ -129,24 +131,49 @@ def load_parlay_ledger():
     return df
 
 def save_to_parlay_ledger(desc, odds, risk, book, is_free, is_boosted=False):
-    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted}
+    row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted}
     append_to_sheet("Parlay_Ledger", row, ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
 
 def load_bankroll(): return load_sheet_df("Bankroll_Ledger", ["Date", "Sportsbook", "Type", "Amount"])
 
 def save_bankroll_transaction(book, trans_type, amount):
-    row = {"Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %H:%M"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
+    row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
     append_to_sheet("Bankroll_Ledger", row, ["Date", "Sportsbook", "Type", "Amount"])
 
 def get_liquid_balance():
     b_df, p_df, bal = load_bankroll(), load_parlay_ledger(), 0.0
-    if not b_df.empty: bal += pd.to_numeric(b_df['Amount'], errors='coerce').sum()
+    
+    # 1. Add all raw deposits/withdrawals
+    if not b_df.empty: 
+        bal += pd.to_numeric(b_df['Amount'], errors='coerce').fillna(0).sum()
+        
+    # 2. Process bets without double-counting Parlay Legs
     if not p_df.empty:
+        processed_slips = set() # 🚨 Prevents multi-leg parlays from draining risk multiple times
+        
         for _, r in p_df.iterrows():
-            o, risk, is_f = pd.to_numeric(r['Odds'], errors='coerce'), pd.to_numeric(r['Risk'], errors='coerce'), r.get('Is_Free_Bet', False)
-            if r['Result'] == 'Win': 
-                prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof
-            elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk)
+            # Create a unique ID for the slip (Date + Book + Risk)
+            slip_id = f"{r.get('Date', '')}_{r.get('Sportsbook', '')}_{r.get('Risk', 0)}"
+            
+            if slip_id in processed_slips:
+                continue # Skip this row, we already did the math for this slip!
+                
+            processed_slips.add(slip_id)
+            
+            o = pd.to_numeric(r.get('Odds', 0), errors='coerce')
+            risk = pd.to_numeric(r.get('Risk', 0), errors='coerce')
+            is_f = r.get('Is_Free_Bet', False)
+            res = r.get('Result', 'Pending')
+            
+            if pd.isna(o) or pd.isna(risk): continue
+            
+            if res == 'Win': 
+                prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
+                bal += prof
+            elif res in ['Loss', 'Pending']: 
+                bal -= (0 if is_f else risk)
+            # If 'Push', we do nothing. The risk is returned (not subtracted, not added).
+
     return max(bal, 0.0)
 
 # ==========================================
@@ -290,7 +317,7 @@ def get_nba_schedule():
         from nba_api.stats.endpoints import scoreboardv2
         from nba_api.stats.static import teams
         
-        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
         board = scoreboardv2.ScoreboardV2(game_date=today_str)
         games = board.get_data_frames()[0]
         if games.empty: return None, "No games scheduled today."
@@ -320,7 +347,7 @@ def get_nba_schedule():
 @st.cache_data(ttl=60)
 def get_nhl_schedule():
     try:
-        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
         r = requests.get(f"https://api-web.nhle.com/v1/schedule/{today_str}", timeout=5).json()
         if not r.get('gameWeek'): return None, "No games scheduled today."
         
@@ -340,7 +367,7 @@ def get_nhl_schedule():
 @st.cache_data(ttl=60)
 def get_mlb_schedule():
     try:
-        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
         r = requests.get(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}", timeout=5).json()
         if not r.get('dates') or not r['dates'][0].get('games'): return None, "No games scheduled today."
         
