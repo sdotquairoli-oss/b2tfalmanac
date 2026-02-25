@@ -459,7 +459,7 @@ def get_nba_stats(player_label):
         df['MATCHUP'] = df['MATCHUP'].apply(lambda x: x.split(' ')[-1])
         df['ValidDate'] = pd.to_datetime(df['GAME_DATE'])
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        def parse_mins(x):
+    def parse_mins(x):
             try:
                 s = str(x)
                 return float(s.split(':')[0]) + float(s.split(':')[1])/60.0 if ':' in s else float(s)
