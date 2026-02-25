@@ -237,6 +237,7 @@ def auto_grade_ledger():
     overwrite_sheet("ROI_Ledger", df)
     return df, f"Graded {updated} bets synced to Cloud!"
 
+@st.cache_data(ttl=3600)
 def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
     try:
         dt = pd.to_datetime(bet_date_str).date()
@@ -755,7 +756,8 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     rf_hist = rf.predict(X_rf)
     gb_hist = gb.predict(X_gb)
     hgbr_hist = hgbr.predict(X_hgbr)
-    mods = df_ml['MATCHUP'].apply(lambda x: get_archetype_defense_modifier(league, x, archetype)[0]).values
+    unique_mods = {team: get_archetype_defense_modifier(league, team, archetype)[0] for team in df_ml['MATCHUP'].unique()}
+    mods = df_ml['MATCHUP'].map(unique_mods).values
     hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
     guru_hist = ((lr_hist + rf_hist) / 2) * mods * 1.0 * hist_split_mods
     df_ml['AI_Proj'] = ((lr_hist + rf_hist + gb_hist + hgbr_hist + guru_hist) / 5) * skynet_data["mod"]
@@ -1066,7 +1068,7 @@ def render_syndicate_board(league_key):
                     if pd.isna(residual_std) or residual_std == 0: residual_std = 1.0
                 
                 # 🚨 BUG FIX: Use Poisson distribution for binary/low-count stats to prevent negative numbers
-                if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB']:
+                if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB', 'Double Double', 'Triple Double']:
                     lam_val = max(0.001, c_proj) # Lambda must be > 0
                     sims = np.random.poisson(lam=lam_val, size=10000)
                 else:
