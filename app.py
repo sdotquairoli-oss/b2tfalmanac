@@ -1524,8 +1524,10 @@ with t_parlay:
         new_p_results = {}
         for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
             orig_idx = row['index']
-            o = int(pd.to_numeric(row['Odds'], errors='coerce') or 0)
-            r = float(pd.to_numeric(row['Risk'], errors='coerce') or 0.0)
+            odds_raw = pd.to_numeric(row['Odds'], errors='coerce')
+            risk_raw = pd.to_numeric(row['Risk'], errors='coerce')
+            o = int(odds_raw) if not pd.isna(odds_raw) else 0
+            r = float(risk_raw) if not pd.isna(risk_raw) else 0.0
             is_f = row.get('Is_Free_Bet', False)
             status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
             legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
