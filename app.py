@@ -648,13 +648,34 @@ def apply_skynet(raw_vote, stat_type):
             graded = ledger[ledger['Result'].isin(['Win', 'Loss'])]
             subset = graded[(graded['Stat'] == stat_type) & (graded['Vote'] == raw_vote)]
             total_graded = len(subset)
-            if total_graded >= 3:
-                wins = len(subset[subset['Result'] == 'Win'])
-                win_rate = wins / total_graded
-                if win_rate <= 0.35: return {"mod": (0.85 if raw_vote == "OVER" else 1.15), "msg": f"🛑 SKYNET TAX: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Applying penalty.", "color": "#ff0055"}
-                elif win_rate >= 0.60: return {"mod": (1.05 if raw_vote == "OVER" else 0.95), "msg": f"🔥 SKYNET BOOST: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Trusting edge.", "color": "#00E676"}
-                else: return {"mod": 1.0, "msg": f"⚖️ SKYNET AUDIT: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s.", "color": "#FFD700"}
-            else: return {"mod": 1.0, "msg": f"🟣 Skynet: Gathering data on {stat_type} {raw_vote}s ({total_graded}/3).", "color": "#94a3b8"}
+            
+            # 🧠 Skynet Bayesian Beta-Prior Engine
+            # We assume a baseline "phantom history" of 3 Wins and 3 Losses to prevent wild overreactions.
+            prior_wins, prior_losses = 3.0, 3.0 
+            
+            if total_graded > 0:
+                actual_wins = len(subset[subset['Result'] == 'Win'])
+                actual_losses = total_graded - actual_wins
+                
+                # Calculate the Posterior Win Probability
+                posterior_win_rate = (prior_wins + actual_wins) / (prior_wins + prior_losses + total_graded)
+                
+                # Smoothly map the posterior into a multiplier (±5% swing based on confidence)
+                skynet_mod = 1.0 + ((posterior_win_rate - 0.50) * 0.3)
+                
+                if posterior_win_rate >= 0.53:
+                    msg = f"🔥 SKYNET BOOST: You are {actual_wins}-{actual_losses} on {stat_type} {raw_vote}s. Nudging edge up."
+                    color = "#00E676"
+                elif posterior_win_rate <= 0.47:
+                    msg = f"🛑 SKYNET TAX: You are {actual_wins}-{actual_losses} on {stat_type} {raw_vote}s. Applying penalty."
+                    color = "#ff0055"
+                else:
+                    msg = f"⚖️ SKYNET AUDIT: You are {actual_wins}-{actual_losses} on {stat_type} {raw_vote}s. Neutral."
+                    color = "#FFD700"
+                    
+                return {"mod": round(skynet_mod, 3), "msg": msg, "color": color}
+            else: 
+                return {"mod": 1.0, "msg": f"🟣 Skynet: Gathering initial data on {stat_type} {raw_vote}s.", "color": "#94a3b8"}
     except: pass
     return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
 
