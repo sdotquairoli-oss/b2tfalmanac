@@ -1523,7 +1523,10 @@ with t_parlay:
         st.markdown("#### 🎫 Your Live / Parlay Slips")
         new_p_results = {}
         for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
-            orig_idx, o, r, is_f = row['index'], int(pd.to_numeric(row['Odds'], errors='coerce')), float(pd.to_numeric(row['Risk'], errors='coerce')), row.get('Is_Free_Bet', False)
+            orig_idx = row['index']
+            o = int(pd.to_numeric(row['Odds'], errors='coerce') or 0)
+            r = float(pd.to_numeric(row['Risk'], errors='coerce') or 0.0)
+            is_f = row.get('Is_Free_Bet', False)
             status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
             legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
             boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
