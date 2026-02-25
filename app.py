@@ -898,25 +898,52 @@ def run_nhl_heaters(stat_choice="Points"):
         if not sched: return None, "No NHL games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
         
-        # 🚨 THE NEW MAPPING: Translates "Shots on Goal" to 'shots' for the API and 'SOG' for our Math Engine
-        sort_key = {"Points": "points", "Goals": "goals", "Assists": "assists", "Shots on Goal": "shots"}.get(stat_choice, "points")
         s_col = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG"}.get(stat_choice, "PTS")
+        filtered_players = []
         
-        r_json = requests.get(f"https://api-web.nhle.com/v1/skater-stats-leaders/current?categories={sort_key}&limit=100", timeout=5).json()
-        
-        # Safely parse NHL's dynamic JSON structure
-        if isinstance(r_json, list): active_players = r_json
-        elif sort_key in r_json: active_players = r_json[sort_key]
-        else: active_players = r_json.get('data', [])
+        # 🚨 THE FIX: Dual-API Routing
+        if stat_choice == "Shots on Goal":
+            # The Leaderboard API rejects SOG, so we route to the massive Stats API!
+            y = datetime.now().year
+            curr_season = f"{y-1}{y}" if datetime.now().month < 9 else f"{y}{y+1}"
             
-        active_players = [p for p in active_players if p.get('teamAbbrev') in teams_today]
-        active_players = sorted(active_players, key=lambda x: x.get(sort_key, 0), reverse=True)[:50]
+            r = requests.get(f"https://api.nhle.com/stats/rest/en/skater/summary?sort=shots&cayenneExp=seasonId={curr_season}", timeout=5)
+            if r.status_code == 200:
+                for p in r.json().get('data', []):
+                    team_abbrev = p.get('teamAbbrevs', '').split(',')[0].strip()
+                    if team_abbrev in teams_today:
+                        filtered_players.append({
+                            "name": p.get('skaterFullName', ''),
+                            "team": team_abbrev,
+                            "val": p.get('shots', 0)
+                        })
+        else:
+            # Standard routing for Points, Goals, and Assists
+            api_cat = {"Points": "points", "Goals": "goals", "Assists": "assists"}.get(stat_choice, "points")
+            r = requests.get(f"https://api-web.nhle.com/v1/skater-stats-leaders/current?categories={api_cat}&limit=100", timeout=5)
+            if r.status_code == 200:
+                r_json = r.json()
+                if isinstance(r_json, list): active_players = r_json
+                elif api_cat in r_json: active_players = r_json[api_cat]
+                else: active_players = r_json.get('data', [])
+                
+                for p in active_players:
+                    team_abbrev = p.get('teamAbbrev', '').strip()
+                    if team_abbrev in teams_today:
+                        filtered_players.append({
+                            "name": f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip(),
+                            "team": team_abbrev,
+                            "val": p.get(api_cat, 0)
+                        })
+                        
+        # ⚡ Sort and take the top 50 active players for tonight!
+        filtered_players = sorted(filtered_players, key=lambda x: x['val'], reverse=True)[:50]
         
         heaters = []
-        for p in active_players:
-            player_name = f"{p.get('firstName', {}).get('default', '')} {p.get('lastName', {}).get('default', '')}".strip()
-            team_abbrev = p.get('teamAbbrev')
-            season_val = p.get(sort_key, 0)
+        for p in filtered_players:
+            player_name = p['name']
+            team_abbrev = p['team']
+            season_val = p['val']
             
             opp, is_home = "OPP", True
             for g in sched:
@@ -949,9 +976,8 @@ def run_nhl_heaters(stat_choice="Points"):
             })
             
         if not heaters: return None, f"No top {stat_choice} leaders playing tonight."
-        return pd.DataFrame(heaters), f"✅ Deep Scan Complete: {stat_choice} Projections loaded."
+        return pd.DataFrame(heaters), f"✅ Deep Scan Complete: NHL {stat_choice} Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
-
 @st.cache_data(ttl=3600)
 def run_barn_burner():
     try:
