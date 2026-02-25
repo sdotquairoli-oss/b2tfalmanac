@@ -625,17 +625,28 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
 # --- ⚡ ML REFACTOR HELPERS ---
 
 def build_models(df_ml, s_col, weights, league):
-    mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
-    df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
+    if league == "MLB":
+        # For MLB, MINS = plate appearances/batters faced
+        # Per-opportunity rate makes more sense than per-minute
+        mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
+        df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
+        df_ml['Per_Min'] = df_ml['Per_Min'].clip(0, 10) # Cap runaway ratios on small samples
+    else:
+        mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
+        df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
     
     y = df_ml[s_col].fillna(0).values
     X = np.arange(len(df_ml)).reshape(-1, 1)
     
     expected_mins = df_ml['MINS'].tail(5).mean()
-    if pd.isna(expected_mins) or expected_mins == 0: 
-        if league == "MLB": expected_mins = 4.0 # Plate Appearances
-        elif league == "NHL": expected_mins = 18.0 # Time on Ice
-        else: expected_mins = 15.0 # Court Time
+    if pd.isna(expected_mins) or expected_mins == 0:
+        if league == "MLB": expected_mins = 4.0
+        elif league == "NHL": expected_mins = 18.0
+        else: expected_mins = 15.0
+    else:
+        if league == "MLB": expected_mins = np.clip(expected_mins, 2.0, 6.0)
+        elif league == "NHL": expected_mins = np.clip(expected_mins, 10.0, 28.0)
+        else: expected_mins = np.clip(expected_mins, 5.0, 42.0)
         
     # 1. Ridge Baseline (Shock Absorber for linear trends)
     lr = Ridge(alpha=1.0).fit(X, df_ml['Per_Min'].values, sample_weight=weights)
