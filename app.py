@@ -125,13 +125,29 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
 def overwrite_sheet(sheet_name, df):
     gc = get_gc()
     if not gc: return
-    try:
-        ws = gc.open("B2TF_Database").worksheet(sheet_name)
-        ws.clear()
-        clean_df = df.fillna("")
-        ws.update(values=[clean_df.columns.values.tolist()] + clean_df.values.tolist())
-        load_sheet_df.clear() 
-    except Exception as e: st.error(f"Failed to update database: {e}")
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            ws = gc.open("B2TF_Database").worksheet(sheet_name)
+            clean_df = df.fillna("")
+            new_values = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
+            
+            # 1. Write new data first
+            ws.update(values=new_values, range_name='A1')
+            
+            # 2. Only clear rows BELOW the new data to avoid wipe-then-fail
+            last_row = len(new_values)
+            total_rows = ws.row_count
+            if total_rows > last_row:
+                ws.batch_clear([f'A{last_row + 1}:Z{total_rows}'])
+            
+            load_sheet_df.clear()
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt) # Exponential backoff: 1s, 2s, 4s
+            else:
+                st.error(f"Failed to update database after {max_retries} attempts: {e}")
 
 def load_ledger(): 
     df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
