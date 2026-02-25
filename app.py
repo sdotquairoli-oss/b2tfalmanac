@@ -14,10 +14,8 @@ from io import StringIO
 import streamlit.components.v1 as components
 
 # --- ML IMPORTS ---
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.svm import SVR
-from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor
 from sklearn.metrics.pairwise import euclidean_distances
 
 # --- CONFIGURATION & GLOBAL CONSTANTS ---
@@ -588,14 +586,17 @@ def build_models(df_ml, s_col, weights):
     expected_mins = df_ml['MINS'].tail(5).mean()
     if pd.isna(expected_mins) or expected_mins == 0: expected_mins = 15.0
 
-    lr = LinearRegression().fit(X, df_ml['Per_Min'].values, sample_weight=weights)
+    # 1. Ridge Baseline (Shock Absorber for linear trends)
+    lr = Ridge(alpha=1.0).fit(X, df_ml['Per_Min'].values, sample_weight=weights)
     trend_proj = lr.predict([[len(X)]])[0] * expected_mins
     
+    # 2. Random Forest (Short-term Form)
     df_ml['Roll3'] = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
     X_rf = df_ml[['Roll3', 'MINS']].fillna(0).values
     rf = RandomForestRegressor(n_estimators=50, random_state=42).fit(X_rf, y, sample_weight=weights)
     stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins]])[0]
     
+    # 3. Gradient Boosting (Variance/Regression Flag)
     s_mean = df_ml[s_col].mean()
     if pd.isna(s_mean): s_mean = 0.0
     df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
@@ -603,53 +604,13 @@ def build_models(df_ml, s_col, weights):
     gb = GradientBoostingRegressor(n_estimators=50, random_state=42).fit(X_gb, y, sample_weight=weights)
     con_proj = gb.predict([[expected_mins, trend_proj - s_mean]])[0]
 
-    scaler = StandardScaler()
-    X_svm_scaled = scaler.fit_transform(X_rf)
-    svm = SVR(kernel='rbf', C=10).fit(X_svm_scaled, y, sample_weight=weights)
-    base_proj = svm.predict(scaler.transform([[df_ml['Roll3'].iloc[-1], expected_mins]]))[0]
+    # 4. HistGradientBoosting (Robust Long-term Baseline)
+    df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
+    X_hgbr = df_ml[['EWMA', 'MINS']].fillna(0).values
+    hgbr = HistGradientBoostingRegressor(max_iter=50, random_state=42).fit(X_hgbr, y, sample_weight=weights)
+    base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
     
-    return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, svm, X, X_rf, X_gb, X_svm_scaled, expected_mins
-
-def apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype):
-    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
-    fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
-    
-    season_avg = df_ml[s_col].mean()
-    if pd.isna(season_avg) or season_avg == 0:
-        season_avg = 1.0 
-        home_avg, away_avg = 1.0, 1.0
-    else:
-        home_avg = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
-        away_avg = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
-        if pd.isna(home_avg): home_avg = season_avg
-        if pd.isna(away_avg): away_avg = season_avg
-        
-    home_mod = np.clip(home_avg / season_avg, 0.80, 1.20)
-    away_mod = np.clip(away_avg / season_avg, 0.80, 1.20)
-    
-    current_split_mod = home_mod if is_home_current == 1 else away_mod
-    split_text = "Home" if is_home_current == 1 else "Road"
-    split_desc = f"+{((current_split_mod-1)*100):.0f}%" if current_split_mod > 1 else f"{((current_split_mod-1)*100):.0f}%"
-    
-    return mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod
-
-def apply_skynet(raw_vote, stat_type):
-    if raw_vote == "PASS": return {"mod": 1.0, "msg": "🟣 Skynet: Market is efficient. Pass.", "color": "#94a3b8"}
-    try:
-        ledger = load_ledger()
-        if not ledger.empty and 'Result' in ledger.columns:
-            graded = ledger[ledger['Result'].isin(['Win', 'Loss'])]
-            subset = graded[(graded['Stat'] == stat_type) & (graded['Vote'] == raw_vote)]
-            total_graded = len(subset)
-            if total_graded >= 3:
-                wins = len(subset[subset['Result'] == 'Win'])
-                win_rate = wins / total_graded
-                if win_rate <= 0.35: return {"mod": (0.85 if raw_vote == "OVER" else 1.15), "msg": f"🛑 SKYNET TAX: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Applying penalty.", "color": "#ff0055"}
-                elif win_rate >= 0.60: return {"mod": (1.05 if raw_vote == "OVER" else 0.95), "msg": f"🔥 SKYNET BOOST: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s. Trusting edge.", "color": "#00E676"}
-                else: return {"mod": 1.0, "msg": f"⚖️ SKYNET AUDIT: You are {wins}-{total_graded-wins} on {stat_type} {raw_vote}s.", "color": "#FFD700"}
-            else: return {"mod": 1.0, "msg": f"🟣 Skynet: Gathering data on {stat_type} {raw_vote}s ({total_graded}/3).", "color": "#94a3b8"}
-    except: pass
-    return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
+    return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins
 
 # --- ⚡ THE SLEEK COORDINATOR ---
 
@@ -664,7 +625,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
     
     # 1. Build Models
-    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, svm, X, X_rf, X_gb, X_svm_scaled, expected_mins = build_models(df_ml, s_col, weights)
+    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins = build_models(df_ml, s_col, weights)
     
     # 2. Context Modifiers
     mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod = apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype)
@@ -686,18 +647,18 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     lr_hist = lr.predict(X) * df_ml['MINS'].replace(0, 1.0).values
     rf_hist = rf.predict(X_rf)
     gb_hist = gb.predict(X_gb)
-    svm_hist = svm.predict(X_svm_scaled)
+    hgbr_hist = hgbr.predict(X_hgbr)
     mods = df_ml['MATCHUP'].apply(lambda x: get_archetype_defense_modifier(league, x, archetype)[0]).values
     hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
     guru_hist = ((lr_hist + rf_hist) / 2) * mods * 1.0 * hist_split_mods
-    df_ml['AI_Proj'] = ((lr_hist + rf_hist + gb_hist + svm_hist + guru_hist) / 5) * skynet_data["mod"]
+    df_ml['AI_Proj'] = ((lr_hist + rf_hist + gb_hist + hgbr_hist + guru_hist) / 5) * skynet_data["mod"]
 
     # 6. UI Payload
     board = [
-        {"name": "⏱️ MIN Maximizer", "model": "Linear Regression", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"Projects {trend_proj:.1f} by weighting recent mins."},
+        {"name": "⏱️ MIN Maximizer", "model": "Ridge Regression", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"Projects {trend_proj:.1f} by weighting recent mins."},
         {"name": "📊 Statistician", "model": "Random Forest", "proj": stat_proj, "vote": get_raw_vote(stat_proj), "color": get_final_vote(stat_proj)[1], "quote": f"Deep Memory sets stable floor. Trees favor {get_raw_vote(stat_proj)}."},
         {"name": "🃏 Contrarian", "model": "Gradient Boosting", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"Flags variance {'regression' if con_proj < df_ml[s_col].mean() else 'spike'} from season norms."},
-        {"name": "🛡️ Baseline", "model": "Support Vector Machine", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": "Weighted multi-year mapping of minute/production correlation."},
+        {"name": "🛡️ Baseline", "model": "Hist-Gradient Boosting", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": "Weighted multi-year mapping using exponentially weighted moving averages."},
         {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors {mod_desc.split('(')[0].strip().replace('🛡️', '').replace('🏃', '').strip()}."}
     ]
     
