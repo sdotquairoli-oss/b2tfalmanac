@@ -1042,11 +1042,17 @@ def render_syndicate_board(league_key):
                     save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob, is_boosted)
                     st.success("Pick locked! It is safely stored in your Google Sheets Database.")
                     
-                if odds < 0: implied_prob = abs(odds) / (abs(odds) + 100); profit = 100 / (abs(odds) / 100); risk = 100
-                else: implied_prob = 100 / (odds + 100); profit = odds; risk = 100
+                if odds < 0: implied_prob = abs(odds) / (abs(odds) + 100); profit = 100 / (abs(odds) / 100); risk = 100; b_odds = 100 / abs(odds)
+                else: implied_prob = 100 / (odds + 100); profit = odds; risk = 100; b_odds = odds / 100
+                
                 ev_dollars = (win_prob * profit) - ((1 - win_prob) * risk)
                 edge_pct = (win_prob - implied_prob) * 100
-
+                
+                # 🧠 Half-Kelly Stake Calculator
+                liq_bal = get_liquid_balance()
+                kelly_pct = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
+                rec_stake = liq_bal * (kelly_pct * 0.5) # Half-Kelly for aggressive growth with safety
+                
                 ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                 if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
                 elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
@@ -1057,7 +1063,7 @@ def render_syndicate_board(league_key):
                     <div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);">
                         <div style="background-color: #0f172a; padding: 12px; border-radius: 6px; text-align: center;">
                             <span style="font-size: 22px;">🌟</span> <span style="font-size: 18px; font-weight: 900; color: #FFD700; letter-spacing: 2px;">OFFICIAL AI TOP PICK</span> <span style="font-size: 22px;">🌟</span>
-                            <div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">Massive Edge Detected! {win_prob*100:.1f}% Win Probability and +{edge_pct:.1f}% EV Edge on the {c_vote}.</div>
+                            <div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">Massive Edge Detected! {win_prob*100:.1f}% Win Prob | Recommend risking ${rec_stake:.2f}.</div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1066,8 +1072,10 @@ def render_syndicate_board(league_key):
                 with sum_c1:
                     st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{c_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
                 with sum_c2:
-                    if c_vote == "PASS": st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">EXPECTED VALUE (+EV)</div><div style="font-size:22px; font-weight:900; color:#94a3b8;">N/A - PASS</div><div style="font-size:13px;">Market is highly efficient.</div></div>', unsafe_allow_html=True)
-                    else: st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: {"#00c853" if ev_dollars > 0 else "#d50000"}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">EXPECTED VALUE (+EV)</div><div style="font-size:22px; font-weight:900; color:{"#00c853" if ev_dollars > 0 else "#d50000"};">${ev_dollars:+.2f} per $100</div><div style="font-size:13px;">Win Prob: {win_prob*100:.1f}% | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
+                    if c_vote == "PASS" or edge_pct <= 0: 
+                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">RECOMMENDED RISK</div><div style="font-size:22px; font-weight:900; color:#94a3b8;">$0.00 (PASS)</div><div style="font-size:12px; color:#94a3b8;">Negative EV or too tight.</div></div>', unsafe_allow_html=True)
+                    else: 
+                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #00E5FF; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#00E5FF; letter-spacing: 1px;">HALF-KELLY STAKE</div><div style="font-size:26px; font-weight:900; color:#00E5FF; margin: 4px 0px;">${rec_stake:.2f}</div><div style="font-size:12px; color:#94a3b8;">EV: ${ev_dollars:+.2f}/$100 | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True) {"#00c853" if ev_dollars > 0 else "#d50000"}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">EXPECTED VALUE (+EV)</div><div style="font-size:22px; font-weight:900; color:{"#00c853" if ev_dollars > 0 else "#d50000"};">${ev_dollars:+.2f} per $100</div><div style="font-size:13px;">Win Prob: {win_prob*100:.1f}% | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
                 with sum_c3:
                     df_l10, df_l5 = df_with_ml.tail(10).reset_index(drop=True), df_with_ml.tail(5)
                     l10_hits, l5_hits = int((df_l10[s_col] > line).sum()), int((df_l5[s_col] > line).sum())
