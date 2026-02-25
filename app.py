@@ -464,8 +464,15 @@ def get_nba_stats(player_label):
                 s = str(x)
                 return float(s.split(':')[0]) + float(s.split(':')[1])/60.0 if ':' in s else float(s)
             except: return 0.0
+            
         df['MINS'] = df['MIN'].apply(parse_mins)
-        df = df.rename(columns={'REB': 'TRB'}) 
+        
+        # 1. Rename ONLY the rebounding columns so we don't overwrite our clean MINS
+        df = df.rename(columns={'REB': 'TRB', 'reb': 'TRB'}) 
+
+        # 2. Filter the clean columns SECOND
+        df = df[['Date', 'Matchup', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK']]
+        
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)] 
