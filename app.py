@@ -46,6 +46,27 @@ BOOK_LOGOS = {
 
 NBA_FULL_TO_ABBREV = {'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'Charlotte Hornets': 'CHA', 'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE', 'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN', 'Detroit Pistons': 'DET', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND', 'LA Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM', 'Miami Heat': 'MIA', 'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN', 'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK', 'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX', 'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'TOR', 'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS'}
 ODDS_MEGA_MAP = {**NBA_FULL_TO_ABBREV, "ANA": "Anaheim Ducks", "BUF": "Sabres", "CGY": "Flames", "CAR": "Hurricanes", "COL": "Avalanche", "CBJ": "Blue Jackets", "EDM": "Oilers", "FLA": "Panthers", "LAK": "Kings", "MTL": "Canadiens", "NSH": "Predators", "NJD": "Devils", "NYI": "Islanders", "NYR": "Rangers", "OTT": "Senators", "PIT": "Penguins", "SJS": "Sharks", "SEA": "Kraken", "STL": "Blues", "TBL": "Lightning", "VAN": "Canucks", "VGK": "Knights", "WPG": "Jets"}
+S_MAP = {
+    "Points": "PTS",
+    "Goals": "G",
+    "Assists": "A",
+    "Shots on Goal": "SOG",
+    "Rebounds": "TRB",
+    "PRA (Pts+Reb+Ast)": "PRA",
+    "Power Play Points": "PPP",
+    "Minutes Played": "MINS",
+    "Threes Made": "FG3M",
+    "Points + Rebounds": "PR",
+    "Points + Assists": "PA",
+    "Rebounds + Assists": "RA",
+    "Hits": "H",
+    "Home Runs": "HR",
+    "Total Bases": "TB",
+    "Pitcher Strikeouts": "K",
+    "Pitcher Earned Runs": "ER",
+    "Double Double": "DD",
+    "Triple Double": "TD"
+}
 
 # --- THEME CSS ---
 st.markdown("""
@@ -188,8 +209,7 @@ def auto_grade_ledger():
             stats, d_col = stats_cache[cache_key]
             if stats.empty: continue
             
-            s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K", "Double Double": "DD", "Triple Double": "TD"}
-            s_col = s_map.get(r['Stat'], "PTS")
+            s_col = S_MAP.get(r['Stat'], "PTS")
             
             if league == "NBA":
                 if s_col == "A": s_col = "AST"
@@ -225,8 +245,7 @@ def generate_ai_autopsy(league, player, stat, line, vote, bet_date_str):
         else: df, _, _ = get_mlb_stats(player); dc = 'gameDate'
         if df.empty: return "No data."
         
-        s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Minutes Played": "MINS", "Hits": "H", "Pitcher Strikeouts": "K", "Double Double": "DD", "Triple Double": "TD"}
-        s_col = s_map.get(stat, "PTS")
+        s_col = S_MAP.get(stat, "PTS")
         
         if league == "NBA":
             if s_col == "A": s_col = "AST"
@@ -1019,8 +1038,7 @@ def render_syndicate_board(league_key):
         if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
         elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
         elif not df.empty:
-            s_map = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Rebounds": "TRB", "PRA (Pts+Reb+Ast)": "PRA", "Power Play Points": "PPP", "Minutes Played": "MINS", "Threes Made": "FG3M", "Points + Rebounds": "PR", "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H", "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K", "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD"}
-            s_col = s_map.get(stat_type, "PTS")
+            s_col = S_MAP.get(stat_type, "PTS")
             
             if league_key == "NBA":
                 if s_col == "A": s_col = "AST"
