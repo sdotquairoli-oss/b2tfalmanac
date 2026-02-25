@@ -1490,7 +1490,7 @@ with t_wallet:
     # ⚡ ONE LINE: The Wallet now shares the exact same math as the Top Bar Engine!
     total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
         
-   with bw_c2:
+    with bw_c2:
         st.markdown(f"""
         <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;">
             <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div>
