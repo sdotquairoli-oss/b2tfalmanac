@@ -1373,20 +1373,29 @@ with t_wallet:
     if book_balances:
         st.markdown("#### 📱 Portfolio Breakdown")
         
-        # 📊 1. The Dynamic Donut Chart Visualizer
+        # 📊 1. The Dynamic Donut Chart Visualizer (Polished)
         import altair as alt
         df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
-        df_pie = df_pie[df_pie['Balance'] > 0] # Automatically hide empty accounts
+        df_pie = df_pie[df_pie['Balance'] > 0] 
         
         if not df_pie.empty:
-            chart = alt.Chart(df_pie).mark_arc(innerRadius=70, cornerRadius=4).encode(
+            chart = alt.Chart(df_pie).mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6).encode(
                 theta=alt.Theta(field="Balance", type="quantitative"),
-                color=alt.Color(field="Sportsbook", type="nominal", scale=alt.Scale(scheme='tableau20'), legend=alt.Legend(title="Liquidity Location", orient="right", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=14, labelFontSize=12)),
+                color=alt.Color(field="Sportsbook", type="nominal", legend=alt.Legend(title="Liquidity Location", orient="right", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=12, labelFontSize=11)),
                 tooltip=[alt.Tooltip('Sportsbook', title='Book'), alt.Tooltip('Balance', format='$.2f')]
-            ).properties(height=280).configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
-            st.altair_chart(chart, use_container_width=True)
+            ).properties(
+                height=260,
+                background='transparent'
+            ).configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
+            
+            # Center the chart in the middle of the screen so it doesn't stretch massively
+            donut_col1, donut_col2, donut_col3 = st.columns([1, 2, 1])
+            with donut_col2:
+                st.altair_chart(chart, use_container_width=True, theme="streamlit")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        # 📱 2. The Portfolio Cards (from earlier!)
+        # 📱 2. The Portfolio Cards
         port_cols = st.columns(min(len(book_balances), 4))
         for i, (book, bal) in enumerate(book_balances.items()):
             logo_img = BOOK_LOGOS.get(book, "")
