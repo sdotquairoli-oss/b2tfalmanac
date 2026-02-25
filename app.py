@@ -170,9 +170,9 @@ def get_liquid_balance():
             if res == 'Win': 
                 prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100))
                 bal += prof
-            elif res in ['Loss', 'Pending']: 
+            elif res == 'Loss':
                 bal -= (0 if is_f else risk)
-            # If 'Push', we do nothing. The risk is returned (not subtracted, not added).
+            # Pending and Push: do nothing — money hasn't left yet
 
     return max(bal, 0.0)
 
@@ -1395,7 +1395,9 @@ with t_wallet:
                 o, risk, is_f = pd.to_numeric(r['Odds'], errors='coerce'), pd.to_numeric(r['Risk'], errors='coerce'), r.get('Is_Free_Bet', False)
                 if r['Result'] == 'Win': 
                     prof = (risk * (o/100)) if o > 0 else (risk / (abs(o)/100)); bal += prof; tot_sports += prof
-                elif r['Result'] in ['Loss', 'Pending']: bal -= (0 if is_f else risk); tot_sports -= ((0 if is_f else risk) if r['Result'] == 'Loss' else 0)
+                elif r['Result'] == 'Loss': 
+                    bal -= (0 if is_f else risk)
+                    tot_sports -= (0 if is_f else risk)
         if has_hist or bal != 0.0: book_balances[book] = bal; total_liquid += bal
             
     with bw_c2:
