@@ -1405,17 +1405,13 @@ if book_balances:
         st.markdown("#### 📱 Portfolio Breakdown")
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # ⚖️ Split the section: Cards on the Left (66%), Chart on the Right (33%)
         breakdown_left, breakdown_right = st.columns([2, 1])
         
         with breakdown_right:
-            # 📊 1. The Dynamic Donut Chart Visualizer (Right Side)
-            import altair as alt
             df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
             df_pie = df_pie[df_pie['Balance'] > 0] 
             
             if not df_pie.empty:
-                # We moved the legend to the bottom so it fits perfectly in the right column
                 chart = alt.Chart(df_pie).mark_arc(innerRadius=60, outerRadius=100, cornerRadius=6).encode(
                     theta=alt.Theta(field="Balance", type="quantitative"),
                     color=alt.Color(field="Sportsbook", type="nominal", legend=alt.Legend(title="Liquidity Location", orient="bottom", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=12, labelFontSize=11)),
@@ -1428,8 +1424,6 @@ if book_balances:
                 st.altair_chart(chart, use_container_width=True, theme="streamlit")
         
         with breakdown_left:
-            # 📱 2. The Portfolio Cards (Left Side)
-            # We use 2 columns here so the cards don't get squished in their new space
             port_cols = st.columns(min(len(book_balances), 2) if len(book_balances) > 1 else 1)
             for i, (book, bal) in enumerate(book_balances.items()):
                 logo_img = BOOK_LOGOS.get(book, "")
