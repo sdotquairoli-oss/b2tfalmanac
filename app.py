@@ -721,27 +721,36 @@ def build_models(df_ml, s_col, weights, league):
 
 def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
-    fatigue_val, fatigue_desc = apply_fatigue_modifier(rest)
+    fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
     
-    # 🚨 BULLETPROOF INIT: These variables now mathematically exist no matter what.
+    # Safe defaults — always defined no matter what
     home_mod = 1.0
     away_mod = 1.0
-    current_split_mod = 1.0
-    split_text = "Home" if is_home_current else "Away"
-    
-    # Safely handle the splits only if the column and data exist
-    if s_col in df.columns and len(df) > 0:
-        overall_avg = df[s_col].mean()
-        if overall_avg > 0:
-            home_df = df[df['Is_Home'] == 1]
-            away_df = df[df['Is_Home'] == 0]
-            
-            if len(home_df) > 0: home_mod = home_df[s_col].mean() / overall_avg
-            if len(away_df) > 0: away_mod = away_df[s_col].mean() / overall_avg
-            
-    current_split_mod = home_mod if is_home_current else away_mod
-    split_desc = f"{split_text} Split: {current_split_mod:.2f}x"
-    
+    split_text = "Home" if is_home_current == 1 else "Road"
+    split_desc = "0%"
+
+    try:
+        if s_col in df.columns and len(df) > 0:
+            season_avg = df[s_col].mean()
+            if not pd.isna(season_avg) and season_avg > 0:
+                home_games = df[df['Is_Home'] == 1][s_col]
+                away_games = df[df['Is_Home'] == 0][s_col]
+
+                home_weight = min(len(home_games) / 10.0, 1.0)
+                away_weight = min(len(away_games) / 10.0, 1.0)
+
+                home_avg = (home_games.mean() * home_weight + season_avg * (1 - home_weight)) if len(home_games) > 0 else season_avg
+                away_avg = (away_games.mean() * away_weight + season_avg * (1 - away_weight)) if len(away_games) > 0 else season_avg
+
+                home_mod = float(np.clip(home_avg / season_avg, 0.80, 1.20))
+                away_mod = float(np.clip(away_avg / season_avg, 0.80, 1.20))
+    except:
+        home_mod = 1.0
+        away_mod = 1.0
+
+    current_split_mod = home_mod if is_home_current == 1 else away_mod
+    split_desc = f"+{((current_split_mod-1)*100):.0f}%" if current_split_mod > 1 else f"{((current_split_mod-1)*100):.0f}%"
+
     return mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod
     
 def apply_skynet(raw_vote, stat_type, league):
