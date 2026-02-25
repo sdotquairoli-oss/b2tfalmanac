@@ -181,8 +181,8 @@ def auto_grade_ledger():
             if cache_key not in stats_cache:
                 time.sleep(1) # Protect against rate limits
                 if league == "NBA": stats, _, _ = get_nba_stats(player); d_col = 'ValidDate'
-                elif league == "NHL": stats, _, _ = get_nhl_stats(player); d_col = 'gameDate'
-                else: stats, _, _ = get_mlb_stats(player); d_col = 'gameDate'
+                elif league == "NHL": stats, _, _ = get_nhl_stats(player); d_col = 'ValidDate'
+                else: stats, _, _ = get_mlb_stats(player); d_col = 'ValidDate'
                 stats_cache[cache_key] = (stats, d_col)
             
             stats, d_col = stats_cache[cache_key]
