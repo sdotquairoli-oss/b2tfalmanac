@@ -579,9 +579,7 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
 
 # --- ⚡ ML REFACTOR HELPERS ---
 
-# --- ⚡ ML REFACTOR HELPERS ---
-
-def build_models(df_ml, s_col, weights):
+def build_models(df_ml, s_col, weights, league):
     mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
     df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
     
@@ -589,8 +587,11 @@ def build_models(df_ml, s_col, weights):
     X = np.arange(len(df_ml)).reshape(-1, 1)
     
     expected_mins = df_ml['MINS'].tail(5).mean()
-    if pd.isna(expected_mins) or expected_mins == 0: expected_mins = 15.0
-
+    if pd.isna(expected_mins) or expected_mins == 0: 
+        if league == "MLB": expected_mins = 4.0 # Plate Appearances
+        elif league == "NHL": expected_mins = 18.0 # Time on Ice
+        else: expected_mins = 15.0 # Court Time
+        
     # 1. Ridge Baseline (Shock Absorber for linear trends)
     lr = Ridge(alpha=1.0).fit(X, df_ml['Per_Min'].values, sample_weight=weights)
     trend_proj = lr.predict([[len(X)]])[0] * expected_mins
@@ -640,42 +641,37 @@ def apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archety
     
     return mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod
 
-def apply_skynet(raw_vote, stat_type):
+def apply_skynet(raw_vote, stat_type, league):
     if raw_vote == "PASS": return {"mod": 1.0, "msg": "🟣 Skynet: Market is efficient. Pass.", "color": "#94a3b8"}
     try:
         ledger = load_ledger()
-        if not ledger.empty and 'Result' in ledger.columns:
+        if not ledger.empty and 'Result' in ledger.columns and 'League' in ledger.columns:
             graded = ledger[ledger['Result'].isin(['Win', 'Loss'])]
-            subset = graded[(graded['Stat'] == stat_type) & (graded['Vote'] == raw_vote)]
+            # 🚨 BUG FIX: Added strict League filtering so NHL doesn't contaminate MLB
+            subset = graded[(graded['Stat'] == stat_type) & (graded['Vote'] == raw_vote) & (graded['League'] == league)]
             total_graded = len(subset)
             
-            # 🧠 Skynet Bayesian Beta-Prior Engine
-            # We assume a baseline "phantom history" of 3 Wins and 3 Losses to prevent wild overreactions.
             prior_wins, prior_losses = 3.0, 3.0 
             
             if total_graded > 0:
                 actual_wins = len(subset[subset['Result'] == 'Win'])
                 actual_losses = total_graded - actual_wins
-                
-                # Calculate the Posterior Win Probability
                 posterior_win_rate = (prior_wins + actual_wins) / (prior_wins + prior_losses + total_graded)
-                
-                # Smoothly map the posterior into a multiplier (±5% swing based on confidence)
                 skynet_mod = 1.0 + ((posterior_win_rate - 0.50) * 0.3)
                 
                 if posterior_win_rate >= 0.53:
-                    msg = f"🔥 SKYNET BOOST: You are {actual_wins}-{actual_losses} on {stat_type} {raw_vote}s. Nudging edge up."
+                    msg = f"🔥 SKYNET BOOST: You are {actual_wins}-{actual_losses} on {league} {stat_type} {raw_vote}s."
                     color = "#00E676"
                 elif posterior_win_rate <= 0.47:
-                    msg = f"🛑 SKYNET TAX: You are {actual_wins}-{actual_losses} on {stat_type} {raw_vote}s. Applying penalty."
+                    msg = f"🛑 SKYNET TAX: You are {actual_wins}-{actual_losses} on {league} {stat_type} {raw_vote}s. Applying penalty."
                     color = "#ff0055"
                 else:
-                    msg = f"⚖️ SKYNET AUDIT: You are {actual_wins}-{actual_losses} on {stat_type} {raw_vote}s. Neutral."
+                    msg = f"⚖️ SKYNET AUDIT: You are {actual_wins}-{actual_losses} on {league} {stat_type} {raw_vote}s. Neutral."
                     color = "#FFD700"
                     
                 return {"mod": round(skynet_mod, 3), "msg": msg, "color": color}
             else: 
-                return {"mod": 1.0, "msg": f"🟣 Skynet: Gathering initial data on {stat_type} {raw_vote}s.", "color": "#94a3b8"}
+                return {"mod": 1.0, "msg": f"🟣 Skynet: Gathering initial data on {league} {stat_type} {raw_vote}s.", "color": "#94a3b8"}
     except: pass
     return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
 
@@ -691,8 +687,8 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     
     weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
     
-    # 1. Build Models
-    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins = build_models(df_ml, s_col, weights)
+    # 1. Build Models (Now league-aware!)
+    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins = build_models(df_ml, s_col, weights, league)
     
     # 2. Context Modifiers
     mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod = apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype)
@@ -703,8 +699,8 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     def get_raw_vote(p): return "OVER" if p >= line + 0.3 else ("UNDER" if p <= line - 0.3 else "PASS")
     raw_vote = get_raw_vote(raw_consensus)
     
-    # 4. Skynet Injection
-    skynet_data = apply_skynet(raw_vote, stat_type)
+    # 4. Skynet Injection (Now league-aware!)
+    skynet_data = apply_skynet(raw_vote, stat_type, league)
     final_consensus = raw_consensus * skynet_data["mod"]
     
     def get_final_vote(p): return ("OVER", "#00c853") if p >= line + 0.3 else (("UNDER", "#d50000") if p <= line - 0.3 else ("PASS", "#94a3b8"))
@@ -730,7 +726,6 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     ]
     
     return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, skynet_data["msg"], skynet_data["color"]
-
 # ==========================================
 # 4. SCANNERS (RADAR)
 # ==========================================
@@ -1027,8 +1022,12 @@ def render_syndicate_board(league_key):
                     residual_std = df_with_ml[s_col].std()
                     if pd.isna(residual_std) or residual_std == 0: residual_std = 1.0
                 
-                # Simulate 10,000 futures based on the model's true accuracy
-                sims = np.random.normal(loc=c_proj, scale=residual_std, size=10000)
+                # 🚨 BUG FIX: Use Poisson distribution for binary/low-count stats to prevent negative numbers
+                if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB']:
+                    lam_val = max(0.001, c_proj) # Lambda must be > 0
+                    sims = np.random.poisson(lam=lam_val, size=10000)
+                else:
+                    sims = np.random.normal(loc=c_proj, scale=residual_std, size=10000)
                 
                 if c_vote == "OVER": win_prob = np.sum(sims > line) / 10000.0
                 elif c_vote == "UNDER": win_prob = np.sum(sims < line) / 10000.0
