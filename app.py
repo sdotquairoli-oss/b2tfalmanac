@@ -143,23 +143,11 @@ def save_bankroll_transaction(book, trans_type, amount):
 def get_liquid_balance():
     b_df, p_df, bal = load_bankroll(), load_parlay_ledger(), 0.0
     
-    # 1. Add all raw deposits/withdrawals
     if not b_df.empty: 
         bal += pd.to_numeric(b_df['Amount'], errors='coerce').fillna(0).sum()
         
-    # 2. Process bets without double-counting Parlay Legs
     if not p_df.empty:
-        processed_slips = set() # 🚨 Prevents multi-leg parlays from draining risk multiple times
-        
         for _, r in p_df.iterrows():
-            # Create a unique ID for the slip (Date + Book + Risk)
-            slip_id = f"{r.get('Date', '')}_{r.get('Sportsbook', '')}_{r.get('Risk', 0)}"
-            
-            if slip_id in processed_slips:
-                continue # Skip this row, we already did the math for this slip!
-                
-            processed_slips.add(slip_id)
-            
             o = pd.to_numeric(r.get('Odds', 0), errors='coerce')
             risk = pd.to_numeric(r.get('Risk', 0), errors='coerce')
             is_f = r.get('Is_Free_Bet', False)
