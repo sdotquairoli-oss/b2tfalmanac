@@ -119,7 +119,14 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
     try:
         ws = gc.open("B2TF_Database").worksheet(sheet_name)
         if ws.row_count == 0 or not ws.row_values(1): ws.append_row(expected_cols)
-        ws.append_row([row_dict.get(col, "") for col in expected_cols])
+        
+        clean_row = []
+        for col in expected_cols:
+            val = row_dict.get(col, "")
+            if isinstance(val, bool): val = "TRUE" if val else "FALSE"
+            clean_row.append(val)
+    
+        ws.append_row(clean_row, value_input_option="USER_ENTERED")
         load_sheet_df.clear() 
     except Exception as e: st.error(f"Failed to save to database: {e}")
 
@@ -131,9 +138,15 @@ def overwrite_sheet(sheet_name, df):
         try:
             ws = gc.open("B2TF_Database").worksheet(sheet_name)
             clean_df = df.fillna("")
+            
+            for col in clean_df.columns:
+                if clean_df[col].dtype == bool:
+                    clean_df[col] = clean_df[col].apply(lambda x: "TRUE" if x else "FALSE")
+                    
             new_values = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
             
-            ws.update(values=new_values, range_name='A1')
+            ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
+            
             last_row = len(new_values)
             total_rows = ws.row_count
             if total_rows > last_row:
