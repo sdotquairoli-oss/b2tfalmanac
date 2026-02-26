@@ -35,7 +35,6 @@ NHL_TEAMS = sorted(["ANA", "BOS", "BUF", "CGY", "CAR", "CHI", "COL", "CBJ", "DAL
 MLB_TEAMS = sorted(["ARI", "ATL", "BAL", "BOS", "CHC", "CHW", "CIN", "CLE", "COL", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "OAK", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"])
 SPORTSBOOKS = ["FanDuel", "Fanatics", "DraftKings", "BetMGM", "Caesars", "ESPN Bet", "Hard Rock", "bet365", "Other"]
 BOOK_LOGOS = {
-    "FanDuel": "https://www.google.com/s2/favicons?domain=fanduel.com&sz=128",
     "DraftKings": "https://www.google.com/s2/favicons?domain=draftkings.com&sz=128",
     "BetMGM": "https://www.google.com/s2/favicons?domain=betmgm.com&sz=128",
     "Caesars": "https://www.google.com/s2/favicons?domain=caesars.com&sz=128",
