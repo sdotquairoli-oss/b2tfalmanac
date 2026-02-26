@@ -42,7 +42,7 @@ BOOK_LOGOS = {
     "Fanatics": "https://www.google.com/s2/favicons?domain=sportsbook.fanatics.com&sz=128",
     "ESPN Bet": "https://www.google.com/s2/favicons?domain=espnbet.com&sz=128",
     "Hard Rock": "https://www.google.com/s2/favicons?domain=hardrock.bet&sz=128",
-    "bet365": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Bet365_Logo.svg/512px-Bet365_Logo.svg.png"
+    "bet365": "https://logo.clearbit.com/bet365.com"
 }
 
 NBA_FULL_TO_ABBREV = {'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'Charlotte Hornets': 'CHA', 'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE', 'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN', 'Detroit Pistons': 'DET', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND', 'LA Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM', 'Miami Heat': 'MIA', 'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN', 'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK', 'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX', 'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'TOR', 'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS'}
