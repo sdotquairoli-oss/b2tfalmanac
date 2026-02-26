@@ -1635,26 +1635,38 @@ with t_roi:
             st.info("🟣 Skynet requires at least 2 graded bets to generate the Performance Analytics dashboard. Keep feeding the machine!")
         
         st.markdown("---")
-        # --- 🎫 2. RESUME BET SLIP RENDERER ---
+       # --- 🎫 2. RESUME BET SLIP RENDERER ---
         st.markdown("#### 🎫 Your Bet Slips")
         
-        # 🚨 THE FIX: This is the loop you were missing!
         for i, row in ledger_df.reset_index().iloc[::-1].iterrows():
             
-            # --- PASTE YOUR BET SLIP UI HERE ---
-            # (If you lost your original UI code, here is a clean fallback to render the slips)
-            with st.container():
-                bc1, bc2, bc3 = st.columns([2, 2, 1])
-                bc1.markdown(f"**{row.get('Player', 'Unknown')}** | {row.get('Stat', '')}")
-                bc1.caption(f"📅 {row.get('Date', '')} | 🏆 {row.get('League', '')}")
+            # Determine the status light color
+            status = str(row.get('Result', 'Pending')).strip()
+            light = "🟢" if status == 'Win' else "🔴" if status == 'Loss' else "🟡" if status == 'Push' else "⚪"
+            
+            # 🎟️ The Premium Ticket Card
+            with st.container(border=True):
+                tc1, tc2, tc3 = st.columns([2, 2.5, 1])
                 
-                bc2.markdown(f"🎯 **{row.get('Vote', '')} {row.get('Line', '')}**")
-                bc2.caption(f"Odds: {row.get('Odds', '')}")
-                
-                bc3.markdown(f"🚥 **{row.get('Result', 'Pending')}**")
-                st.divider()
-
-# ==========================================
+                with tc1:
+                    st.markdown(f"#### {row.get('Player', 'Unknown')}")
+                    st.caption(f"🏆 {row.get('League', '')} &nbsp;|&nbsp; 📅 {row.get('Date', '')}")
+                    if str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True:
+                        st.markdown("🚀 **Odds Boost Applied**")
+                        
+                with tc2:
+                    st.markdown(f"🎯 **{row.get('Stat', '')}**")
+                    st.markdown(f"**{row.get('Vote', '')} {row.get('Line', '')}** &nbsp;|&nbsp; Odds: **{row.get('Odds', '')}**")
+                    
+                    # 🤖 Inject the Skynet Math safely
+                    proj_val = row.get('Proj', 'N/A')
+                    prob_val = row.get('Win_Prob', 0)
+                    try: prob_str = f"{float(prob_val) * 100:.1f}%"
+                    except: prob_str = "N/A"
+                    st.caption(f"🤖 **AI Proj:** {proj_val} &nbsp;|&nbsp; 🔮 **Win Prob:** {prob_str}")
+                        
+                with tc3:
+                    st.markdown(f"### {light} {status}")
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
