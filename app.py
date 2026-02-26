@@ -1637,8 +1637,7 @@ with t_roi:
         st.markdown("---")
         # --- 🎫 2. RESUME BET SLIP RENDERER ---
         st.markdown("#### 🎫 Your Bet Slips")
-
-        for i, row in ledger_df.reset_index().iloc[::-1].iterrows():
+for i, row in ledger_df.reset_index().iloc[::-1].iterrows():
 
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
