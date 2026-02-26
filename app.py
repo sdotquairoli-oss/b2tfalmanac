@@ -161,6 +161,9 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
 
 def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
+    df = df[df['Description'].astype(str).str.strip() != '']
+    df = df[df['Date'].astype(str).str.strip() != '']
+    df = df.reset_index(drop=True)
     if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False
     else: df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
