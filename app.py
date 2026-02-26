@@ -1637,7 +1637,24 @@ with t_roi:
         st.markdown("---")
         # --- 🎫 2. RESUME BET SLIP RENDERER ---
         st.markdown("#### 🎫 Your Bet Slips")
+        
+        # 🚨 THE FIX: This is the loop you were missing!
+        for i, row in ledger_df.reset_index().iloc[::-1].iterrows():
+            
+            # --- PASTE YOUR BET SLIP UI HERE ---
+            # (If you lost your original UI code, here is a clean fallback to render the slips)
+            with st.container():
+                bc1, bc2, bc3 = st.columns([2, 2, 1])
+                bc1.markdown(f"**{row.get('Player', 'Unknown')}** | {row.get('Stat', '')}")
+                bc1.caption(f"📅 {row.get('Date', '')} | 🏆 {row.get('League', '')}")
+                
+                bc2.markdown(f"🎯 **{row.get('Vote', '')} {row.get('Line', '')}**")
+                bc2.caption(f"Odds: {row.get('Odds', '')}")
+                
+                bc3.markdown(f"🚥 **{row.get('Result', 'Pending')}**")
+                st.divider()
 
+# ==========================================
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
