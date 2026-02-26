@@ -1638,39 +1638,71 @@ with t_roi:
         # --- 🎫 2. RESUME BET SLIP RENDERER ---
         st.markdown("#### 🎫 Your Bet Slips")
         
-        # 🚨 THE FIX: Slips injected right here, packed into compact tickets!
         for i, row in ledger_df.reset_index().iloc[::-1].iterrows():
-            with st.container(border=True):
-                c1, c2, c3, c4 = st.columns([3, 3, 2, 2])
+            
+            # 1. Status and Color Coordination
+            status = str(row.get('Result', 'Pending')).strip()
+            if status == 'Win': b_color = "#00c853" # Neon Green
+            elif status == 'Loss': b_color = "#ff0055" # Crimson Red
+            elif status == 'Push': b_color = "#f59e0b" # Warning Yellow
+            else: b_color = "#3b82f6" # Pending Blue
                 
-                with c1:
-                    st.markdown(f"**👤 {row.get('Player', 'Unknown')}**")
-                    st.caption(f"📅 {row.get('Date', '')} &nbsp;|&nbsp; 🏆 {row.get('League', '')}")
-                    if str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True:
-                        st.caption("🚀 **Odds Boost Applied**")
-                        
-                with c2:
-                    st.markdown(f"🎯 **{row.get('Stat', '')}**")
-                    prob_val = row.get('Win_Prob', 0)
-                    try: prob_str = f"{float(prob_val) * 100:.1f}%"
-                    except: prob_str = "N/A"
-                    st.caption(f"🤖 **Proj:** {row.get('Proj', 'N/A')} &nbsp;|&nbsp; 🔮 **Prob:** {prob_str}")
-                        
-                with c3:
-                    st.markdown(f"**{row.get('Vote', '')} {row.get('Line', '')}**")
-                    st.caption(f"Odds: {row.get('Odds', '')}")
-                        
-                with c4:
-                    current_res = str(row.get('Result', 'Pending')).strip()
-                    opts = ["Pending", "Win", "Loss", "Push"]
-                    start_idx = opts.index(current_res) if current_res in opts else 0
+            # 2. Extract Data
+            league = row.get('League', 'N/A')
+            date = row.get('Date', 'N/A')
+            odds = row.get('Odds', 'N/A')
+            player = row.get('Player', 'Unknown')
+            stat = row.get('Stat', '')
+            vote = row.get('Vote', '')
+            line = row.get('Line', '')
+            proj = row.get('Proj', 'N/A')
+            
+            prob_val = row.get('Win_Prob', 0)
+            try: prob_str = f"{float(prob_val) * 100:.1f}%"
+            except: prob_str = "N/A"
+            
+            is_boosted = str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True
+            boost_html = '<span style="color: #f59e0b; font-size: 10px; font-weight: 900; letter-spacing: 1px;">🚀 BOOSTED</span> &nbsp;' if is_boosted else ''
+            
+            # 3. Render the Parlay-Style Card
+            sc1, sc2 = st.columns([4, 1])
+            
+            with sc1:
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;">
+                            🛡️ {league} &nbsp;•&nbsp; {date}
+                        </div>
+                        <div style="color: #fff; font-size: 14px; font-weight: 900;">
+                            {boost_html}{odds}
+                        </div>
+                    </div>
                     
-                    new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
+                    <div style="margin-bottom: 15px;">
+                        <div style="color: #f8fafc; font-size: 14px; font-weight: 500;">
+                            <span style="color: #f59e0b; margin-right: 6px;">●</span> <b>{player}</b> ({stat} {vote} {line})
+                        </div>
+                    </div>
                     
-                    if new_val != current_res:
-                        if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
-                            st.info("Value changed! Run Auto-Grade or update the Sheet to lock it in.")
-
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
+                        <div>🤖 AI Proj: <span style="color: #00E5FF; font-weight: bold;">{proj}</span></div>
+                        <div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with sc2:
+                # Spacer to push the dropdown down so it aligns perfectly with the center of the card
+                st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True) 
+                
+                opts = ["Pending", "Win", "Loss", "Push"]
+                start_idx = opts.index(status) if status in opts else 0
+                new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
+                
+                if new_val != status:
+                    if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
+                        st.info("Run Auto-Grade to lock it in.")
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
