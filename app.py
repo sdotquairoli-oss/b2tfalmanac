@@ -151,6 +151,9 @@ def overwrite_sheet(sheet_name, df):
 
 def load_ledger(): 
     df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+    df = df[df['Player'].astype(str).str.strip() != '']
+    df = df[df['Date'].astype(str).str.strip() != '']
+    df = df.reset_index(drop=True)
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     return df
