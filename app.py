@@ -1563,114 +1563,142 @@ with t_parlay:
             overwrite_sheet("Parlay_Ledger", parlay_df); st.success("Tracker Updated!"); time.sleep(1); st.rerun()
 
 with t_roi:
-    roi_col1, roi_col2 = st.columns([4, 1])
-    with roi_col1: st.markdown("### 🏦 The Bankroll (Single Units)")
-    with roi_col2:
-        if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
-            with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
-            st.success(grade_msg); time.sleep(1.5); st.rerun()
-            
-    ledger_df = load_ledger()
-    if not ledger_df.empty:
-        graded_df = ledger_df[ledger_df['Result'].isin(['Win', 'Loss'])]
-        wins, losses, profit = len(graded_df[graded_df['Result'] == 'Win']), len(graded_df[graded_df['Result'] == 'Loss']), 0.0
-        
-        for _, row in graded_df.iterrows():
-            o = pd.to_numeric(row['Odds'], errors='coerce')
-            profit += ((100 / (abs(o)/100)) if o < 0 else o) if row['Result'] == 'Win' else -100
-                
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Graded Picks", f"{wins + losses}")
-        m2.metric("Win Rate", f"{(wins / (wins + losses) * 100) if (wins + losses) > 0 else 0.0:.1f}%")
-        m3.metric("Net Profit (from $100 bets)", f"${profit:+.2f}")
-        m4.metric("ROI (%)", f"{(profit / ((wins + losses) * 100) * 100) if (wins + losses) > 0 else 0.0:+.1f}%")
-        
-        # --- 📈 1. THE ANALYTICS ENGINE INJECTION ---
-        st.markdown("---")
-        st.markdown("#### 📈 Syndicate Performance Analytics")
-        
-        if len(graded_df) > 1:
-            analytics_df = graded_df.copy()
-            analytics_df['Date_DT'] = pd.to_datetime(analytics_df['Date'])
-            analytics_df = analytics_df.sort_values('Date_DT')
-            
-            # Re-calculate exact row-by-row profit for the timeline
-            def row_profit(r):
-                o_val = pd.to_numeric(r['Odds'], errors='coerce')
-                return ((100 / (abs(o_val)/100)) if o_val < 0 else o_val) if r['Result'] == 'Win' else -100.0
-                
-            analytics_df['Profit_Per_Bet'] = analytics_df.apply(row_profit, axis=1)
-            analytics_df['Cumulative_Profit'] = analytics_df['Profit_Per_Bet'].cumsum()
-            
-            ac1, ac2 = st.columns([2, 1])
-            with ac1:
-                st.caption("**Bankroll Trajectory (Cumulative Profit)**")
-                # 📊 Glowing Neon Area Chart
-                line_chart = alt.Chart(analytics_df).mark_area(
-                    line={'color':'#00E5FF'},
-                    color=alt.Gradient(
-                        gradient='linear',
-                        stops=[alt.GradientStop(color='#00E5FF', offset=0), alt.GradientStop(color='rgba(0, 229, 255, 0)', offset=1)],
-                        x1=1, x2=1, y1=1, y2=0
-                    )
-                ).encode(
-                    x=alt.X('Date_DT:T', title='Date'),
-                    y=alt.Y('Cumulative_Profit:Q', title='Net Profit ($)'),
-                    tooltip=[alt.Tooltip('Date:N'), alt.Tooltip('Player:N'), alt.Tooltip('Stat:N'), alt.Tooltip('Profit_Per_Bet:Q', title='Bet Result', format='+.2f'), alt.Tooltip('Cumulative_Profit:Q', title='Total Bankroll', format='+.2f')]
-                ).properties(height=260, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
-                st.altair_chart(line_chart, use_container_width=True)
-                
-            with ac2:
-                st.caption("**The Leak Finder (Profit by Stat)**")
-                # 📊 Green/Red Horizontal Bar Chart
-                stat_profit = analytics_df.groupby('Stat')['Profit_Per_Bet'].sum().reset_index()
-                bar_chart = alt.Chart(stat_profit).mark_bar(cornerRadiusEnd=4).encode(
-                    y=alt.Y('Stat:N', sort='-x', title=None, axis=alt.Axis(labelLimit=120)),
-                    x=alt.X('Profit_Per_Bet:Q', title='Net Profit ($)'),
-                    color=alt.condition(alt.datum.Profit_Per_Bet > 0, alt.value('#00c853'), alt.value('#ff0055')),
-                    tooltip=[alt.Tooltip('Stat:N'), alt.Tooltip('Profit_Per_Bet:Q', title='Net Profit', format='+.2f')]
-                ).properties(height=260, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
-                st.altair_chart(bar_chart, use_container_width=True)
-        else:
-            st.info("🟣 Skynet requires at least 2 graded bets to generate the Performance Analytics dashboard. Keep feeding the machine!")
-        
-        st.markdown("---")
-       # --- 🎫 2. RESUME BET SLIP RENDERER ---
-        st.markdown("#### 🎫 Your Bet Slips")
-        
+    roi_col1, roi_col2 = st.columns([4, 1])
+    with roi_col1: st.markdown("### 🏦 The Bankroll (Single Units)")
+    with roi_col2:
+        if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
+            with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
+            st.success(grade_msg); time.sleep(1.5); st.rerun()
+            
+    ledger_df = load_ledger()
+    if not ledger_df.empty:
+        graded_df = ledger_df[ledger_df['Result'].isin(['Win', 'Loss'])]
+        wins, losses, profit = len(graded_df[graded_df['Result'] == 'Win']), len(graded_df[graded_df['Result'] == 'Loss']), 0.0
+        
+        for _, row in graded_df.iterrows():
+            o = pd.to_numeric(row['Odds'], errors='coerce')
+            profit += ((100 / (abs(o)/100)) if o < 0 else o) if row['Result'] == 'Win' else -100
+                
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Graded Picks", f"{wins + losses}")
+        m2.metric("Win Rate", f"{(wins / (wins + losses) * 100) if (wins + losses) > 0 else 0.0:.1f}%")
+        m3.metric("Net Profit (from $100 bets)", f"${profit:+.2f}")
+        m4.metric("ROI (%)", f"{(profit / ((wins + losses) * 100) * 100) if (wins + losses) > 0 else 0.0:+.1f}%")
+        
+        # --- 📈 1. THE ANALYTICS ENGINE INJECTION ---
+        st.markdown("---")
+        st.markdown("#### 📈 Syndicate Performance Analytics")
+        
+        if len(graded_df) > 1:
+            analytics_df = graded_df.copy()
+            analytics_df['Date_DT'] = pd.to_datetime(analytics_df['Date'])
+            analytics_df = analytics_df.sort_values('Date_DT')
+            
+            # Re-calculate exact row-by-row profit for the timeline
+            def row_profit(r):
+                o_val = pd.to_numeric(r['Odds'], errors='coerce')
+                return ((100 / (abs(o_val)/100)) if o_val < 0 else o_val) if r['Result'] == 'Win' else -100.0
+                
+            analytics_df['Profit_Per_Bet'] = analytics_df.apply(row_profit, axis=1)
+            analytics_df['Cumulative_Profit'] = analytics_df['Profit_Per_Bet'].cumsum()
+            
+            ac1, ac2 = st.columns([2, 1])
+            with ac1:
+                st.caption("**Bankroll Trajectory (Cumulative Profit)**")
+                # 📊 Glowing Neon Area Chart
+                line_chart = alt.Chart(analytics_df).mark_area(
+                    line={'color':'#00E5FF'},
+                    color=alt.Gradient(
+                        gradient='linear',
+                        stops=[alt.GradientStop(color='#00E5FF', offset=0), alt.GradientStop(color='rgba(0, 229, 255, 0)', offset=1)],
+                        x1=1, x2=1, y1=1, y2=0
+                    )
+                ).encode(
+                    x=alt.X('Date_DT:T', title='Date'),
+                    y=alt.Y('Cumulative_Profit:Q', title='Net Profit ($)'),
+                    tooltip=[alt.Tooltip('Date:N'), alt.Tooltip('Player:N'), alt.Tooltip('Stat:N'), alt.Tooltip('Profit_Per_Bet:Q', title='Bet Result', format='+.2f'), alt.Tooltip('Cumulative_Profit:Q', title='Total Bankroll', format='+.2f')]
+                ).properties(height=260, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
+                st.altair_chart(line_chart, use_container_width=True)
+                
+            with ac2:
+                st.caption("**The Leak Finder (Profit by Stat)**")
+                # 📊 Green/Red Horizontal Bar Chart
+                stat_profit = analytics_df.groupby('Stat')['Profit_Per_Bet'].sum().reset_index()
+                bar_chart = alt.Chart(stat_profit).mark_bar(cornerRadiusEnd=4).encode(
+                    y=alt.Y('Stat:N', sort='-x', title=None, axis=alt.Axis(labelLimit=120)),
+                    x=alt.X('Profit_Per_Bet:Q', title='Net Profit ($)'),
+                    color=alt.condition(alt.datum.Profit_Per_Bet > 0, alt.value('#00c853'), alt.value('#ff0055')),
+                    tooltip=[alt.Tooltip('Stat:N'), alt.Tooltip('Profit_Per_Bet:Q', title='Net Profit', format='+.2f')]
+                ).properties(height=260, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
+                st.altair_chart(bar_chart, use_container_width=True)
+        else:
+            st.info("🟣 Skynet requires at least 2 graded bets to generate the Performance Analytics dashboard. Keep feeding the machine!")
+        
+        st.markdown("---")
+        # --- 🎫 2. RESUME BET SLIP RENDERER ---
+        st.markdown("#### 🎫 Your Bet Slips")
+
         for i, row in ledger_df.reset_index().iloc[::-1].iterrows():
-            with st.container(border=True):
-                # ⚡ 4 Columns to keep everything tightly packed on one line
-                c1, c2, c3, c4 = st.columns([3, 3, 2, 2])
-                
-                with c1:
-                    st.markdown(f"**👤 {row.get('Player', 'Unknown')}**")
-                    st.caption(f"📅 {row.get('Date', '')} &nbsp;|&nbsp; 🏆 {row.get('League', '')}")
-                        
-                with c2:
-                    st.markdown(f"🎯 **{row.get('Stat', '')}**")
-                    prob_val = row.get('Win_Prob', 0)
-                    try: prob_str = f"{float(prob_val) * 100:.1f}%"
-                    except: prob_str = "N/A"
-                    st.caption(f"🤖 **Proj:** {row.get('Proj', 'N/A')} &nbsp;|&nbsp; 🔮 **Prob:** {prob_str}")
-                        
-                with c3:
-                    st.markdown(f"**{row.get('Vote', '')} {row.get('Line', '')}**")
-                    st.caption(f"Odds: {row.get('Odds', '')}")
-                        
-                with c4:
-                    # 🔘 The Dropdown Box returns!
-                    current_res = str(row.get('Result', 'Pending')).strip()
-                    opts = ["Pending", "Win", "Loss", "Push"]
-                    start_idx = opts.index(current_res) if current_res in opts else 0
-                    
-                    new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
-                    
-                    # If you manually change the dropdown, a save button pops up!
-                    if new_val != current_res:
-                        if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
-                            # (You can wire this to a manual update function, or just use your Auto-Grader!)
-                            st.info("Value changed! Run Auto-Grade or update the Sheet to lock it in.")
+
+with t_wallet:
+    st.markdown("### 💵 Multi-Sportsbook Wallet")
+    st.caption("Track balances across different apps.")
+    
+    bw_c1, bw_c2 = st.columns([2, 1])
+    with bw_c1:
+        with st.form("bankroll_form"):
+            sc1, sc2 = st.columns(2)
+            t_book = sc1.selectbox("Sportsbook", SPORTSBOOKS)
+            t_type = sc2.selectbox("Transaction Type", ["Deposit (Out of Pocket)", "Withdrawal (Cash Out)", "Casino Win (House Money)", "Casino Loss (Bad Spins)"])
+            t_amount = st.number_input("Amount ($)", min_value=0.01, step=1.00, format="%.2f")
+            
+            if st.form_submit_button("Log Transaction"):
+                save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
+                st.success("Transaction Logged!"); time.sleep(1); st.rerun()
+                
+    # ⚡ ONE LINE: The Wallet now shares the exact same math as the Top Bar Engine!
+    total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
+        
+    with bw_c2:
+        st.markdown(f"""
+        <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;">
+            <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div>
+            <div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${get_liquid_balance():.2f}</div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;">
+                <span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span>
+                <span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span>
+                <span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    if book_balances:
+        st.markdown("#### 📱 Portfolio Breakdown")
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        breakdown_left, breakdown_right = st.columns([2, 1])
+        
+        with breakdown_right:
+            df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
+            df_pie = df_pie[df_pie['Balance'] > 0] 
+            
+            if not df_pie.empty:
+                chart = alt.Chart(df_pie).mark_arc(innerRadius=60, outerRadius=100, cornerRadius=6).encode(
+                    theta=alt.Theta(field="Balance", type="quantitative"),
+                    color=alt.Color(field="Sportsbook", type="nominal", legend=alt.Legend(title="Liquidity Location", orient="bottom", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=12, labelFontSize=11)),
+                    tooltip=[alt.Tooltip('Sportsbook', title='Book'), alt.Tooltip('Balance', format='$.2f')]
+                ).properties(
+                    height=280,
+                    background='transparent'
+                ).configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
+                
+                st.altair_chart(chart, use_container_width=True, theme="streamlit")
+        
+        with breakdown_left:
+            port_cols = st.columns(min(len(book_balances), 2) if len(book_balances) > 1 else 1)
+            for i, (book, bal) in enumerate(book_balances.items()):
+                logo_img = BOOK_LOGOS.get(book, "")
+                logo_html = f'<img src="{logo_img}" width="20" height="20" style="border-radius: 50%; vertical-align: middle; margin-right: 8px;"> <span style="font-size: 15px; font-weight: bold; color: #00E5FF; vertical-align: middle;">{book}</span>' if logo_img else f'<span style="font-size: 15px; font-weight: bold; color: #00E5FF;">{book}</span>'
+                port_cols[i % len(port_cols)].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal > 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
