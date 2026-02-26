@@ -1639,34 +1639,38 @@ with t_roi:
         st.markdown("#### 🎫 Your Bet Slips")
         
         for i, row in ledger_df.reset_index().iloc[::-1].iterrows():
-            
-            # Determine the status light color
-            status = str(row.get('Result', 'Pending')).strip()
-            light = "🟢" if status == 'Win' else "🔴" if status == 'Loss' else "🟡" if status == 'Push' else "⚪"
-            
-            # 🎟️ The Premium Ticket Card
             with st.container(border=True):
-                tc1, tc2, tc3 = st.columns([2, 2.5, 1])
+                # ⚡ 4 Columns to keep everything tightly packed on one line
+                c1, c2, c3, c4 = st.columns([3, 3, 2, 2])
                 
-                with tc1:
-                    st.markdown(f"#### {row.get('Player', 'Unknown')}")
-                    st.caption(f"🏆 {row.get('League', '')} &nbsp;|&nbsp; 📅 {row.get('Date', '')}")
-                    if str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True:
-                        st.markdown("🚀 **Odds Boost Applied**")
+                with c1:
+                    st.markdown(f"**👤 {row.get('Player', 'Unknown')}**")
+                    st.caption(f"📅 {row.get('Date', '')} &nbsp;|&nbsp; 🏆 {row.get('League', '')}")
                         
-                with tc2:
+                with c2:
                     st.markdown(f"🎯 **{row.get('Stat', '')}**")
-                    st.markdown(f"**{row.get('Vote', '')} {row.get('Line', '')}** &nbsp;|&nbsp; Odds: **{row.get('Odds', '')}**")
-                    
-                    # 🤖 Inject the Skynet Math safely
-                    proj_val = row.get('Proj', 'N/A')
                     prob_val = row.get('Win_Prob', 0)
                     try: prob_str = f"{float(prob_val) * 100:.1f}%"
                     except: prob_str = "N/A"
-                    st.caption(f"🤖 **AI Proj:** {proj_val} &nbsp;|&nbsp; 🔮 **Win Prob:** {prob_str}")
+                    st.caption(f"🤖 **Proj:** {row.get('Proj', 'N/A')} &nbsp;|&nbsp; 🔮 **Prob:** {prob_str}")
                         
-                with tc3:
-                    st.markdown(f"### {light} {status}")
+                with c3:
+                    st.markdown(f"**{row.get('Vote', '')} {row.get('Line', '')}**")
+                    st.caption(f"Odds: {row.get('Odds', '')}")
+                        
+                with c4:
+                    # 🔘 The Dropdown Box returns!
+                    current_res = str(row.get('Result', 'Pending')).strip()
+                    opts = ["Pending", "Win", "Loss", "Push"]
+                    start_idx = opts.index(current_res) if current_res in opts else 0
+                    
+                    new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
+                    
+                    # If you manually change the dropdown, a save button pops up!
+                    if new_val != current_res:
+                        if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
+                            # (You can wire this to a manual update function, or just use your Auto-Grader!)
+                            st.info("Value changed! Run Auto-Grade or update the Sheet to lock it in.")
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
