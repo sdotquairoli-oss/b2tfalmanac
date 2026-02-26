@@ -1664,33 +1664,23 @@ with t_roi:
             is_boosted = str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True
             boost_html = '<span style="color: #f59e0b; font-size: 10px; font-weight: 900; letter-spacing: 1px;">🚀 BOOSTED</span> &nbsp;' if is_boosted else ''
             
-            # 3. Render the Parlay-Style Card
+            # 3. Render the Parlay-Style Card (COMPRESSED HTML TO PREVENT BLEED)
             sc1, sc2 = st.columns([4, 1])
             
             with sc1:
-                st.markdown(f"""
-                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                        <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;">
-                            🛡️ {league} &nbsp;•&nbsp; {date}
-                        </div>
-                        <div style="color: #fff; font-size: 14px; font-weight: 900;">
-                            {boost_html}{odds}
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 15px;">
-                        <div style="color: #f8fafc; font-size: 14px; font-weight: 500;">
-                            <span style="color: #f59e0b; margin-right: 6px;">●</span> <b>{player}</b> ({stat} {vote} {line})
-                        </div>
-                    </div>
-                    
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
-                        <div>🤖 AI Proj: <span style="color: #00E5FF; font-weight: bold;">{proj}</span></div>
-                        <div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
+<div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+<div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;">🛡️ {league} &nbsp;•&nbsp; {date}</div>
+<div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
+</div>
+<div style="margin-bottom: 15px;">
+<div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> <b>{player}</b> ({stat} {vote} {line})</div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
+<div>🤖 AI Proj: <span style="color: #00E5FF; font-weight: bold;">{proj}</span></div>
+<div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span></div>
+</div>
+</div>""", unsafe_allow_html=True)
                 
             with sc2:
                 # Spacer to push the dropdown down so it aligns perfectly with the center of the card
