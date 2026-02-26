@@ -1236,7 +1236,7 @@ def render_syndicate_board(league_key):
             line = st.number_input("Line", value=start_line, step=0.5, key=f"{lk}.line")
             if sync and f_line is not None and f_odds is not None: st.session_state[f"{lk}.odds"] = estimate_alt_odds(float(f_line), int(f_odds), line, stat_type)
             elif f"{lk}.odds" not in st.session_state: st.session_state[f"{lk}.odds"] = -110
-            odds = st.number_input("Odds", step=5, key=f"{lk}.odds")
+            odds = st.number_input(, step=5, key=f"{lk}.odds")
             is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"{lk}.boost")
                 
         with c4: 
@@ -1709,7 +1709,26 @@ with t_wallet:
             if st.form_submit_button("Log Transaction"):
                 save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
                 st.success("Transaction Logged!"); time.sleep(1); st.rerun()
-                
+
+            with st.form("manual_bet_form"):
+                st.markdown("**📝 Log Manual Bet (Moneyline/Spread)**")
+                mc1, mc2 = st.columns(2)
+                m_team = mc1.text_input("Team Name", placeholder="e.g., Spurs")
+                m_market = mc2.selectbox("Market", ["Moneyline", "Spread", "Total (O/U)"])
+            
+                mc3, mc4, mc5 = st.columns([1, 1, 1.5])
+                m_odds = mc3.number_input("Odds", step=10, value=-110)
+                m_risk = mc4.number_input("Risk ($)", step=5.0, value=10.0)
+                m_book = mc5.selectbox("Sportsbook Tracker", SPORTSBOOKS, key="m_book")
+            
+            if st.form_submit_button("Log Manual Slip"):
+                if m_team:
+                    # We use the parlay ledger because it tracks cash perfectly without needing AI stats!
+                    save_to_parlay_ledger(f"{m_team} {m_market}", m_odds, m_risk, m_book, False, False)
+                    st.success("Moneyline Logged to Wallet!"); time.sleep(1); st.rerun()
+                else:
+                    st.error("Please enter a team name.")
+    
     # ⚡ ONE LINE: The Wallet now shares the exact same math as the Top Bar Engine!
     total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
         
