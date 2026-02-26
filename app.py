@@ -41,7 +41,7 @@ BOOK_LOGOS = {
     "Caesars": "https://www.google.com/s2/favicons?domain=caesars.com&sz=128",
     "Fanatics": "https://www.google.com/s2/favicons?domain=sportsbook.fanatics.com&sz=128",
     "ESPN Bet": "https://www.google.com/s2/favicons?domain=espnbet.com&sz=128",
-    "Hard Rock": "https://www.google.com/s2/favicons?domain=hardrock.bet&sz=128"
+    "Hard Rock": "https://www.google.com/s2/favicons?domain=hardrock.bet&sz=128",
     "bet365": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Bet365_Logo.svg/512px-Bet365_Logo.svg.png"
 }
 
