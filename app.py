@@ -1215,9 +1215,9 @@ def render_syndicate_board(league_key):
                 else: df, status_code, _ = get_nhl_stats(target_player)
                 
             if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
-            elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
-            elif not df.empty:
-            else:
+                elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
+                elif not df.empty:
+                else:
                 st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}. They may have zero minutes played this season, or there is a naming discrepancy.")    
                 s_col = S_MAP.get(stat_type, "PTS")
                 
