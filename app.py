@@ -1046,7 +1046,7 @@ def render_league_scanners(league_name):
         
         if league_name == "NBA":
             c1, c2 = st.columns([1, 1.5])
-    with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists"], key=f"{lk}.scan_stat")            with c2: 
+        with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists"], key=f"{lk}.scan_stat")            with c2: 
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
                     with st.spinner(f"Scanning {scan_stat} Leaders..."):
