@@ -796,17 +796,30 @@ def run_nba_heaters(stat_choice="Points"):
         if not sched: return None, "No NBA games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
 
-        api_abbr = {"Points": "PTS", "Rebounds": "REB", "Assists": "AST", "Threes Made": "FG3M"}.get(stat_choice, "PTS")
-        s_col = {"Points": "PTS", "Rebounds": "TRB", "Assists": "AST", "Threes Made": "FG3M"}.get(stat_choice, "PTS")
+        # 1. Map the stat choice to the exact dataframe column
+        s_col = S_MAP.get(stat_choice, "PTS")
+        if s_col == "A": s_col = "AST"
 
-        leaders = leagueleaders.LeagueLeaders(stat_category_abbreviation=api_abbr, per_mode48='PerGame').get_data_frames()[0]
+        # 2. Always pull base Points leaders (this fetches all active players)
+        leaders = leagueleaders.LeagueLeaders(stat_category_abbreviation="PTS", per_mode48='PerGame').get_data_frames()[0]
+        
+        # 3. 🟢 THE FIX: Compute Combo Stats for the entire league
+        leaders['TRB'] = leaders['REB'] # Standardize rebound name
+        leaders['PRA'] = leaders['PTS'] + leaders['REB'] + leaders['AST']
+        leaders['PR'] = leaders['PTS'] + leaders['REB']
+        leaders['PA'] = leaders['PTS'] + leaders['AST']
+        leaders['RA'] = leaders['REB'] + leaders['AST']
+
+        # 4. Sort the league by the custom stat we just built
+        sort_col = s_col if s_col in leaders.columns else 'PTS'
+        leaders = leaders.sort_values(by=sort_col, ascending=False).reset_index(drop=True)
         
         heaters = []
         for _, r in leaders.head(50).iterrows():
             team_abbrev = r['TEAM']
             if team_abbrev in teams_today:
                 player_name = r['PLAYER']
-                season_val = round(r[api_abbr], 1)
+                season_val = round(r[sort_col], 1)
                 
                 opp, is_home = "OPP", True
                 for g in sched:
@@ -822,6 +835,12 @@ def run_nba_heaters(stat_choice="Points"):
                     today_est = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
                     days_out = (today_est - last_played).days
                     if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
+                    
+                    # 🟢 THE FIX: Compute PRA inside the player's game logs before the AI analyzes it!
+                    if s_col == "PRA": df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
+                    if s_col == "PR": df['PR'] = df['PTS'] + df['TRB']
+                    if s_col == "PA": df['PA'] = df['PTS'] + df['AST']
+                    if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
                     
                     _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
                         df, s_col, float(season_val), opp, "NBA", "Rested (1+ Days)", is_home, stat_choice
@@ -841,7 +860,6 @@ def run_nba_heaters(stat_choice="Points"):
         if not heaters: return None, f"No top 50 {stat_choice} leaders playing tonight."
         return pd.DataFrame(heaters), f"✅ Deep Scan Complete: {stat_choice} Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
-
 @st.cache_data(ttl=3600)
 def get_nhl_roster(team_abbr):
     try:
@@ -1028,8 +1046,7 @@ def render_league_scanners(league_name):
         
         if league_name == "NBA":
             c1, c2 = st.columns([1, 1.5])
-            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made"], key=f"{lk}.scan_stat")
-            with c2: 
+with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists"], key=f"{lk}.scan_stat")            with c2: 
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
                     with st.spinner(f"Scanning {scan_stat} Leaders..."):
