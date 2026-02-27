@@ -1670,8 +1670,14 @@ with t_roi:
                 new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
                 
                 if new_val != status:
-                    if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
-                        st.info("Run Auto-Grade to lock it in.")
+                        if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
+                            # 🟢 THE FIX: Actually write the new grade to the database!
+                            orig_idx = row['index'] 
+                            ledger_df.at[orig_idx, 'Result'] = new_val
+                            overwrite_sheet("ROI_Ledger", ledger_df)
+                            st.success("Grade locked!")
+                            time.sleep(1)
+                            st.rerun()
 
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
