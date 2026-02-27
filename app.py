@@ -1217,10 +1217,7 @@ def render_syndicate_board(league_key):
             if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
             elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
             elif not df.empty:
-                # ... (Keep all your existing code that renders the board here) ...
-            else:
-                # 🟢 THE FIX: Catch the silent failure!
-                st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}. They may have zero minutes played this season, or there is a naming discrepancy.")
+                
                 s_col = S_MAP.get(stat_type, "PTS")
                 
                 if league_key == "NBA":
@@ -1348,7 +1345,8 @@ def render_syndicate_board(league_key):
                             st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
                             st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🔋 Energy Levels**")
                             st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)   
-                
+                            else:    
+                                st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}. They may have zero minutes played this season, or there is a naming discrepancy.")
 def render_league_tab(league_name, get_sched_func):
     lk = league_name.lower()
     
