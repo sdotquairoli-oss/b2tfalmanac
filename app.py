@@ -464,7 +464,8 @@ def get_nba_stats(player_label):
         import unicodedata
         
         def clean_name(name):
-            return unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
+            base = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
+            return base.replace(".", "").replace("'", "").replace("-", "").replace(" ", "")
             
         nba_players = players.get_players()
         player_dict = [p for p in nba_players if clean_name(p['full_name']) == clean_name(cn)]
@@ -1216,6 +1217,8 @@ def render_syndicate_board(league_key):
             if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
             elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
             elif not df.empty:
+            else:
+                st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}. They may have zero minutes played this season, or there is a naming discrepancy.")    
                 s_col = S_MAP.get(stat_type, "PTS")
                 
                 if league_key == "NBA":
