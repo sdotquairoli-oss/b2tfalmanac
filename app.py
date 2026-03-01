@@ -117,15 +117,19 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
     gc = get_gc()
     if not gc: return
     try:
-        # 1. Load current clean data (automatically filters out the 1000 ghost rows)
+        # 1. Load current clean data
         df = load_sheet_df(sheet_name, expected_cols)
         
+        # 🟢 THE GHOST BUSTER: Erases checkbox-only rows from Python's memory!
+        if not df.empty and 'Date' in df.columns:
+            df = df[df['Date'].astype(str).str.strip() != '']
+            
         # 2. Prep the new bet and force Checkboxes to explicitly read as "TRUE/FALSE" text
         clean_row = {col: row_dict.get(col, "") for col in expected_cols}
         for key, val in clean_row.items():
             if isinstance(val, bool): clean_row[key] = "TRUE" if val else "FALSE"
                 
-        # 3. Pack the new bet tightly onto the bottom of the active dataframe
+        # 3. Pack the new bet tightly onto the bottom of the REAL active data
         new_df = pd.concat([df, pd.DataFrame([clean_row])], ignore_index=True)
         
         # 4. Use the overwrite engine to paste it safely starting at A1
