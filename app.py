@@ -1747,10 +1747,10 @@ with t_roi:
                 market_html = f"<b>{player}</b> ({stat} {vote} {line})"
                 proj_html = f"🤖 AI Proj: <span style='color: #00E5FF; font-weight: bold;'>{proj}</span>"
             
-            # 3. Render the Parlay-Style Card
+            # 🟢 MISSING LINE RESTORED: You have to create the columns before you can use them!
             sc1, sc2 = st.columns([4, 1])
             
-            # 🟢 Move the dictionary OUTSIDE the column to bypass the spacing error!
+            # 🟢 DICTIONARY MOVED OUTSIDE: This mathematically prevents any IndentationErrors
             LEAGUE_SHIELDS = {
                 "NBA": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
                 "NHL": "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png",
@@ -1759,7 +1759,7 @@ with t_roi:
             }
             shield_url = LEAGUE_SHIELDS.get(league, "")
             league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
-            
+
             with sc1:
                 st.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
 <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
@@ -1776,6 +1776,20 @@ with t_roi:
 </div>""", unsafe_allow_html=True)
                 
             with sc2:
+                st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True) 
+                
+                opts = ["Pending", "Win", "Loss", "Push"]
+                start_idx = opts.index(status) if status in opts else 0
+                new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
+                
+                if new_val != status:
+                    if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
+                        orig_idx = row['index'] 
+                        ledger_df.at[orig_idx, 'Result'] = new_val
+                        overwrite_sheet("ROI_Ledger", ledger_df)
+                        st.success("Grade locked!")
+                        time.sleep(1)
+                        st.rerun()
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
