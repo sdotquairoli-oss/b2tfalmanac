@@ -117,18 +117,21 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
     gc = get_gc()
     if not gc: return
     try:
-        ws = gc.open("B2TF_Database").worksheet(sheet_name)
-        if ws.row_count == 0 or not ws.row_values(1): ws.append_row(expected_cols)
+        # 1. Load current clean data (automatically filters out the 1000 ghost rows)
+        df = load_sheet_df(sheet_name, expected_cols)
         
-        clean_row = []
-        for col in expected_cols:
-            val = row_dict.get(col, "")
-            if isinstance(val, bool): val = "TRUE" if val else "FALSE"
-            clean_row.append(val)
-    
-        ws.append_row(clean_row, value_input_option="USER_ENTERED")
-        load_sheet_df.clear() 
-    except Exception as e: st.error(f"Failed to save to database: {e}")
+        # 2. Prep the new bet and force Checkboxes to explicitly read as "TRUE/FALSE" text
+        clean_row = {col: row_dict.get(col, "") for col in expected_cols}
+        for key, val in clean_row.items():
+            if isinstance(val, bool): clean_row[key] = "TRUE" if val else "FALSE"
+                
+        # 3. Pack the new bet tightly onto the bottom of the active dataframe
+        new_df = pd.concat([df, pd.DataFrame([clean_row])], ignore_index=True)
+        
+        # 4. Use the overwrite engine to paste it safely starting at A1
+        overwrite_sheet(sheet_name, new_df)
+    except Exception as e: 
+        st.error(f"Failed to save to database: {e}")
 
 def overwrite_sheet(sheet_name, df):
     gc = get_gc()
@@ -138,15 +141,21 @@ def overwrite_sheet(sheet_name, df):
         try:
             ws = gc.open("B2TF_Database").worksheet(sheet_name)
             clean_df = df.fillna("")
+            
+            for col in clean_df.columns:
+                if clean_df[col].dtype == bool:
+                    clean_df[col] = clean_df[col].apply(lambda x: "TRUE" if x else "FALSE")
+                    
             new_values = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
-            ws.update(values=new_values, range_name='A1')
+            
+            try: ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
+            except TypeError: ws.update('A1', new_values, value_input_option="USER_ENTERED")
+            
             last_row = len(new_values)
             total_rows = ws.row_count
             if total_rows > last_row:
-                # ✅ clear_values preserves data validation & formatting
-                ws.spreadsheet.values_clear(
-                    f"'{ws.title}'!A{last_row + 1}:Z{total_rows}"
-                )
+                ws.spreadsheet.values_clear(f"'{ws.title}'!A{last_row + 1}:Z{total_rows}")
+            
             load_sheet_df.clear()
             return
         except Exception as e:
