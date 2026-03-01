@@ -1439,10 +1439,13 @@ def render_syndicate_board(league_key):
                         st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
                     with side_col:
                         with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
-                        player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
-                        team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
-                        opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
-                        st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)                            if league_key == "NBA":
+                            # 🟢 Notice how these are pushed one 'Tab' to the right!
+                            player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
+                            team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
+                            opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
+                            st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
+                            
+                            if league_key == "NBA":
                                 st.caption("**🧬 AI Player Archetype**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
                                 if "Exploit" in mod_desc or "Fade" in mod_desc: st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:2px; font-style:italic;'>{mod_desc}</div>", unsafe_allow_html=True)
