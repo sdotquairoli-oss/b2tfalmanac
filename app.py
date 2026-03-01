@@ -1751,7 +1751,7 @@ with t_roi:
             sc1, sc2 = st.columns([4, 1])
             
             # 🟢 DICTIONARY MOVED OUTSIDE: This mathematically prevents any IndentationErrors
-                LEAGUE_SHIELDS = {
+            LEAGUE_SHIELDS = {
                 "NBA": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
                 "NHL": "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png",
                 "MLB": "https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png",
