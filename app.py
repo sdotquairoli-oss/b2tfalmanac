@@ -138,24 +138,19 @@ def overwrite_sheet(sheet_name, df):
         try:
             ws = gc.open("B2TF_Database").worksheet(sheet_name)
             clean_df = df.fillna("")
-            
-            for col in clean_df.columns:
-                if clean_df[col].dtype == bool:
-                    clean_df[col] = clean_df[col].apply(lambda x: "TRUE" if x else "FALSE")
-                    
             new_values = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
-            
-            ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
-            
+            ws.update(values=new_values, range_name='A1')
             last_row = len(new_values)
             total_rows = ws.row_count
             if total_rows > last_row:
-                ws.batch_clear([f'A{last_row + 1}:Z{total_rows}'])
-            
+                # ✅ clear_values preserves data validation & formatting
+                ws.spreadsheet.values_clear(
+                    f"'{ws.title}'!A{last_row + 1}:Z{total_rows}"
+                )
             load_sheet_df.clear()
             return
         except Exception as e:
-            if attempt < max_retries - 1: time.sleep(2 ** attempt) 
+            if attempt < max_retries - 1: time.sleep(2 ** attempt)
             else: st.error(f"Failed to update database after {max_retries} attempts: {e}")
 
 def load_ledger(): 
