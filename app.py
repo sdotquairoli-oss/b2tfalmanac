@@ -1751,19 +1751,30 @@ with t_roi:
             sc1, sc2 = st.columns([4, 1])
             
             with sc1:
-                # 🟢 1. Check the league and grab the official ESPN Shield
-            LEAGUE_SHIELDS = {
-                "NBA": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
-                "NHL": "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png",
-                "MLB": "https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png",
-                "NFL": "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png"
-            }
-            shield_url = LEAGUE_SHIELDS.get(league, "")
-            league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
+                        # 🟢 1. Check the league and grab the official ESPN Shield inside the column!
+                        LEAGUE_SHIELDS = {
+                            "NBA": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
+                            "NHL": "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png",
+                            "MLB": "https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png",
+                            "NFL": "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png"
+                        }
+                        shield_url = LEAGUE_SHIELDS.get(league, "")
+                        league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
 
-            # 🟢 2. Render the card with the new dynamic shield!
-            with sc1:
-                st.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
+                        # 🟢 2. Render the card
+                        st.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+        <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
+        <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
+        </div>
+        <div style="margin-bottom: 15px;">
+        <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
+        <div>{proj_html}</div>
+        <div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span></div>
+        </div>
+        </div>""", unsafe_allow_html=True)
     <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
     <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
     <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
