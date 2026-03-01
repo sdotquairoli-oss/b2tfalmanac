@@ -861,6 +861,64 @@ def run_nba_heaters(stat_choice="Points"):
         return pd.DataFrame(heaters), f"✅ Deep Scan Complete: {stat_choice} Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
 @st.cache_data(ttl=3600)
+def run_nhl_heaters(stat_choice="Points"):
+    try:
+        sched, _ = get_nhl_schedule()
+        if not sched: return None, "No NHL games scheduled today."
+        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+
+        y = datetime.now().year
+        curr_season = f"{y-1}{y}" if datetime.now().month < 9 else f"{y}{y+1}"
+        
+        sort_map = {"Points": "points", "Goals": "goals", "Assists": "assists", "Shots on Goal": "shots"}
+        api_stat = sort_map.get(stat_choice, "points")
+        s_col = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG"}.get(stat_choice, "PTS")
+
+        r = requests.get(f"https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=[{{\"property\":\"{api_stat}\",\"direction\":\"DESC\"}}]&start=0&limit=50&cayenneExp=seasonId={curr_season}", timeout=5).json()
+        
+        heaters = []
+        for p in r.get('data', []):
+            team_abbr = p.get('teamAbbrevs', '').split(',')[0]
+            if team_abbr in teams_today:
+                player_name = p.get('skaterFullName', p.get('lastName', ''))
+                games_played = max(1, p.get('gamesPlayed', 1))
+                season_val = round(p.get(api_stat, 0) / games_played, 1) # Per Game Average
+                
+                opp, is_home = "OPP", True
+                for g in sched:
+                    if g['home'] == team_abbr: opp = g['away']; is_home = True; break
+                    elif g['away'] == team_abbr: opp = g['home']; is_home = False; break
+                    
+                ai_proj = 0.0
+                matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
+                df, status, _ = get_nhl_stats(player_name)
+                
+                if status != 429 and not df.empty and len(df) >= 5:
+                    last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
+                    today_est = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
+                    days_out = (today_est - last_played).days
+                    if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
+                    
+                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                        df, s_col, float(season_val), opp, "NHL", "Rested (1+ Days)", is_home, stat_choice
+                    )
+                    ai_proj = round(c_proj, 1)
+                
+                time.sleep(0.5) 
+                
+                heaters.append({
+                    "Player": player_name,
+                    "Team": team_abbr,
+                    "Season Stat": season_val,
+                    "AI Proj": ai_proj,
+                    "Status": matchup_status
+                })
+
+        if not heaters: return None, f"No top {stat_choice} leaders playing tonight."
+        return pd.DataFrame(heaters), f"✅ Deep Scan Complete: NHL {stat_choice} Projections loaded."
+    except Exception as e: return None, f"API Error: {str(e)}"
+
+@st.cache_data(ttl=3600)
 def get_nhl_roster(team_abbr):
     try:
         r = requests.get(f"https://api-web.nhle.com/v1/roster/{team_abbr}/current", timeout=5).json()
