@@ -1475,7 +1475,7 @@ def render_league_tab(league_name, get_sched_func):
         if st.button("🔄 Refresh", key=f"{lk}.ref_btn"): st.rerun()
         
     with st.spinner("Loading matchups..."): sched, msg = get_sched_func()
-    if sched: render_scoreboard(sched)
+    if sched: render_scoreboard(sched, league_name)
     else: st.info(msg)
     
     st.markdown("---")
