@@ -45,6 +45,25 @@ BOOK_LOGOS = {
     "bet365": "https://www.google.com/s2/favicons?domain=bet365.com&sz=128"
 }
 
+def get_team_logo(league, abbr):
+    """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
+    abbr_upper = str(abbr).upper()
+    # Handle ESPN's weird abbreviation variations
+    nba_map = {"GSW": "gs", "NOP": "no", "NYK": "ny", "SAS": "sa", "UTA": "ut"}
+    nhl_map = {"SJS": "sj", "TBL": "tb", "LAK": "la", "NJD": "nj", "WSH": "wsh"}
+    mlb_map = {"CHW": "cws"}
+    
+    if league == "NBA":
+        espn_abbr = nba_map.get(abbr_upper, abbr_upper).lower()
+        return f"https://a.espncdn.com/i/teamlogos/nba/500/{espn_abbr}.png"
+    elif league == "NHL":
+        espn_abbr = nhl_map.get(abbr_upper, abbr_upper).lower()
+        return f"https://a.espncdn.com/i/teamlogos/nhl/500/{espn_abbr}.png"
+    elif league == "MLB":
+        espn_abbr = mlb_map.get(abbr_upper, abbr_upper).lower()
+        return f"https://a.espncdn.com/i/teamlogos/mlb/500/{espn_abbr}.png"
+    return ""
+
 NBA_FULL_TO_ABBREV = {'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'Charlotte Hornets': 'CHA', 'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE', 'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN', 'Detroit Pistons': 'DET', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND', 'LA Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM', 'Miami Heat': 'MIA', 'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN', 'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK', 'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX', 'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'TOR', 'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS'}
 ODDS_MEGA_MAP = {**NBA_FULL_TO_ABBREV, "ANA": "Anaheim Ducks", "BUF": "Sabres", "CGY": "Flames", "CAR": "Hurricanes", "COL": "Avalanche", "CBJ": "Blue Jackets", "EDM": "Oilers", "FLA": "Panthers", "LAK": "Kings", "MTL": "Canadiens", "NSH": "Predators", "NJD": "Devils", "NYI": "Islanders", "NYR": "Rangers", "OTT": "Senators", "PIT": "Penguins", "SJS": "Sharks", "SEA": "Kraken", "STL": "Blues", "TBL": "Lightning", "VAN": "Canucks", "VGK": "Knights", "WPG": "Jets"}
 S_MAP = {
@@ -1097,15 +1116,22 @@ def init_state(key, default):
     if key not in st.session_state: st.session_state[key] = default
     return st.session_state[key]
     
-def render_scoreboard(sd):
+def render_scoreboard(sd, league_name):
     if not sd: return
     for i in range(0, len(sd), 5):
         cols = st.columns(5)
         for j, g in enumerate(sd[i:i+5]):
             with cols[j]:
-                dt = f"{g['away']} <span style='color: #FFD700;'>{g['away_score']}</span> - <span style='color: #FFD700;'>{g['home_score']}</span> {g['home']}" if g['is_live_or_final'] else f"{g['away']} @ {g['home']}"
-                st.markdown(f'<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;"><div style="font-size: 14px; font-weight: bold; color: #fff;">{dt}</div><div style="font-size: 11px; color: #00E5FF; margin-top: 4px;">{g["status"]}</div></div>', unsafe_allow_html=True)
-
+                away_logo = get_team_logo(league_name, g['away'])
+                home_logo = get_team_logo(league_name, g['home'])
+                
+                # HTML template for the matchup with logos
+                if g['is_live_or_final']:
+                    dt = f"<img src='{away_logo}' width='24' style='vertical-align:middle; margin-right:4px;'> <span style='color: #fff;'>{g['away']}</span> <span style='color: #FFD700; font-weight:900;'>{g['away_score']}</span> - <span style='color: #FFD700; font-weight:900;'>{g['home_score']}</span> <span style='color: #fff;'>{g['home']}</span> <img src='{home_logo}' width='24' style='vertical-align:middle; margin-left:4px;'>"
+                else:
+                    dt = f"<img src='{away_logo}' width='24' style='vertical-align:middle; margin-right:4px;'> <span style='color: #fff;'>{g['away']}</span> <span style='color: #94a3b8; margin: 0 4px;'>@</span> <span style='color: #fff;'>{g['home']}</span> <img src='{home_logo}' width='24' style='vertical-align:middle; margin-left:4px;'>"
+                
+                st.markdown(f'<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;"><div style="font-size: 14px; font-weight: bold; color: #fff; display: flex; justify-content: center; align-items: center;">{dt}</div><div style="font-size: 11px; color: #00E5FF; margin-top: 4px; font-weight:bold;">{g["status"]}</div></div>', unsafe_allow_html=True)
 def render_league_scanners(league_name):
     lk = league_name.lower()
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
@@ -1413,8 +1439,10 @@ def render_syndicate_board(league_key):
                         st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
                     with side_col:
                         with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
-                            st.markdown(f"<div style='text-align:center; font-weight:900; font-size:16px; color:#00E5FF;'>{(target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else 'Team')} vs {opp}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
-                            if league_key == "NBA":
+                        player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
+                            team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
+                            opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
+                            st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)                            if league_key == "NBA":
                                 st.caption("**🧬 AI Player Archetype**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
                                 if "Exploit" in mod_desc or "Fade" in mod_desc: st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:2px; font-style:italic;'>{mod_desc}</div>", unsafe_allow_html=True)
