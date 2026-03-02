@@ -1784,9 +1784,16 @@ with t_roi:
                 
                 if new_val != status:
                     if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
-                        orig_idx = row['index'] 
-                        ledger_df.at[orig_idx, 'Result'] = new_val
-                        overwrite_sheet("ROI_Ledger", ledger_df)
+                        # 🟢 THE LASER SCALPEL: Updates ONLY the single 'Result' cell!
+                        orig_idx = int(row['index']) 
+                        target_row = orig_idx + 2 # Mathematically targets the exact Google Sheets row
+                        
+                        gc = get_gc()
+                        if gc:
+                            ws = gc.open("B2TF_Database").worksheet("ROI_Ledger")
+                            ws.update_acell(f"I{target_row}", new_val) # Column I is the 'Result' column
+                            
+                        load_sheet_df.clear() # Instantly refreshes your app
                         st.success("Grade locked!")
                         time.sleep(1)
                         st.rerun()
