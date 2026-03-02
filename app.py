@@ -125,71 +125,70 @@ def get_gc():
     except Exception as e: st.error(f"🚨 Google Sheets Auth Error: {e}")
     return None
 
-@st.cache_data(ttl=300)
-def load_sheet_df(sheet_name, expected_cols):
+@st.cache_data(ttl=600)
+def load_sheet_df(sheet_name, expected_cols=None):
     gc = get_gc()
-    if not gc: return pd.DataFrame(columns=expected_cols)
+    if not gc: return pd.DataFrame(columns=expected_cols or [])
     try:
         ws = gc.open("B2TF_Database").worksheet(sheet_name)
         data = ws.get_all_records()
-        if not data:
-            if ws.row_count == 0 or not ws.row_values(1): ws.append_row(expected_cols)
-            return pd.DataFrame(columns=expected_cols)
-        return pd.DataFrame(data)
-    except: return pd.DataFrame(columns=expected_cols)
+        df = pd.DataFrame(data)
+        
+        # 🟢 THE MASTER GHOST BUSTER: Erases the 1000 blank runway rows from Python's memory!
+        if not df.empty and 'Date' in df.columns:
+            df = df[df['Date'].astype(str).str.strip() != '']
+            
+        if expected_cols:
+            for c in expected_cols:
+                if c not in df.columns: df[c] = ""
+            df = df[expected_cols]
+        return df
+    except Exception as e:
+        st.error(f"Error loading {sheet_name}: {e}")
+        return pd.DataFrame(columns=expected_cols or [])
 
 def append_to_sheet(sheet_name, row_dict, expected_cols):
     gc = get_gc()
     if not gc: return
     try:
-        # 1. Load current clean data
-        df = load_sheet_df(sheet_name, expected_cols)
+        ws = gc.open("B2TF_Database").worksheet(sheet_name)
         
-        # 🟢 THE GHOST BUSTER: Erases checkbox-only rows from Python's memory!
-        if not df.empty and 'Date' in df.columns:
-            df = df[df['Date'].astype(str).str.strip() != '']
-            
-        # 2. Prep the new bet and force Checkboxes to explicitly read as "TRUE/FALSE" text
-        clean_row = {col: row_dict.get(col, "") for col in expected_cols}
-        for key, val in clean_row.items():
-            if isinstance(val, bool): clean_row[key] = "TRUE" if val else "FALSE"
+        # 🟢 THE SNIPER: Counts ONLY the dates, completely ignoring checkboxes!
+        dates = [d for d in ws.col_values(1) if str(d).strip() != '']
+        next_row = len(dates) + 1
+        
+        clean_row = []
+        for col in expected_cols:
+            val = row_dict.get(col, "")
+            if isinstance(val, bool): clean_row.append("TRUE" if val else "FALSE")
+            else: clean_row.append(val)
                 
-        # 3. Pack the new bet tightly onto the bottom of the REAL active data
-        new_df = pd.concat([df, pd.DataFrame([clean_row])], ignore_index=True)
+        # 🟢 Injects strictly the new row. Does not touch the runway below it!
+        try: ws.update(values=[clean_row], range_name=f'A{next_row}', value_input_option="USER_ENTERED")
+        except TypeError: ws.update(f'A{next_row}', [clean_row], value_input_option="USER_ENTERED")
         
-        # 4. Use the overwrite engine to paste it safely starting at A1
-        overwrite_sheet(sheet_name, new_df)
+        load_sheet_df.clear()
     except Exception as e: 
         st.error(f"Failed to save to database: {e}")
 
 def overwrite_sheet(sheet_name, df):
     gc = get_gc()
     if not gc: return
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            ws = gc.open("B2TF_Database").worksheet(sheet_name)
-            clean_df = df.fillna("")
-            
-            for col in clean_df.columns:
-                if clean_df[col].dtype == bool:
-                    clean_df[col] = clean_df[col].apply(lambda x: "TRUE" if x else "FALSE")
-                    
-            new_values = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
-            
-            try: ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
-            except TypeError: ws.update('A1', new_values, value_input_option="USER_ENTERED")
-            
-            last_row = len(new_values)
-            total_rows = ws.row_count
-            if total_rows > last_row:
-                ws.spreadsheet.values_clear(f"'{ws.title}'!A{last_row + 1}:Z{total_rows}")
-            
-            load_sheet_df.clear()
-            return
-        except Exception as e:
-            if attempt < max_retries - 1: time.sleep(2 ** attempt)
-            else: st.error(f"Failed to update database after {max_retries} attempts: {e}")
+    try:
+        ws = gc.open("B2TF_Database").worksheet(sheet_name)
+        clean_df = df.fillna("")
+        for col in clean_df.columns:
+            if clean_df[col].dtype == bool:
+                clean_df[col] = clean_df[col].apply(lambda x: "TRUE" if x else "FALSE")
+                
+        new_values = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
+        
+        # 🟢 Safely overwrites top data, stops writing completely before the runway starts!
+        try: ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
+        except TypeError: ws.update('A1', new_values, value_input_option="USER_ENTERED")
+        
+        load_sheet_df.clear()
+    except Exception as e: st.error(f"Failed to update database: {e}")
 
 def load_ledger(): 
     df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
