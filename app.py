@@ -1123,20 +1123,31 @@ def init_state(key, default):
     
 def render_scoreboard(sd, league_name):
     if not sd: return
-    for i in range(0, len(sd), 5):
+    
+    # 🟢 THE DUPLICATE FILTER: Scans the API data and vaporizes cloned games
+    unique_sd = []
+    seen_matchups = set()
+    for g in sd:
+        match_sig = f"{g.get('away', '')}@{g.get('home', '')}"
+        if match_sig not in seen_matchups:
+            seen_matchups.add(match_sig)
+            unique_sd.append(g)
+            
+    # 🟢 Use the 'unique_sd' list to draw the scoreboard instead of the raw API data
+    for i in range(0, len(unique_sd), 5):
         cols = st.columns(5)
-        for j, g in enumerate(sd[i:i+5]):
+        for j, g in enumerate(unique_sd[i:i+5]):
             with cols[j]:
                 away_logo = get_team_logo(league_name, g['away'])
                 home_logo = get_team_logo(league_name, g['home'])
                 
                 # HTML template for the matchup with logos
-                if g['is_live_or_final']:
-                    dt = f"<img src='{away_logo}' width='24' style='vertical-align:middle; margin-right:4px;'> <span style='color: #fff;'>{g['away']}</span> <span style='color: #FFD700; font-weight:900;'>{g['away_score']}</span> - <span style='color: #FFD700; font-weight:900;'>{g['home_score']}</span> <span style='color: #fff;'>{g['home']}</span> <img src='{home_logo}' width='24' style='vertical-align:middle; margin-left:4px;'>"
+                if g.get('is_live_or_final', False):
+                    dt = f"<img src='{away_logo}' width='24' style='vertical-align:middle; margin-right:4px;'> <span style='color: #fff;'>{g['away']}</span> <span style='color: #FFD700; font-weight:900;'>{g.get('away_score', '')}</span> - <span style='color: #FFD700; font-weight:900;'>{g.get('home_score', '')}</span> <span style='color: #fff;'>{g['home']}</span> <img src='{home_logo}' width='24' style='vertical-align:middle; margin-left:4px;'>"
                 else:
                     dt = f"<img src='{away_logo}' width='24' style='vertical-align:middle; margin-right:4px;'> <span style='color: #fff;'>{g['away']}</span> <span style='color: #94a3b8; margin: 0 4px;'>@</span> <span style='color: #fff;'>{g['home']}</span> <img src='{home_logo}' width='24' style='vertical-align:middle; margin-left:4px;'>"
                 
-                st.markdown(f'<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;"><div style="font-size: 14px; font-weight: bold; color: #fff; display: flex; justify-content: center; align-items: center;">{dt}</div><div style="font-size: 11px; color: #00E5FF; margin-top: 4px; font-weight:bold;">{g["status"]}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 10px; text-align: center; margin-bottom: 10px;"><div style="font-size: 14px; font-weight: bold; color: #fff; display: flex; justify-content: center; align-items: center;">{dt}</div><div style="font-size: 11px; color: #00E5FF; margin-top: 4px; font-weight:bold;">{g.get("status", "")}</div></div>', unsafe_allow_html=True)
 def render_league_scanners(league_name):
     lk = league_name.lower()
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
