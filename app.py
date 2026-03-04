@@ -1411,9 +1411,32 @@ def render_syndicate_board(league_key):
                     elif c_vote == "UNDER": win_prob = np.sum(sims < line) / 10000.0
                     else: win_prob = 0.50
                     
+                    # 🟢 1. CALCULATE THE VEGAS MATH FIRST
+                    if odds < 0: implied_prob = abs(odds) / (abs(odds) + 100); profit = 100 / (abs(odds) / 100); risk = 100; b_odds = 100 / abs(odds)
+                    else: implied_prob = 100 / (odds + 100); profit = odds; risk = 100; b_odds = odds / 100
+                    
+                    ev_dollars = (win_prob * profit) - ((1 - win_prob) * risk)
+                    edge_pct = (win_prob - implied_prob) * 100
+                    
+                    liq_bal = get_liquid_balance()
+                    kelly_pct = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
+                    rec_stake = liq_bal * (kelly_pct * 0.5) 
+                    
+                    # 🟢 2. THE +EV AI VETO PROTOCOL
+                    if edge_pct < 0 and c_vote != "PASS":
+                        c_vote = "VETO"
+                        c_color = "#ff0055"
+                        ai_summary_short = f"🛑 <b>NEGATIVE EV DETECTED.</b><br>Vegas requires a {implied_prob*100:.1f}% win rate, but Skynet only projects {win_prob*100:.1f}%. The math is toxic. Do not bet."
+                    else:
+                        ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
+                        if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
+                        elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
+                        ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
+
+                    # 🟢 3. RENDER THE LOCK BUTTON (But hide it if Skynet Vetoes!)
                     lock_pressed = False
                     with btn_c2:
-                        if c_vote != "PASS": lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
+                        if c_vote not in ["PASS", "VETO"]: lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
                     
                     if lock_pressed:
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob, is_boosted)
