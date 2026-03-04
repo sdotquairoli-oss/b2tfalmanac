@@ -55,7 +55,7 @@ def get_team_logo(league, abbr):
     """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
     abbr_upper = str(abbr).upper()
     # Handle ESPN's weird abbreviation variations
-    nba_map = {"GSW": "gs", "NOP": "no", "NYK": "ny", "SAS": "sa", "UTA": "ut"}
+   nba_map = {"GSW": "gs", "NOP": "no", "NYK": "ny", "SAS": "sa", "UTA": "utah"}
     nhl_map = {"SJS": "sj", "TBL": "tb", "LAK": "la", "NJD": "nj", "WSH": "wsh"}
     mlb_map = {"CHW": "cws"}
     
