@@ -1422,18 +1422,51 @@ def render_syndicate_board(league_key):
                     kelly_pct = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
                     rec_stake = liq_bal * (kelly_pct * 0.5) 
                     
-                    # 🟢 2. THE +EV AI VETO PROTOCOL
+                    # 🟢 2. THE SKYNET MEMORY LOOP (Self-Correcting Bankroll)
+                    memory_mult = 1.0
+                    mem_notes = []
+                    try:
+                        mem_df = load_ledger()
+                        if not mem_df.empty and c_vote not in ["PASS", "VETO"]:
+                            mem_graded = mem_df[mem_df['Result'].isin(['Win', 'Loss'])]
+                            
+                            # Drill into Player History
+                            p_hist = mem_graded[(mem_graded['Player'] == target_player) & (mem_graded['Stat'] == stat_type)]
+                            p_w, p_l = len(p_hist[p_hist['Result']=='Win']), len(p_hist[p_hist['Result']=='Loss'])
+                            
+                            # Drill into Macro Stat History
+                            s_hist = mem_graded[(mem_graded['Stat'] == stat_type) & (mem_graded['League'] == league_key)]
+                            s_w, s_l = len(s_hist[s_hist['Result']=='Win']), len(s_hist[s_hist['Result']=='Loss'])
+                            
+                            if (p_w + p_l) >= 3:
+                                p_pct = p_w / (p_w + p_l)
+                                if p_pct <= 0.35: memory_mult *= 0.5; mem_notes.append(f"🛑 <b>FADE:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s. Halving risk.")
+                                elif p_pct >= 0.65: memory_mult *= 1.5; mem_notes.append(f"🔥 <b>SMASH:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s. Boosting risk.")
+                                else: mem_notes.append(f"⚖️ <b>NEUTRAL:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s.")
+                            
+                            if (s_w + s_l) >= 10:
+                                s_pct = s_w / (s_w + s_l)
+                                if s_pct <= 0.45: memory_mult *= 0.75; mem_notes.append(f"⚠️ <b>LEAK:</b> Syndicate win rate on {stat_type}s is {s_pct*100:.1f}%. Trimming risk.")
+                                elif s_pct >= 0.58: memory_mult *= 1.25; mem_notes.append(f"📈 <b>EDGE:</b> Syndicate crushes {stat_type}s ({s_pct*100:.1f}%). Boosting risk.")
+                    except: pass
+                    
+                    # Apply the Memory Multiplier to our Kelly Criterion Stake
+                    rec_stake = rec_stake * min(memory_mult, 2.0)
+                    memory_html = f"<div style='margin-top:12px; padding-top:10px; border-top:1px dashed #334155; font-size:12px; color:#FFD700; line-height:1.4;'>{'<br>'.join(mem_notes)}</div>" if mem_notes else ""
+                    
+                    # 🟢 3. THE +EV AI VETO PROTOCOL
                     if edge_pct < 0 and c_vote != "PASS":
                         c_vote = "VETO"
                         c_color = "#ff0055"
+                        rec_stake = 0.0
                         ai_summary_short = f"🛑 <b>NEGATIVE EV DETECTED.</b><br>Vegas requires a {implied_prob*100:.1f}% win rate, but Skynet only projects {win_prob*100:.1f}%. The math is toxic. Do not bet."
                     else:
                         ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                         if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
                         elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
-                        ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
+                        ai_summary_short += memory_html
 
-                    # 🟢 3. RENDER THE LOCK BUTTON (But hide it if Skynet Vetoes!)
+                    # 🟢 4. RENDER THE LOCK BUTTON (But hide it if Skynet Vetoes!)
                     lock_pressed = False
                     with btn_c2:
                         if c_vote not in ["PASS", "VETO"]: lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
