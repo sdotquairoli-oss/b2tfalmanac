@@ -662,6 +662,18 @@ def get_fatigue_modifier(rest_status):
     if "3 in 4" in rest_status: return 0.90, "Exhausted (-10%)"
     return 1.00, "Fully Rested"
 
+def calculate_implied_prob(odds_str):
+    """Converts American Vegas odds into true Implied Probability %"""
+    try:
+        odds = int(str(odds_str).replace('+', '').strip())
+        if odds == 0: return 0.0
+        if odds < 0:
+            return (abs(odds) / (abs(odds) + 100)) * 100
+        else:
+            return (100 / (odds + 100)) * 100
+    except ValueError:
+        return 0.0
+
 def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
     if orig_line is None or orig_odds is None or orig_line == new_line: return orig_odds
     p_orig = abs(orig_odds)/(abs(orig_odds)+100) if orig_odds < 0 else 100/(orig_odds+100)
@@ -1308,6 +1320,26 @@ def render_syndicate_board(league_key):
             
             odds = st.number_input("Odds", step=5, key=f"{lk}.odds")
             is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"{lk}.boost")
+            
+            implied_prob = calculate_implied_prob(odds)
+
+            if implied_prob > 0:
+                if implied_prob >= 66.0: 
+                    juice_color, juice_msg = "#ff0055", "🚨 TOXIC JUICE: Requires extreme win rate."
+                elif implied_prob >= 58.0:
+                    juice_color, juice_msg = "#f59e0b", "⚠️ HEAVY FAVORITE: Proceed with caution."
+                else:
+                    juice_color, juice_msg = "#00c853", "✅ FAIR PRICE: Mathematical green light."
+
+                st.markdown(f"""
+                    <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 3px solid {juice_color}; border-radius: 4px; padding: 8px; margin-top: 5px; margin-bottom: 15px;">
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Implied Vegas Probability</div>
+                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                            <div style="font-size: 18px; color: #fff; font-weight: 900;">{implied_prob:.1f}% <span style="font-size: 12px; color: {juice_color}; font-weight: 500;">Win Rate Needed</span></div>
+                        </div>
+                        <div style="font-size: 10px; color: {juice_color}; margin-top: 2px;">{juice_msg}</div>
+                    </div>
+                """, unsafe_allow_html=True)
                 
         with c4: 
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
