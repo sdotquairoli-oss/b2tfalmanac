@@ -1959,6 +1959,16 @@ with t_roi:
             league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
 
             with sc1:
+                # 🟢 SAFE PARSER FOR LEGACY BETS
+                raw_ai = row.get('Win_Prob', 0)
+                raw_user = row.get('User_Prob', '')
+                
+                try: ai_prob_str = f"{float(raw_ai if str(raw_ai).strip() != '' else 0)*100:.1f}%"
+                except: ai_prob_str = "N/A"
+                
+                try: user_prob_str = f"{float(raw_user if str(raw_user).strip() != '' else raw_ai)*100:.1f}%"
+                except: user_prob_str = "N/A"
+
                 st.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
 <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
 <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
@@ -1970,14 +1980,13 @@ with t_roi:
 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
 <div>{proj_html}</div>
 <div style="font-size: 11px; text-align: right;">
-    🤖 AI Prob: <span style="color: #94a3b8;">{float(row.get('Win_Prob', 0))*100:.1f}%</span><br>
-    👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{float(row.get('User_Prob', 0))*100:.1f}%</span>
+    🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
+    👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
 </div>
 </div>
 <div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
 </div>
 """, unsafe_allow_html=True)
-
             with sc2:
                 st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
                 opts = ["Pending", "Win", "Loss", "Push"]
