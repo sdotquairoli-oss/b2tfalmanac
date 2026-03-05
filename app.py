@@ -78,31 +78,18 @@ S_MAP = {
     "Minutes Played": "MINS", "Threes Made": "FG3M", "Points + Rebounds": "PR",
     "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H",
     "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K",
-    "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD"
+    "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD",
+    "Blocks": "BLK", "Steals": "STL" # 🟢 Added Defense
 }
 
 # 🎯 Minimum projection gap required to fire a bet (prevents coin-flip calls)
 PASS_THRESHOLDS = {
-    "PTS": 1.5,
-    "TRB": 0.8,
-    "AST": 0.8,
-    "FG3M": 0.6,
-    "PRA": 2.0,
-    "PR": 1.5,
-    "PA": 1.5,
-    "RA": 1.0,
-    "SOG": 0.75,
-    "G": 0.3,
-    "A": 0.4,
-    "H": 0.5,
-    "HR": 0.25,
-    "TB": 0.75,
-    "K": 1.0,
-    "ER": 0.5,
-    "DD": 0.10,
-    "TD": 0.08,
-    "MINS": 2.0,
-    "PPP": 0.3,
+    "PTS": 1.5, "TRB": 0.8, "AST": 0.8, "FG3M": 0.6, "PRA": 2.0, "PR": 1.5,
+    "PA": 1.5, "RA": 1.0, "SOG": 0.75, "G": 0.3, "A": 0.4, "H": 0.5,
+    "HR": 0.25, "TB": 0.75, "K": 1.0, "ER": 0.5, "DD": 0.10, "TD": 0.08,
+    "MINS": 2.0, "PPP": 0.3, 
+    "BLK": 0.35, # 🟢 Low volume stat, requires smaller edge
+    "STL": 0.35  # 🟢 Low volume stat, requires smaller edge
 }
 # --- THEME CSS ---
 st.markdown("""
@@ -481,7 +468,15 @@ def get_mlb_schedule():
 @st.cache_data(ttl=600)
 def get_live_line(player_label, stat_type, api_key, sport_path):
     if not api_key: return None, None, "API Key missing", None, None
-    m_map = {"Points": "player_points", "Goals": "player_goals", "Assists": "player_assists", "Shots on Goal": "player_shots_on_goal", "Power Play Points": "player_power_play_points", "Rebounds": "player_rebounds", "PRA (Pts+Reb+Ast)": "player_points_rebounds_assists", "Threes Made": "player_threes", "Hits": "batter_hits", "Home Runs": "batter_home_runs", "Pitcher Strikeouts": "pitcher_strikeouts", "Double Double": "player_double_double", "Triple Double": "player_triple_double"}
+    m_map = {
+        "Points": "player_points", "Goals": "player_goals", "Assists": "player_assists", 
+        "Shots on Goal": "player_shots_on_goal", "Power Play Points": "player_power_play_points", 
+        "Rebounds": "player_rebounds", "PRA (Pts+Reb+Ast)": "player_points_rebounds_assists", 
+        "Threes Made": "player_threes", "Hits": "batter_hits", "Home Runs": "batter_home_runs", 
+        "Pitcher Strikeouts": "pitcher_strikeouts", "Double Double": "player_double_double", 
+        "Triple Double": "player_triple_double", 
+        "Blocks": "player_blocks", "Steals": "player_steals" # 🟢 Added to Odds API Sync
+    }
     market = m_map.get(stat_type, "player_points")
     clean_name = player_label.split("(")[0].strip().lower()
     team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
@@ -1286,7 +1281,9 @@ def render_syndicate_board(league_key):
 
         with c2:
             game_lines = ["Moneyline", "Spread", "Total (O/U)"]
-            player_props = ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Double Double", "Triple Double", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
+            
+            # 🟢 Added "Blocks" and "Steals" to the NBA dropdown list
+            player_props = ["Points", "Rebounds", "Assists", "Threes Made", "Blocks", "Steals", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Double Double", "Triple Double", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
             stat_type = st.selectbox("Stat / Market", game_lines + player_props, key=f"{lk}.stat")
             live_odds_display = st.empty()
 
