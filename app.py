@@ -1547,12 +1547,13 @@ def render_syndicate_board(league_key):
                         # 🟢 COMPACT OVERRIDE & LOCK BUTTON
                         override_c1, override_c2 = st.columns([1, 1])
                         with override_c1:
+                            # Added a unique "smart_side" key to bypass duplicate errors
                             final_side = st.radio("Side", ["OVER", "UNDER"], 
                                                  index=0 if c_vote == "OVER" else 1, 
-                                                 horizontal=True, key=f"{lk}.user_side", label_visibility="collapsed")
+                                                 horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
                         with override_c2:
-                            if c_vote not in ["PASS", "VETO"] or st.checkbox("Force Lock?", key=f"{lk}.force"):
-                                lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
+                            if c_vote not in ["PASS", "VETO"] or st.checkbox("Force Lock?", key=f"{lk}.smart_force"):
+                                lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
 
                     if lock_pressed:
                         # 🟢 AUTO-INVERT MATH: If you go against the AI, invert the prob & edge!
