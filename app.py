@@ -727,6 +727,9 @@ def build_models(df_ml, s_col, weights, league):
 
     df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
     X_hgbr = df_ml[['EWMA', 'MINS']].fillna(0).values
+    
+    hgbr = HistGradientBoostingRegressor(max_iter=50, random_state=42).fit(X_hgbr, y, sample_weight=weights)
+    
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
     return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins, mins_std
