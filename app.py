@@ -832,11 +832,27 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
     ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
 
+    SAMPLE_GATES = {
+        "NBA": {"min_games": 15, "min_recent": 5},
+        "NHL": {"min_games": 10, "min_recent": 3},
+        "MLB": {"min_games": 10, "min_recent": 4},
+    }
+    gate = SAMPLE_GATES.get(league, {"min_games": 10, "min_recent": 3})
+    recent_games = int((df_ml['Days_Ago'] <= 30).sum()) if 'Days_Ago' in df_ml.columns else len(df_ml)
+    low_sample_warning = ""
+
+    if len(df_ml) < gate["min_games"]:
+        low_sample_warning = f"⚠️ <b>THIN SAMPLE:</b> Only {len(df_ml)} career games found (need {gate['min_games']}). Confidence is reduced.<br>"
+    elif recent_games < gate["min_recent"]:
+        low_sample_warning = f"⚠️ <b>STALE DATA:</b> Only {recent_games} games in the last 30 days. Player may be returning from injury.<br>"
+
+    # 🟢 BUILD THE UI WARNING STRING
     vol_warning = ""
-    if is_blowout_risk: vol_warning = f"🚨 BLOWOUT RISK: Matchup is highly lopsided. Slashed expected minutes. "
-    if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}. "
-    elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m). "
-    mod_desc = vol_warning + mod_desc
+    if is_blowout_risk: vol_warning += f"🚨 BLOWOUT RISK: Matchup is highly lopsided. Slashed expected minutes.<br>"
+    if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}.<br>"
+    elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m).<br>"
+    
+    mod_desc = vol_warning + low_sample_warning + mod_desc
 
     threshold = PASS_THRESHOLDS.get(s_col, 0.5) # Defaults to 0.5 if stat isn't listed
 
