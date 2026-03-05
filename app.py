@@ -1810,8 +1810,31 @@ with t_parlay:
         pm3.metric("Net Profit", f"${p_profit:+.2f}")
         pm4.metric("ROI (%)", f"{(p_profit / total_staked * 100) if p_total > 0 and total_staked > 0 else 0.0:+.1f}%")
 
-        st.markdown("#### 🎫 Your Live / Parlay Slips")
-        new_p_results = {}
+        st.markdown("---")
+        
+        # 🟢 THE NEW TOP-LEVEL HEADER & SAVE BUTTON
+        header_c1, header_c2 = st.columns([3, 1])
+        with header_c1:
+            st.markdown("#### 🎫 Your Live / Parlay Slips")
+        with header_c2:
+            if st.button("💾 Save All Grades", type="primary", use_container_width=True):
+                updated_count = 0
+                for orig_idx in parlay_df.index:
+                    k = f"p_res_{orig_idx}"
+                    if k in st.session_state:
+                        new_val = st.session_state[k]
+                        if parlay_df.at[orig_idx, 'Result'] != new_val:
+                            parlay_df.at[orig_idx, 'Result'] = new_val
+                            updated_count += 1
+                if updated_count > 0:
+                    overwrite_sheet("Parlay_Ledger", parlay_df)
+                    st.success(f"Successfully locked {updated_count} new grades!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.info("No new grades to save.")
+
+        # Render the slips below the button
         for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
             orig_idx = row['index']
             odds_raw = pd.to_numeric(row['Odds'], errors='coerce')
@@ -1834,11 +1857,8 @@ with t_parlay:
             with pc2:
                 st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
                 opts = ["Pending", "Win", "Loss", "Push"]
-                new_p_results[orig_idx] = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
-
-        if st.button("💾 Save All Live/Parlay Grades", type="primary", use_container_width=True):
-            for orig_idx, res in new_p_results.items(): parlay_df.at[orig_idx, 'Result'] = res
-            overwrite_sheet("Parlay_Ledger", parlay_df); st.success("Tracker Updated!"); time.sleep(1); st.rerun()
+                # Selectbox directly updates session_state; button above reads from it.
+                st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
 
 with t_roi:
     roi_col1, roi_col2 = st.columns([4, 1])
