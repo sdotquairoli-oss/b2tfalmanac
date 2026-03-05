@@ -1256,6 +1256,33 @@ def render_syndicate_board(league_key):
             if f_line is not None and f_odds is not None: live_odds_display.markdown(f'<div style="background-color: rgba(0, 230, 118, 0.1); border: 1px solid #00E676; padding: 10px; border-radius: 6px; margin-top: 10px;"><div style="font-size: 11px; font-weight: 900; color: #00E676; letter-spacing: 1px;">📡 LIVE MARKET SYNCED</div><div style="font-size: 16px; font-weight: bold; color: #fff;">{stat_type} O/U {f_line} <span style="color: #94a3b8; font-size: 14px;">({"+"+str(f_odds) if f_odds>0 else f_odds})</span></div></div>', unsafe_allow_html=True)
             elif f_odds is not None: live_odds_display.markdown(f'<div style="background-color: rgba(255, 215, 0, 0.1); border: 1px solid #FFD700; padding: 10px; border-radius: 6px; margin-top: 10px;"><div style="font-size: 11px; font-weight: 900; color: #FFD700; letter-spacing: 1px;">🟡 MARKET PARTIAL SYNC</div><div style="font-size: 16px; font-weight: bold; color: #fff;">{stat_type} Odds <span style="color: #94a3b8; font-size: 14px;">({"+"+str(f_odds) if f_odds>0 else f_odds})</span></div></div>', unsafe_allow_html=True)
             else: live_odds_display.caption(f"🟡 {msg}")
+        
+            # 📈 LINE MOVEMENT TRACKER: Record opening line on first sync, compare on subsequent syncs
+            opening_key = f"{lk}.opening_line.{player_name}.{stat_type}"
+            if f_line is not None:
+                if opening_key not in st.session_state:
+                    # First time we've seen this line — store it as the opener
+                    st.session_state[opening_key] = f_line
+                else:
+                    opener = st.session_state[opening_key]
+                    move = round(f_line - opener, 1)
+                    if abs(move) >= 0.5:
+                        if move > 0:
+                            st.session_state[f"{lk}.line_move_msg"] = (
+                                f"📈 Line moved UP {move:+.1f} (opened {opener}) — "
+                                f"sharp money may be on the OVER."
+                            )
+                            st.session_state[f"{lk}.line_move_dir"] = "up"
+                        else:
+                            st.session_state[f"{lk}.line_move_msg"] = (
+                                f"📉 Line moved DOWN {move:+.1f} (opened {opener}) — "
+                                f"sharp money may be on the UNDER."
+                            )
+                            st.session_state[f"{lk}.line_move_dir"] = "down"
+                    else:
+                        # Movement too small to be meaningful — clear any old warning
+                        st.session_state.pop(f"{lk}.line_move_msg", None)
+                        st.session_state.pop(f"{lk}.line_move_dir", None)        
 
         with c3:
             start_line = float(f_line) if (sync and f_line is not None) else 0.5
@@ -1476,6 +1503,32 @@ def render_syndicate_board(league_key):
                     if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
                         st.markdown(f"""<div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);"><div style="background-color: #0f172a; padding: 12px; border-radius: 6px; text-align: center;"><span style="font-size: 22px;">🌟</span> <span style="font-size: 18px; font-weight: 900; color: #FFD700; letter-spacing: 2px;">OFFICIAL AI TOP PICK</span> <span style="font-size: 22px;">🌟</span><div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">Massive Edge Detected! {win_prob*100:.1f}% Win Prob | Recommend risking ${rec_stake:.2f}.</div></div></div>""", unsafe_allow_html=True)
 
+                    # 📈 LINE MOVEMENT WARNING DISPLAY
+                    move_msg = st.session_state.get(f"{lk}.line_move_msg")
+                    move_dir = st.session_state.get(f"{lk}.line_move_dir")
+                    if move_msg and c_vote != "PASS":
+                        is_against = (
+                            (c_vote == "OVER" and move_dir == "down") or
+                            (c_vote == "UNDER" and move_dir == "up")
+                        )
+                        border_color = "#ff4500" if is_against else "#00E676"
+                        icon = "🚨" if is_against else "✅"
+                        severity = (
+                            "Sharp money appears to be on the **same side** as your pick. Good sign."
+                            if not is_against else
+                            "Sharp money appears to be **against** your pick. Proceed with caution or reduce stake."
+                        )
+                        st.markdown(f"""
+                        <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {border_color};
+                             border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                            <span style="font-size:15px; font-weight:900; color:{border_color};">
+                                {icon} LINE MOVEMENT ALERT
+                            </span>
+                            <div style="font-size:13px; color:#f8fafc; margin-top:4px;">{move_msg}</div>
+                            <div style="font-size:12px; color:#94a3b8; margin-top:4px;">{severity}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
                     sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
                     with sum_c1:
                         st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{c_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
