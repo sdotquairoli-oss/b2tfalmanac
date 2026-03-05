@@ -1396,9 +1396,6 @@ def render_syndicate_board(league_key):
 
                     lock_pressed = False
                     with btn_c2:
-
-                    lock_pressed = False
-                    with btn_c2:
                         if c_vote not in ["PASS", "VETO"]: lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
 
                     if lock_pressed:
