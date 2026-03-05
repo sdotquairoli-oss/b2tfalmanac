@@ -194,16 +194,19 @@ def overwrite_sheet(sheet_name, df):
 # ✅ OPT-9: load_ledger now cached — filtering logic runs once per TTL, not every render
 @st.cache_data(ttl=120)
 def load_ledger():
-    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score"])
+    # Added "User_Prob" to the expected columns
+    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"])
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     if "Setup_Score" not in df.columns: df["Setup_Score"] = 0
+    # Ensure User_Prob exists
+    if "User_Prob" not in df.columns: df["User_Prob"] = df["Win_Prob"] 
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0):
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55):
     row = {
         "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
         "League": league,
@@ -212,13 +215,14 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Line": line,
         "Odds": odds,
         "Proj": round(proj, 2),
-        "Vote": vote,
+        "Vote": vote, # This will now be YOUR final vote
         "Result": "Pending",
-        "Win_Prob": float(win_prob),
+        "Win_Prob": float(win_prob), # AI's conviction
+        "User_Prob": float(user_prob), # YOUR conviction
         "Is_Boosted": is_boosted,
         "Setup_Score": int(setup_score)
     }
-    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score"])
+    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"])
 
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=10, max_win_rate=0.42):
@@ -1355,10 +1359,11 @@ def render_syndicate_board(league_key):
             m_c1, m_c2 = st.columns(2)
             with m_c1: st.metric("Target Line", line if stat_type != "Moneyline" else "Win")
             with m_c2: st.metric("Odds", odds)
-            if st.button(f"🔒 Lock {stat_type} Pick into ROI Ledger", use_container_width=True, type="primary", key=f"{lk}.lock_team"):
-                save_to_ledger(league_key, target_player, stat_type, line if stat_type != "Moneyline" else "ML", odds, 0.0, "TEAM", 0.50, is_boosted)
-                st.success(f"{stat_type} locked into ROI Database!")
-                time.sleep(1); st.rerun()
+            user_side = st.radio("Your Position:", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True)
+
+            if st.button(f"🔒 Lock {league_key} Pick"):
+                # Pass user_side instead of c_vote to the ledger
+                save_to_ledger(..., user_side, ...)
         else:
             # 🛑 AUTO-SUPPRESSION: Block markets with a proven losing record
             suppressed = get_suppressed_stats(league_key)
@@ -1524,14 +1529,36 @@ def render_syndicate_board(league_key):
                         consensus_label = "🟢 UNANIMOUS (5/5)" if agree_count == 5 else "🟡 STRONG CONSENSUS (4/5)"
                         st.caption(f"{consensus_label} — Board in agreement.")
 
+                    # 🟢 SYNDICATE OVERRIDE PANEL
+                    st.markdown("---")
+                    st.subheader("🎮 Captain's Override")
+                    col_user1, col_user2 = st.columns(2)
+                    
+                    with col_user1:
+                        # Allow you to flip the side manually
+                        final_side = st.radio("Final Position", ["OVER", "UNDER"], 
+                                             index=0 if c_vote == "OVER" else 1, 
+                                             horizontal=True, key=f"{lk}.user_side")
+                    
+                    with col_user2:
+                        # Allow you to set your own probability (e.g., your 10.4%)
+                        user_p = st.slider("Adjust Win Prob (%)", 1.0, 99.0, 
+                                          value=float(win_prob * 100), 
+                                          step=0.1, key=f"{lk}.user_p") / 100.0
+
                     lock_pressed = False
                     with btn_c2:
-                        if c_vote not in ["PASS", "VETO"]: lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
+                        # The button is now always available unless it's a VETO/PASS, 
+                        # but it respects your "Final Position"
+                        if c_vote not in ["PASS", "VETO"] or st.checkbox("Manual Force Lock?"):
+                            lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
 
                     if lock_pressed:
-                        s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
-                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob, is_boosted, s_score)
-                        st.success(f"Pick locked! Setup Score: **{s_score}/100**")
+                        # Re-calculate score using YOUR probability for a more honest ledger
+                        s_score = calculate_setup_score(user_p, edge_pct, board, c_proj, line, stat_type)
+                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, 
+                                       final_side, win_prob, is_boosted, s_score, user_p)
+                        st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {user_p*100:.1f}%)")
                         
                     ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                     if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
@@ -1939,8 +1966,11 @@ with t_roi:
 </div>
 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
 <div>{proj_html}</div>
-<div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span> &nbsp;•&nbsp; {score_html}</div>
-</div>""", unsafe_allow_html=True)
+<div style="font-size: 11px; margin-top: 5px;">
+    🤖 AI Prob: <span style="color: #94a3b8;">{float(row.get('Win_Prob', 0))*100:.1f}%</span><br>
+    👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{float(row.get('User_Prob', 0))*100:.1f}%</span>
+</div>
+<div style="margin-top: 8px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
 
             with sc2:
                 st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
