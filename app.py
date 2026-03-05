@@ -81,6 +81,29 @@ S_MAP = {
     "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD"
 }
 
+# 🎯 Minimum projection gap required to fire a bet (prevents coin-flip calls)
+PASS_THRESHOLDS = {
+    "PTS": 1.5,
+    "TRB": 0.8,
+    "AST": 0.8,
+    "FG3M": 0.6,
+    "PRA": 2.0,
+    "PR": 1.5,
+    "PA": 1.5,
+    "RA": 1.0,
+    "SOG": 0.75,
+    "G": 0.3,
+    "A": 0.4,
+    "H": 0.5,
+    "HR": 0.25,
+    "TB": 0.75,
+    "K": 1.0,
+    "ER": 0.5,
+    "DD": 0.10,
+    "TD": 0.08,
+    "MINS": 2.0,
+    "PPP": 0.3,
+}
 # --- THEME CSS ---
 st.markdown("""
 <style>
@@ -795,15 +818,15 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m). "
     mod_desc = vol_warning + mod_desc
 
-    def get_raw_vote(p): return "OVER" if p >= line + 0.3 else ("UNDER" if p <= line - 0.3 else "PASS")
+    threshold = PASS_THRESHOLDS.get(s_col, 0.5) # Defaults to 0.5 if stat isn't listed
+
+    def get_raw_vote(p): return "OVER" if p >= line + threshold else ("UNDER" if p <= line - threshold else "PASS")
     raw_vote = get_raw_vote(raw_consensus)
 
     # ✅ OPT-4: Return raw_vote so caller can apply fresh Skynet outside the cache
-    # Skynet is applied by the caller using ledger data that isn't frozen in cache
-    # For heater scans that pass skynet_mod=1.0, this is a no-op
     final_consensus = raw_consensus  # Skynet applied by caller after this returns
 
-    def get_final_vote(p): return ("OVER", "#00c853") if p >= line + 0.3 else (("UNDER", "#d50000") if p <= line - 0.3 else ("PASS", "#94a3b8"))
+    def get_final_vote(p): return ("OVER", "#00c853") if p >= line + threshold else (("UNDER", "#d50000") if p <= line - threshold else ("PASS", "#94a3b8"))
     f_vote, f_color = get_final_vote(final_consensus)
 
     lr_hist = lr.predict(X) * df_ml['MINS'].replace(0, 1.0).values
@@ -1346,6 +1369,33 @@ def render_syndicate_board(league_key):
                         # Add the Skynet Audit and Memory Loop to the bottom
                         ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
                         ai_summary_short += memory_html
+
+                    # 🟢 THE BOARD UNANIMITY FILTER (4/5 Required)
+                    votes = [m['vote'] for m in board]
+                    agree_count = max(votes.count("OVER"), votes.count("UNDER"), votes.count("PASS"))
+                    is_near_unanimous = agree_count >= 4
+                    consensus_pct = int((agree_count / len(board)) * 100)
+
+                    if not is_near_unanimous and c_vote not in ["PASS", "VETO"]:
+                        # 1. Override the AI's final vote to PASS
+                        c_vote = "PASS"
+                        c_color = "#94a3b8"
+                        rec_stake = 0.0
+                        # 2. Overwrite the Consensus Box text
+                        ai_summary_short = f"⚠️ <b>SPLIT BOARD ({agree_count}/5):</b> The models are divided. Vegas has priced this line efficiently. Pass."
+                        # 3. Render Claude's warning banner
+                        st.markdown(f"""
+                        <div style="background-color: rgba(255,69,0,0.1); border: 1px solid #ff4500; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                            <span style="font-size:16px; font-weight:900; color:#ff4500;">⚠️ SPLIT BOARD — NO BET RECOMMENDED</span>
+                            <div style="font-size:13px; color:#94a3b8; margin-top:4px;">Board agreement: {agree_count}/5 ({consensus_pct}%). Syndicate requires 4/5 consensus.</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif is_near_unanimous and c_vote not in ["PASS", "VETO"]:
+                        consensus_label = "🟢 UNANIMOUS (5/5)" if agree_count == 5 else "🟡 STRONG CONSENSUS (4/5)"
+                        st.caption(f"{consensus_label} — Board in agreement.")
+
+                    lock_pressed = False
+                    with btn_c2:
 
                     lock_pressed = False
                     with btn_c2:
