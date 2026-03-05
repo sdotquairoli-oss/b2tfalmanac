@@ -206,6 +206,26 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
     row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob), "Is_Boosted": is_boosted}
     append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
 
+@st.cache_data(ttl=120)
+def get_suppressed_stats(league, min_bets=10, max_win_rate=0.42):
+    """Returns set of stat types with provably bad ledger history for this league."""
+    try:
+        ledger = load_ledger()
+        if ledger.empty: return set()
+        graded = ledger[
+            (ledger['Result'].isin(['Win', 'Loss'])) &
+            (ledger['League'] == league)
+        ]
+        suppress = set()
+        for stat, group in graded.groupby('Stat'):
+            if len(group) >= min_bets:
+                win_rate = len(group[group['Result'] == 'Win']) / len(group)
+                if win_rate <= max_win_rate:
+                    suppress.add(stat)
+        return suppress
+    except:
+        return set()
+
 def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
     df = df[df['Description'].astype(str).str.strip() != '']
@@ -1260,6 +1280,27 @@ def render_syndicate_board(league_key):
                 st.success(f"{stat_type} locked into ROI Database!")
                 time.sleep(1); st.rerun()
         else:
+            # 🛑 AUTO-SUPPRESSION: Block markets with a proven losing record
+            suppressed = get_suppressed_stats(league_key)
+            if stat_type in suppressed:
+                graded = load_ledger()
+                graded = graded[
+                    (graded['Result'].isin(['Win', 'Loss'])) &
+                    (graded['League'] == league_key) &
+                    (graded['Stat'] == stat_type)
+                ]
+                wins = len(graded[graded['Result'] == 'Win'])
+                total = len(graded)
+                wr = wins / total * 100 if total > 0 else 0
+                st.error(
+                    f"🛑 **SKYNET AUTO-SUPPRESSION ACTIVE**\n\n"
+                    f"Your historical record on **{league_key} {stat_type}** is "
+                    f"**{wins}-{total - wins}** ({wr:.1f}% win rate) — below the 42% floor. "
+                    f"Syndicate recommends skipping this market entirely until your edge is reestablished. "
+                    f"Clear the Skynet Cache above to re-evaluate after new data comes in."
+                )
+                st.stop()
+
             with st.spinner(f"Scouting data for {target_player}..."):
                 if league_key == "NBA": df, status_code, _ = get_nba_stats(target_player)
                 elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
@@ -1355,8 +1396,17 @@ def render_syndicate_board(league_key):
                     rec_stake = rec_stake * min(memory_mult, 2.0)
                     memory_html = f"<div style='margin-top:12px; padding-top:10px; border-top:1px dashed #334155; font-size:12px; color:#FFD700; line-height:1.4;'>{'<br>'.join(mem_notes)}</div>" if mem_notes else ""
 
+                    # 🟢 CHECK THE SUPPRESSION BLACKLIST
+                    suppressed_stats = get_suppressed_stats(league_key)
+                    is_suppressed = stat_type in suppressed_stats
+
                     # 🟢 THE +EV AI VETO PROTOCOL & SUMMARY BUILDER
-                    if edge_pct < 0 and c_vote != "PASS":
+                    if is_suppressed:
+                        c_vote = "VETO"
+                        c_color = "#ff0055"
+                        rec_stake = 0.0
+                        ai_summary_short = f"🛑 <b>STAT LOCKED ({stat_type}):</b> Your Syndicate win rate on this market is dangerously low (under 42%). Skynet is physically blocking this bet to protect your bankroll until you improve."
+                    elif edge_pct < 0 and c_vote != "PASS":
                         c_vote = "VETO"
                         c_color = "#ff0055"
                         rec_stake = 0.0
