@@ -194,17 +194,31 @@ def overwrite_sheet(sheet_name, df):
 # ✅ OPT-9: load_ledger now cached — filtering logic runs once per TTL, not every render
 @st.cache_data(ttl=120)
 def load_ledger():
-    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score"])
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+    if "Setup_Score" not in df.columns: df["Setup_Score"] = 0
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False):
-    row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "League": league, "Player": player.split('(')[0].strip(), "Stat": stat, "Line": line, "Odds": odds, "Proj": round(proj, 2), "Vote": vote, "Result": "Pending", "Win_Prob": float(win_prob), "Is_Boosted": is_boosted}
-    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted"])
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0):
+    row = {
+        "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
+        "League": league,
+        "Player": player.split('(')[0].strip(),
+        "Stat": stat,
+        "Line": line,
+        "Odds": odds,
+        "Proj": round(proj, 2),
+        "Vote": vote,
+        "Result": "Pending",
+        "Win_Prob": float(win_prob),
+        "Is_Boosted": is_boosted,
+        "Setup_Score": int(setup_score)
+    }
+    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score"])
 
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=10, max_win_rate=0.42):
@@ -676,6 +690,29 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
     p_new = max(0.05, min(0.95, p_orig + (z_shift * 0.35)))
     new_odds = int(round((-100*p_new)/(1-p_new))) if p_new > 0.50 else int(round((100*(1-p_new))/p_new))
     return 5 * round(new_odds/5)
+
+def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
+    """
+    0–100 score rating the quality of a bet setup.
+    Higher = cleaner setup with more converging signals.
+    """
+    score = 0
+    # Component 1: Win probability above 50% baseline (max 35 pts)
+    score += min(35, max(0, (win_prob - 0.50) * 200))
+    # Component 2: Edge over implied odds (max 25 pts)
+    score += min(25, max(0, edge_pct * 2.5))
+    # Component 3: Board agreement (max 25 pts)
+    if board:
+        votes = [m['vote'] for m in board]
+        top_vote = max(set(votes), key=votes.count)
+        agreement = votes.count(top_vote)
+        score += {5: 25, 4: 15, 3: 5}.get(agreement, 0)
+    # Component 4: Projection conviction
+    thresh = PASS_THRESHOLDS.get(S_MAP.get(stat_type, ""), 0.75)
+    gap = abs(c_proj - line)
+    if thresh > 0:
+        score += min(15, max(0, ((gap / thresh) - 1.0) * 15))
+    return max(0, min(100, int(score)))
 
 def build_models(df_ml, s_col, weights, league):
     if league == "MLB":
@@ -1492,9 +1529,10 @@ def render_syndicate_board(league_key):
                         if c_vote not in ["PASS", "VETO"]: lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
 
                     if lock_pressed:
-                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob, is_boosted)
-                        st.success("Pick locked! It is safely stored in your Google Sheets Database.")
-
+                        s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
+                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, c_vote, win_prob, is_boosted, s_score)
+                        st.success(f"Pick locked! Setup Score: **{s_score}/100**")
+                        
                     ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                     if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
                     elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
@@ -1825,6 +1863,26 @@ with t_roi:
             is_boosted = str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True
             boost_html = '<span style="color: #f59e0b; font-size: 10px; font-weight: 900; letter-spacing: 1px;">🚀 BOOSTED</span> &nbsp;' if is_boosted else ''
 
+            # 🟢 NEW SETUP SCORE HTML
+            raw_score = row.get('Setup_Score', 0)
+            try: setup_score_val = int(float(raw_score))
+            except: setup_score_val = 0
+
+            if setup_score_val >= 75:
+                score_color, score_label = "#00E676", "ELITE"
+            elif setup_score_val >= 55:
+                score_color, score_label = "#FFD700", "SOLID"
+            elif setup_score_val >= 35:
+                score_color, score_label = "#f59e0b", "MARGINAL"
+            else:
+                score_color, score_label = "#94a3b8", "WEAK"
+
+            score_html = (
+                f"<span style='color:{score_color}; font-weight:900;'>"
+                f"⚡ {setup_score_val}/100</span> "
+                f"<span style='color:{score_color}; font-size:10px; font-weight:bold;'>{score_label}</span>"
+            ) if setup_score_val > 0 else ""
+            
             if stat in ["Moneyline", "Spread", "Total (O/U)"]:
                 market_html = f"<b>{player}</b> ({stat} {line})"
                 proj_html = "AI Proj: <span style='color: #00E5FF; font-weight: bold;'>Bypassed</span>"
@@ -1848,8 +1906,7 @@ with t_roi:
 </div>
 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
 <div>{proj_html}</div>
-<div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span></div>
-</div>
+<div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span> &nbsp;•&nbsp; {score_html}</div></div>
 </div>""", unsafe_allow_html=True)
 
             with sc2:
