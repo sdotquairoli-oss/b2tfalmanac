@@ -1262,8 +1262,6 @@ def render_syndicate_board(league_key):
                     matches = search_nba_players(search_query) if league_key == "NBA" else (search_mlb_players(search_query) if league_key == "MLB" else search_nhl_players(search_query))
                     if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"{lk}.dropdown")
                     else: st.caption("No matches found.")
-            
-            implied_prob_placeholder = st.empty()
 
         auto_opp = None
         auto_is_home = True
@@ -1327,6 +1325,7 @@ def render_syndicate_board(league_key):
                         st.session_state.pop(f"{lk}.line_move_msg", None)
                         st.session_state.pop(f"{lk}.line_move_dir", None)        
 
+                   implied_prob_placeholder = st.empty()
         with c3:
             start_line = float(f_line) if (sync and f_line is not None) else 0.5
             if stat_type in ["Moneyline"]: start_line = 0.0
@@ -1347,7 +1346,7 @@ def render_syndicate_board(league_key):
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
             rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
 
-    btn_c1, btn_c2, _ = st.columns([1, 1, 2])
+    btn_c1, btn_c2, btn_c3, _ = st.columns([1.5, 1.5, 1.5, 1])
     with btn_c1: analyze_pressed = st.button(f"🚀 Analyze Matchup", type="primary", use_container_width=True, key=f"{lk}.btn_analyze")
 
     if analyze_pressed and player_name: st.session_state[f"{lk}.target_player"] = player_name
@@ -1534,42 +1533,31 @@ def render_syndicate_board(league_key):
                         consensus_label = "🟢 UNANIMOUS (5/5)" if agree_count == 5 else "🟡 STRONG CONSENSUS (4/5)"
                         st.caption(f"{consensus_label} — Board in agreement.")
 
-                    # 🟢 SYNDICATE OVERRIDE PANEL
-                    st.markdown("---")
-                    st.subheader("🎮 Captain's Override")
-                    
-                    # Single clean selector
-                    final_side = st.radio("Final Position", ["OVER", "UNDER"], 
-                                         index=0 if c_vote == "OVER" else 1, 
-                                         horizontal=True, key=f"{lk}.user_side")
                     lock_pressed = False
-                    with btn_c2:
-                        # 🟢 COMPACT OVERRIDE & LOCK BUTTON
-                        override_c1, override_c2 = st.columns([1, 1])
-                        with override_c1:
-                            # Added a unique "smart_side" key to bypass duplicate errors
-                            final_side = st.radio("Side", ["OVER", "UNDER"], 
-                                                 index=0 if c_vote == "OVER" else 1, 
-                                                 horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
-                        with override_c2:
-                            if c_vote not in ["PASS", "VETO"] or st.checkbox("Force Lock?", key=f"{lk}.smart_force"):
-                                lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
+                    final_side = c_vote
+                    
+                    if c_vote not in ["PASS", "VETO"]:
+                        # 🟢 BUTTON GOES IN COL 2
+                        with btn_c2:
+                            lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
+                        # 🟢 RADIO GOES IN COL 3 (Right next to it!)
+                        with btn_c3:
+                            final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
 
                     if lock_pressed:
-                        # 🟢 AUTO-INVERT MATH: If you go against the AI, invert the prob & edge!
-                        if final_side != c_vote and c_vote not in ["PASS", "VETO"]:
+                        # 🟢 AUTO-INVERT MATH
+                        if final_side != c_vote:
                             auto_user_p = 1.0 - win_prob
                             user_edge_pct = (auto_user_p - implied_prob) * 100
                         else:
                             auto_user_p = win_prob
                             user_edge_pct = edge_pct
 
-                        # Recalculate your new score based on the auto-inverted math
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
-                        
-                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, 
-                                       final_side, win_prob, is_boosted, s_score, auto_user_p)
+                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p)
                         st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {auto_user_p*100:.1f}%)")
+                        
+                    ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                         
                     ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                     if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
