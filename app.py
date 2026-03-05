@@ -1359,11 +1359,14 @@ def render_syndicate_board(league_key):
             m_c1, m_c2 = st.columns(2)
             with m_c1: st.metric("Target Line", line if stat_type != "Moneyline" else "Win")
             with m_c2: st.metric("Odds", odds)
-            user_side = st.radio("Your Position:", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True)
+            
+            # Removed c_vote to fix NameError
+            user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True)
 
             if st.button(f"🔒 Lock {league_key} Pick"):
-                # Pass user_side instead of c_vote to the ledger
-                save_to_ledger(..., user_side, ...)
+                # Removed literal "..." to fix SyntaxError
+                save_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50)
+                st.success(f"Team Pick Locked: {user_side}")
         else:
             # 🛑 AUTO-SUPPRESSION: Block markets with a proven losing record
             suppressed = get_suppressed_stats(league_key)
@@ -1966,11 +1969,14 @@ with t_roi:
 </div>
 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
 <div>{proj_html}</div>
-<div style="font-size: 11px; margin-top: 5px;">
+<div style="font-size: 11px; text-align: right;">
     🤖 AI Prob: <span style="color: #94a3b8;">{float(row.get('Win_Prob', 0))*100:.1f}%</span><br>
     👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{float(row.get('User_Prob', 0))*100:.1f}%</span>
 </div>
-<div style="margin-top: 8px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
+</div>
+<div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
+</div>
+""", unsafe_allow_html=True)
 
             with sc2:
                 st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
@@ -2010,8 +2016,23 @@ with t_wallet:
     total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
 
     with bw_c2:
-        st.markdown(f"""<div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;"><div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div><div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${get_liquid_balance():.2f}</div><div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;"><span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${max((tot_dep - tot_wit), 0.0):.2f}</span></span><span style="color: #94a3b8;">Net Casino: <span style="color: {'#00E676' if tot_cas >= 0 else '#ff0055'};">{tot_cas:+.2f}</span></span><span style="color: #94a3b8;">Sports Profit: <span style="color: {'#00E676' if tot_sports >= 0 else '#ff0055'};">${tot_sports:+.2f}</span></span></div></div>""", unsafe_allow_html=True)
+# Cleaned up variables to prevent f-string parsing crashes
+        c_col = "#00E676" if tot_cas >= 0 else "#ff0055"
+        s_col_color = "#00E676" if tot_sports >= 0 else "#ff0055"
+        oop = max((tot_dep - tot_wit), 0.0)
+        lb = get_liquid_balance()
 
+        st.markdown(f"""
+        <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;">
+            <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div>
+            <div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${lb:.2f}</div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;">
+                <span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${oop:.2f}</span></span>
+                <span style="color: #94a3b8;">Net Casino: <span style="color: {c_col};">{tot_cas:+.2f}</span></span>
+                <span style="color: #94a3b8;">Sports Profit: <span style="color: {s_col_color};">${tot_sports:+.2f}</span></span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     st.markdown("---")
     with st.form("manual_ml_form"):
         st.markdown("#### 📝 Log Manual Team Bet (Moneyline/Spread)")
