@@ -1262,6 +1262,8 @@ def render_syndicate_board(league_key):
                     matches = search_nba_players(search_query) if league_key == "NBA" else (search_mlb_players(search_query) if league_key == "MLB" else search_nhl_players(search_query))
                     if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"{lk}.dropdown")
                     else: st.caption("No matches found.")
+                # 🟢 Landing zone for the Implied Prob box
+                implied_prob_placeholder = st.empty()        
 
         auto_opp = None
         auto_is_home = True
@@ -1339,7 +1341,7 @@ def render_syndicate_board(league_key):
                 if implied_prob >= 66.0: juice_color, juice_msg = "#ff0055", "🚨 TOXIC JUICE: Requires extreme win rate."
                 elif implied_prob >= 58.0: juice_color, juice_msg = "#f59e0b", "⚠️ HEAVY FAVORITE: Proceed with caution."
                 else: juice_color, juice_msg = "#00c853", "✅ FAIR PRICE: Mathematical green light."
-                st.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 3px solid {juice_color}; border-radius: 4px; padding: 8px; margin-top: 5px; margin-bottom: 15px;"><div style="font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Implied Vegas Probability</div><div style="display: flex; justify-content: space-between; align-items: baseline;"><div style="font-size: 18px; color: #fff; font-weight: 900;">{implied_prob:.1f}% <span style="font-size: 12px; color: {juice_color}; font-weight: 500;">Win Rate Needed</span></div></div><div style="font-size: 10px; color: {juice_color}; margin-top: 2px;">{juice_msg}</div></div>""", unsafe_allow_html=True)
+                implied_prob_placeholder.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 3px solid {juice_color}; border-radius: 4px; padding: 8px; margin-top: 15px;"><div style="font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Implied Vegas Probability</div><div style="display: flex; justify-content: space-between; align-items: baseline;"><div style="font-size: 18px; color: #fff; font-weight: 900;">{implied_prob:.1f}% <span style="font-size: 12px; color: {juice_color}; font-weight: 500;">Win Rate Needed</span></div></div><div style="font-size: 10px; color: {juice_color}; margin-top: 2px;">{juice_msg}</div></div>""", unsafe_allow_html=True)
 
         with c4:
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
@@ -1540,14 +1542,20 @@ def render_syndicate_board(league_key):
                     final_side = st.radio("Final Position", ["OVER", "UNDER"], 
                                          index=0 if c_vote == "OVER" else 1, 
                                          horizontal=True, key=f"{lk}.user_side")
-
                     lock_pressed = False
                     with btn_c2:
-                        if c_vote not in ["PASS", "VETO"] or st.checkbox("Manual Force Lock?"):
-                            lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
+                        # 🟢 COMPACT OVERRIDE & LOCK BUTTON
+                        override_c1, override_c2 = st.columns([1, 1])
+                        with override_c1:
+                            final_side = st.radio("Side", ["OVER", "UNDER"], 
+                                                 index=0 if c_vote == "OVER" else 1, 
+                                                 horizontal=True, key=f"{lk}.user_side", label_visibility="collapsed")
+                        with override_c2:
+                            if c_vote not in ["PASS", "VETO"] or st.checkbox("Force Lock?", key=f"{lk}.force"):
+                                lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
 
                     if lock_pressed:
-                        # 🟢 AUTO-INVERT MATH: If you go against the AI, invert the probability and edge!
+                        # 🟢 AUTO-INVERT MATH: If you go against the AI, invert the prob & edge!
                         if final_side != c_vote and c_vote not in ["PASS", "VETO"]:
                             auto_user_p = 1.0 - win_prob
                             user_edge_pct = (auto_user_p - implied_prob) * 100
@@ -1555,12 +1563,11 @@ def render_syndicate_board(league_key):
                             auto_user_p = win_prob
                             user_edge_pct = edge_pct
 
-                        # Recalculate score based on YOUR position's true mathematical edge
+                        # Recalculate your new score based on the auto-inverted math
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
                         
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, 
                                        final_side, win_prob, is_boosted, s_score, auto_user_p)
-                        
                         st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {auto_user_p*100:.1f}%)")
                         
                     ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
