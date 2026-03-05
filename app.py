@@ -1325,7 +1325,7 @@ def render_syndicate_board(league_key):
                         st.session_state.pop(f"{lk}.line_move_msg", None)
                         st.session_state.pop(f"{lk}.line_move_dir", None)        
 
-                   implied_prob_placeholder = st.empty()
+                implied_prob_placeholder = st.empty()
         with c3:
             start_line = float(f_line) if (sync and f_line is not None) else 0.5
             if stat_type in ["Moneyline"]: start_line = 0.0
