@@ -1539,7 +1539,24 @@ def render_syndicate_board(league_key):
                     ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
 
                     if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
-                        st.markdown(f"""<div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);"><div style="background-color: #0f172a; padding: 12px; border-radius: 6px; text-align: center;"><span style="font-size: 22px;">🌟</span> <span style="font-size: 18px; font-weight: 900; color: #FFD700; letter-spacing: 2px;">OFFICIAL AI TOP PICK</span> <span style="font-size: 22px;">🌟</span><div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">Massive Edge Detected! {win_prob*100:.1f}% Win Prob | Recommend risking ${rec_stake:.2f}.</div></div></div>""", unsafe_allow_html=True)
+                        # 🟢 CALCULATE SCORE FOR THE BANNER
+                        s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
+                        
+                        # 🟢 DETERMINE LABEL
+                        if s_score >= 75: banner_label = "🌟 ELITE AI TOP PICK 🌟"
+                        elif s_score >= 55: banner_label = "✅ SOLID AI TOP PICK"
+                        else: banner_label = "🎯 AI TOP PICK"
+
+                        st.markdown(f"""
+                        <div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);">
+                            <div style="background-color: #0f172a; padding: 12px; border-radius: 6px; text-align: center;">
+                                <span style="font-size: 18px; font-weight: 900; color: #FFD700; letter-spacing: 2px;">{banner_label}</span>
+                                <div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">
+                                    <b>Score: {s_score}/100</b> | {win_prob*100:.1f}% Win Prob | Recommend risking <b>${rec_stake:.2f}</b>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                     # 📈 LINE MOVEMENT WARNING DISPLAY
                     move_msg = st.session_state.get(f"{lk}.line_move_msg")
