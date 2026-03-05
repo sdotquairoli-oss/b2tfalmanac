@@ -1623,10 +1623,26 @@ def render_syndicate_board(league_key):
                                 st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
                             st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**⚔️ History vs {opp} (All Time)**")
                             df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
-                            if not df_opp.empty:
-                                opp_hits, opp_total = int((df_opp[s_col] > line).sum()), len(df_opp); opp_win_pct = (opp_hits / opp_total) * 100
-                                st.markdown(f"<div style='font-size:22px; font-weight:900; color:{'#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
-                            else: st.markdown("<div style='font-size:14px; color:#94a3b8;'>No recent data vs this team.</div>", unsafe_allow_html=True)
+                            opp_total = len(df_opp)
+
+                            if opp_total >= 5:
+                                # ✅ Statistically meaningful — show H2H hit rate normally
+                                opp_hits = int((df_opp[s_col] > line).sum())
+                                opp_win_pct = (opp_hits / opp_total) * 100
+                                h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
+                                st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
+
+                            elif opp_total >= 2:
+                                # ⚠️ Small sample — show data but flag unreliability
+                                opp_hits = int((df_opp[s_col] > line).sum())
+                                opp_win_pct = (opp_hits / opp_total) * 100
+                                h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
+                                st.markdown(f"<div style='font-size:18px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:12px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
+
+                            else:
+                                # ❌ Insufficient data — suppress entirely to avoid misleading modifiers
+                                st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
                             st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🏟️ Venue Advantage ({split_text})**")
                             st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
                             st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🔋 Energy Levels**")
@@ -1906,7 +1922,7 @@ with t_roi:
 </div>
 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
 <div>{proj_html}</div>
-<div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span> &nbsp;•&nbsp; {score_html}</div></div>
+<div>🔮 Win Prob: <span style="color: #00E5FF; font-weight: bold;">{prob_str}</span> &nbsp;•&nbsp; {score_html}</div>
 </div>""", unsafe_allow_html=True)
 
             with sc2:
