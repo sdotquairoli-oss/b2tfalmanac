@@ -696,6 +696,11 @@ def build_models(df_ml, s_col, weights, league):
     X = np.arange(len(df_ml)).reshape(-1, 1)
     
     expected_mins = df_ml['MINS'].tail(5).mean()
+    
+    # 🟢 THE VOLATILITY ENGINE: Calculates minute chaos over the last 10 games
+    mins_std = df_ml['MINS'].tail(10).std() 
+    if pd.isna(mins_std) or mins_std == 0: mins_std = 2.0
+    
     if pd.isna(expected_mins) or expected_mins == 0:
         if league == "MLB": expected_mins = 4.0
         elif league == "NHL": expected_mins = 18.0
@@ -722,10 +727,9 @@ def build_models(df_ml, s_col, weights, league):
 
     df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
     X_hgbr = df_ml[['EWMA', 'MINS']].fillna(0).values
-    hgbr = HistGradientBoostingRegressor(max_iter=50, random_state=42).fit(X_hgbr, y, sample_weight=weights)
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
-    
-    return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins
+
+    return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins, mins_std
 
 def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
@@ -798,11 +802,42 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
     
     weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
     
-    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins = build_models(df_ml, s_col, weights, league)
+    # 🟢 Unpack the new Volatility data
+    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins, mins_std = build_models(df_ml, s_col, weights, league)
     mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod = apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype)
+
+    # 🟢 THE BLOWOUT RISK SCANNER & MINUTES HIJACK
+    is_blowout_risk = False
+    if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25:
+        is_blowout_risk = True
+        # Slash the expected minutes using the player's exact historical variance!
+        expected_mins = max(15.0, expected_mins - (mins_std * 1.5)) 
+        
+        # Instantly recalculate all AI projections using the newly slashed minutes
+        trend_proj = lr.predict([[len(X)]])[0] * expected_mins
+        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins]])[0]
+        con_proj = gb.predict([[expected_mins, trend_proj - df_ml[s_col].mean()]])[0]
+        base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
     guru_proj = ((trend_proj + stat_proj) / 2) * mod_val * fatigue_val * current_split_mod
     raw_consensus = (trend_proj + stat_proj + con_proj + base_proj + guru_proj) / 5
+    
+    # 🟢 CALCULATE FLOOR AND CEILING (For UI Display)
+    floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
+    ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
+    
+    # 🟢 BUILD THE UI WARNING STRING
+    vol_warning = ""
+    if is_blowout_risk:
+        vol_warning = f"🚨 BLOWOUT RISK: Matchup is highly lopsided. Slashed expected minutes. "
+    
+    if mins_std >= 4.5:
+        vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}. "
+    elif mins_std <= 2.5:
+        vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m). "
+        
+    mod_desc = vol_warning + mod_desc
+
     def get_raw_vote(p): return "OVER" if p >= line + 0.3 else ("UNDER" if p <= line - 0.3 else "PASS")
     raw_vote = get_raw_vote(raw_consensus)
     
@@ -827,7 +862,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type)
         {"name": "📊 Statistician", "model": "Random Forest", "proj": stat_proj, "vote": get_raw_vote(stat_proj), "color": get_final_vote(stat_proj)[1], "quote": f"Deep Memory sets stable floor. Trees favor {get_raw_vote(stat_proj)}."},
         {"name": "🃏 Contrarian", "model": "Gradient Boosting", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"Flags variance {'regression' if con_proj < df_ml[s_col].mean() else 'spike'} from season norms."},
         {"name": "🛡️ Baseline", "model": "Hist-Gradient Boosting", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": "Weighted multi-year mapping using exponentially weighted moving averages."},
-        {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors {mod_desc.split('(')[0].strip().replace('🛡️', '').replace('🏃', '').strip()}."}
+        {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors Context and Volatility."}
     ]
     
     return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, skynet_data["msg"], skynet_data["color"]
