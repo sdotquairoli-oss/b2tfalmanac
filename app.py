@@ -1588,9 +1588,9 @@ def render_syndicate_board(league_key):
                             st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
                             
                             if league_key == "NBA":
-                                st.caption("**🧬 AI Player Archetype**")
+                                st.caption("**🧬 AI Player Archetype & Rotation**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
-                                if "Exploit" in mod_desc or "Fade" in mod_desc: st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:2px; font-style:italic;'>{mod_desc}</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:6px; line-height:1.4; font-weight:500;'>{mod_desc}</div>", unsafe_allow_html=True)
                             else:
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
                                 st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
