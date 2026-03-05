@@ -1535,33 +1535,33 @@ def render_syndicate_board(league_key):
                     # 🟢 SYNDICATE OVERRIDE PANEL
                     st.markdown("---")
                     st.subheader("🎮 Captain's Override")
-                    col_user1, col_user2 = st.columns(2)
                     
-                    with col_user1:
-                        # Allow you to flip the side manually
-                        final_side = st.radio("Final Position", ["OVER", "UNDER"], 
-                                             index=0 if c_vote == "OVER" else 1, 
-                                             horizontal=True, key=f"{lk}.user_side")
-                    
-                    with col_user2:
-                        # Allow you to set your own probability (e.g., your 10.4%)
-                        user_p = st.slider("Adjust Win Prob (%)", 1.0, 99.0, 
-                                          value=float(win_prob * 100), 
-                                          step=0.1, key=f"{lk}.user_p") / 100.0
+                    # Single clean selector
+                    final_side = st.radio("Final Position", ["OVER", "UNDER"], 
+                                         index=0 if c_vote == "OVER" else 1, 
+                                         horizontal=True, key=f"{lk}.user_side")
 
                     lock_pressed = False
                     with btn_c2:
-                        # The button is now always available unless it's a VETO/PASS, 
-                        # but it respects your "Final Position"
                         if c_vote not in ["PASS", "VETO"] or st.checkbox("Manual Force Lock?"):
                             lock_pressed = st.button(f"🔒 Lock {league_key} Pick", use_container_width=True, type="primary", key=f"{lk}.lock")
 
                     if lock_pressed:
-                        # Re-calculate score using YOUR probability for a more honest ledger
-                        s_score = calculate_setup_score(user_p, edge_pct, board, c_proj, line, stat_type)
+                        # 🟢 AUTO-INVERT MATH: If you go against the AI, invert the probability and edge!
+                        if final_side != c_vote and c_vote not in ["PASS", "VETO"]:
+                            auto_user_p = 1.0 - win_prob
+                            user_edge_pct = (auto_user_p - implied_prob) * 100
+                        else:
+                            auto_user_p = win_prob
+                            user_edge_pct = edge_pct
+
+                        # Recalculate score based on YOUR position's true mathematical edge
+                        s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
+                        
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, 
-                                       final_side, win_prob, is_boosted, s_score, user_p)
-                        st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {user_p*100:.1f}%)")
+                                       final_side, win_prob, is_boosted, s_score, auto_user_p)
+                        
+                        st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {auto_user_p*100:.1f}%)")
                         
                     ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                     if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
