@@ -1262,8 +1262,8 @@ def render_syndicate_board(league_key):
                     matches = search_nba_players(search_query) if league_key == "NBA" else (search_mlb_players(search_query) if league_key == "MLB" else search_nhl_players(search_query))
                     if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"{lk}.dropdown")
                     else: st.caption("No matches found.")
-                # 🟢 Landing zone for the Implied Prob box
-                implied_prob_placeholder = st.empty()        
+            
+            implied_prob_placeholder = st.empty()
 
         auto_opp = None
         auto_is_home = True
