@@ -840,7 +840,8 @@ def apply_skynet(raw_vote, stat_type, league):
 #    - df_hash and ledger_hash params added as cheap cache invalidation keys
 # ✅ OPT-6: df_hash param prevents re-hashing the entire DataFrame on every cache check
 @st.cache_data(show_spinner=False, ttl=300)
-def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash=""):    df_ml = df.copy()
+def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash=""):
+    df_ml = df.copy()
     archetype = get_player_archetype(df_ml, league)
 
     if len(df_ml) < 5:
