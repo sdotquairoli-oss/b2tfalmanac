@@ -1678,7 +1678,8 @@ def render_syndicate_board(league_key):
                             st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #00E5FF; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#00E5FF; letter-spacing: 1px;">HALF-KELLY STAKE</div><div style="font-size:26px; font-weight:900; color:#00E5FF; margin: 4px 0px;">${rec_stake:.2f}</div><div style="font-size:12px; color:#94a3b8;">EV: ${ev_dollars:+.2f}/$100 | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
                     with sum_c3:
                         df_l10, df_l5 = df_with_ml.tail(10).reset_index(drop=True), df_with_ml.tail(5)
-                        l10_hits, l5_hits = int((df_l10[s_col] > line).sum()), int((df_l5[s_col] > line).sum())
+                        # Changed > to >= so exact hits count as wins
+                        l10_hits, l5_hits = int((df_l10[s_col] >= line).sum()), int((df_l5[s_col] >= line).sum())
                         hit_color = "#00c853" if l10_hits >= 6 else ("#d50000" if l10_hits <= 4 else "#FFD700")
                         st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">HIT RATE (OVER {line})</div><div style="font-size:22px; font-weight:900; color:{hit_color};">{l10_hits}/10</div><div style="font-size:13px;">L5: {l5_hits}/5</div></div>', unsafe_allow_html=True)
                     with sum_c4:
@@ -1699,7 +1700,8 @@ def render_syndicate_board(league_key):
                         bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
                             x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
                             y=alt.Y(s_col, title=stat_type),
-                            color=alt.condition(alt.datum[s_col] > line, alt.value('#00c853'), alt.value('#d50000')),
+                            # Changed > to >= for the color condition
+                            color=alt.condition(alt.datum[s_col] >= line, alt.value('#00c853'), alt.value('#d50000')),
                             stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
                             strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
                             tooltip=[
@@ -1709,6 +1711,12 @@ def render_syndicate_board(league_key):
                                 alt.Tooltip(s_col, title='Actual Stats'), 
                                 alt.Tooltip('AI_Proj', title='AI Projection', format='.2f')
                             ]
+                        ).properties(height=350)
+                        vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
+                        ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
+                        text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
+                        st.altair_chart((bars + vegas_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
+                        st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
                         ).properties(height=350)
                         vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
                         ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
@@ -1734,14 +1742,14 @@ def render_syndicate_board(league_key):
 
                             if opp_total >= 5:
                                 # ✅ Statistically meaningful — show H2H hit rate normally
-                                opp_hits = int((df_opp[s_col] > line).sum())
+                                opp_hits = int((df_opp[s_col] >= line).sum())
                                 opp_win_pct = (opp_hits / opp_total) * 100
                                 h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
                                 st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
 
                             elif opp_total >= 2:
                                 # ⚠️ Small sample — show data but flag unreliability
-                                opp_hits = int((df_opp[s_col] > line).sum())
+                                opp_hits = int((df_opp[s_col] >= line).sum())
                                 opp_win_pct = (opp_hits / opp_total) * 100
                                 h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
                                 st.markdown(f"<div style='font-size:18px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:12px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
