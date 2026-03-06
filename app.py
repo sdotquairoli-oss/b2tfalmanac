@@ -2182,40 +2182,32 @@ with t_roi:
 
                         with st.expander(f"🔬 View Bet Autopsy  —  {miss_type}", expanded=False):
                             st.markdown(f"""
-                            <div style="background-color:#0f172a; border:1px solid {miss_color};
-                                 border-radius:8px; padding:16px; font-size:13px; line-height:1.7;">
+                            <div style="background-color:#0f172a; border:1px solid {miss_color}; border-radius:8px; padding:16px; font-size:13px; line-height:1.7;">
 
-                                <div style="font-size:15px; font-weight:900; color:{miss_color};
-                                     margin-bottom:12px; letter-spacing:1px;">
+                                <div style="font-size:15px; font-weight:900; color:{miss_color}; margin-bottom:12px; letter-spacing:1px;">
                                     {miss_type} &nbsp;·&nbsp;
                                     <span style="color:#94a3b8; font-size:12px; font-weight:400;">
                                         Miss Distance: {abs_miss} units
                                     </span>
                                 </div>
 
-                                <div style="display:grid; grid-template-columns:1fr 1fr 1fr;
-                                     gap:12px; margin-bottom:14px;">
+                                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:14px;">
                                     <div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">
-                                        <div style="color:#94a3b8; font-size:10px; font-weight:bold;
-                                             text-transform:uppercase; margin-bottom:4px;">AI Projected</div>
+                                        <div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">AI Projected</div>
                                         <div style="color:#00E5FF; font-size:20px; font-weight:900;">{proj_val}</div>
                                     </div>
                                     <div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">
-                                        <div style="color:#94a3b8; font-size:10px; font-weight:bold;
-                                             text-transform:uppercase; margin-bottom:4px;">Vegas Line</div>
+                                        <div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">Vegas Line</div>
                                         <div style="color:#FFD700; font-size:20px; font-weight:900;">{line_val}</div>
                                     </div>
                                     <div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">
-                                        <div style="color:#94a3b8; font-size:10px; font-weight:bold;
-                                             text-transform:uppercase; margin-bottom:4px;">Actual Result</div>
+                                        <div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">Actual Result</div>
                                         <div style="color:{miss_color}; font-size:20px; font-weight:900;">{actual_raw}</div>
                                     </div>
                                 </div>
 
-                                <div style="background:#1e293b; border-radius:6px; padding:12px;
-                                     margin-bottom:12px; border-left:3px solid {miss_color};">
-                                    <div style="color:#94a3b8; font-size:10px; font-weight:bold;
-                                         text-transform:uppercase; margin-bottom:4px;">Likely Cause</div>
+                                <div style="background:#1e293b; border-radius:6px; padding:12px; margin-bottom:12px; border-left:3px solid {miss_color};">
+                                    <div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">Likely Cause</div>
                                     <div style="color:#f8fafc;">{likely_cause}</div>
                                 </div>
 
@@ -2231,7 +2223,7 @@ with t_roi:
                                 </div>
 
                             </div>
-                            """, unsafe_allow_html=True)        
+                            """, unsafe_allow_html=True)    
 
                 # MAIN BET SLIP
                 st.markdown(f"""
