@@ -2309,7 +2309,7 @@ with t_wallet:
             </div>
         </div>
         """, unsafe_allow_html=True)
-st.markdown("---")
+    st.markdown("---")
     with st.form("manual_ml_form"):
         st.markdown("#### 📝 Log Manual Team Bet (Moneyline/Spread)")
         c1, c2, c3 = st.columns(3)
