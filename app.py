@@ -717,8 +717,9 @@ def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
         score += min(15, max(0, ((gap / thresh) - 1.0) * 15))
     return max(0, min(100, int(score)))
 
-def build_models(df_ml, s_col, weights, league, is_home_current, rest_status):
-    y = df_ml[s_col].fillna(0).values
+def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, tonight_def_mod):
+    # 🟢 SAFETY CLIP: Forcing a floor of 0 because Poisson crashes on negative numbers
+    y = df_ml[s_col].fillna(0).clip(lower=0).values
 
     # 🟢 1. FEATURE ENRICHMENT: Calculate Rest Days
     df_ml['Rest_Days'] = df_ml['ValidDate'].diff().dt.days.fillna(3.0).clip(0, 7)
@@ -771,7 +772,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status):
         poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
 
     # Format tonight's contextual inputs
-    tonight_rest = 1.0 if "B2B" in rest_status else (0.0 if "3 in 4" in rest_status else 3.0)
+    tonight_rest = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
 
     # 🎯 GENERATE TONIGHT'S PROJECTIONS
     trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
@@ -899,15 +900,16 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
         
         # Calculate tonight's rest to feed into the Random Forest recalculation
-        tonight_rest = 1.0 if "B2B" in rest else (0.0 if "3 in 4" in rest else 3.0)
+        tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
         
         # Recalculate using the NEW models and inputs
         trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest]])[0]
+        # 🟢 Added mod_val to the rf.predict line so the Random Forest has all 5 inputs
+        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]])[0]
         con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
-
+        
     # 🟢 MATH FIX: The Random Forest (stat_proj) already knows the defense, venue, and rest internally!
     # We only apply the external multipliers to the Poisson model (trend_proj).
     adjusted_trend = trend_proj * mod_val * fatigue_val * current_split_mod
