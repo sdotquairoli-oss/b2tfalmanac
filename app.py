@@ -2141,9 +2141,11 @@ with t_roi:
             has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
             
             if has_autopsy:
-                sc1, sc2 = st.columns([2.8, 1.2]) # Widens the right column for the Autopsy
+                # Widens the right column significantly to fit the full rich Autopsy breakdown
+                sc1, sc2 = st.columns([2.4, 1.6]) 
             else:
-                sc1, sc2 = st.columns([4, 1])     # Normal layout for Pending/Wins
+                # Normal layout for Pending/Wins
+                sc1, sc2 = st.columns([4, 1])     
 
             shield_url = LEAGUE_SHIELDS.get(league, "")
             league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
@@ -2181,33 +2183,53 @@ with t_roi:
                 """, unsafe_allow_html=True)
                 
             with sc2:
-                # 🔬 COMPACT AUTOPSY CARD
+                # 🔬 FULL AUTOPSY CARD (SIDE-BY-SIDE)
                 if has_autopsy:
                     miss_type, abs_miss, likely_cause, miss_color = classify_miss(
                         row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', '')
                     )
                     if miss_type:
                         proj_val = row.get('Proj', 'N/A')
-                        st.markdown(f"""
-                        <div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 6px; padding: 10px; margin-bottom: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-                            <div style="font-size: 12px; font-weight: 900; color: {miss_color}; margin-bottom: 8px; letter-spacing: 0.5px;">
-                                {miss_type}
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 8px; color: #94a3b8;">
-                                <div style="text-align: center; background: #1e293b; padding: 4px; border-radius: 4px; flex: 1; margin-right: 4px;">
-                                    <div style="font-size: 9px; text-transform: uppercase; font-weight: bold;">Proj</div>
-                                    <div style="color: #00E5FF; font-weight: bold;">{proj_val}</div>
-                                </div>
-                                <div style="text-align: center; background: #1e293b; padding: 4px; border-radius: 4px; flex: 1; margin-left: 4px;">
-                                    <div style="font-size: 9px; text-transform: uppercase; font-weight: bold;">Actual</div>
-                                    <div style="color: {miss_color}; font-weight: bold;">{actual_raw}</div>
-                                </div>
-                            </div>
-                            <div style="font-size: 10px; color: #f8fafc; line-height: 1.4; background: #1e293b; padding: 6px 8px; border-radius: 4px; border-left: 2px solid {miss_color};">
-                                {likely_cause}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        line_val = row.get('Line', 'N/A')
+                        
+                        try: autopsy_score_val = int(float(row.get('Setup_Score', 0)))
+                        except: autopsy_score_val = 0
+                            
+                        autopsy_score_label = (
+                            "ELITE"     if autopsy_score_val >= 75 else
+                            "SOLID"     if autopsy_score_val >= 55 else
+                            "MARGINAL"  if autopsy_score_val >= 35 else
+                            "WEAK"
+                        )
+                        
+                        try: 
+                            prob_val = float(row.get('Win_Prob', 0))
+                            prob_str = f"{prob_val * 100:.1f}%" if prob_val <= 1.0 else f"{prob_val:.1f}%"
+                        except: 
+                            prob_str = "N/A"
+
+                        # Using safe parenthesis concatenation to prevent markdown indentation bugs
+                        autopsy_html = (
+                            f'<div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.4);">'
+                            f'<div style="font-size: 13px; font-weight: 900; color: {miss_color}; margin-bottom: 10px; letter-spacing: 0.5px; display: flex; justify-content: space-between;">'
+                            f'<span>{miss_type}</span> <span style="color:#94a3b8; font-size:10px; font-weight:400; letter-spacing: 0px;">Miss: {abs_miss} units</span></div>'
+                            f'<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px; text-align: center;">'
+                            f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
+                            f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Proj</div>'
+                            f'<div style="color: #00E5FF; font-weight: bold; font-size: 15px;">{proj_val}</div></div>'
+                            f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
+                            f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Line</div>'
+                            f'<div style="color: #FFD700; font-weight: bold; font-size: 15px;">{line_val}</div></div>'
+                            f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
+                            f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Actual</div>'
+                            f'<div style="color: {miss_color}; font-weight: bold; font-size: 15px;">{actual_raw}</div></div></div>'
+                            f'<div style="font-size: 11px; color: #f8fafc; line-height: 1.5; background: #1e293b; padding: 8px; border-radius: 4px; border-left: 3px solid {miss_color}; margin-bottom: 10px;">'
+                            f'{likely_cause}</div>'
+                            f'<div style="display:flex; justify-content: space-between; font-size: 10px; color: #94a3b8;">'
+                            f'<div>Score: <span style="color:#fff; font-weight:bold;">{autopsy_score_val}/100 ({autopsy_score_label})</span></div>'
+                            f'<div>Prob: <span style="color:#fff; font-weight:bold;">{prob_str}</span></div></div></div>'
+                        )
+                        st.markdown(autopsy_html, unsafe_allow_html=True)
                 else:
                     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
                     
