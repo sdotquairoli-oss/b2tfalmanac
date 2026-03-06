@@ -2136,7 +2136,15 @@ with t_roi:
                 market_html = f"<b>{player}</b> ({stat} {vote} {line})"
                 proj_html = f"🤖 AI Proj: <span style='color: #00E5FF; font-weight: bold;'>{proj}</span>"
 
-            sc1, sc2 = st.columns([4, 1])
+            # 🟢 DYNAMIC LAYOUT: Give the Autopsy card room if it exists
+            actual_raw = str(row.get('Actual', '')).strip()
+            has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
+            
+            if has_autopsy:
+                sc1, sc2 = st.columns([2.8, 1.2]) # Widens the right column for the Autopsy
+            else:
+                sc1, sc2 = st.columns([4, 1])     # Normal layout for Pending/Wins
+
             shield_url = LEAGUE_SHIELDS.get(league, "")
             league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
 
@@ -2150,63 +2158,10 @@ with t_roi:
                 
                 try: user_prob_str = f"{float(raw_user if str(raw_user).strip() != '' else raw_ai)*100:.1f}%"
                 except: user_prob_str = "N/A"
-            
-                # 🔬 AUTOPSY CARD — only renders on graded losses with a stored actual value
-                actual_raw = str(row.get('Actual', '')).strip()
-                if status == 'Loss' and actual_raw not in ['', 'nan', 'None']:
-                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(
-                        row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', '')
-                    )
-                    if miss_type:
-                        proj_val   = row.get('Proj', 'N/A')
-                        line_val   = row.get('Line', 'N/A')
-                        autopsy_score  = row.get('Setup_Score', 0)
-                        
-                        try:
-                            prob_val = float(row.get('Win_Prob', 0))
-                            prob_str = f"{prob_val * 100:.1f}%" if prob_val <= 1.0 else f"{prob_val:.1f}%"
-                        except:
-                            prob_str = "N/A"
-
-                        try: 
-                            autopsy_score_val = int(float(autopsy_score))
-                        except: 
-                            autopsy_score_val = 0
-                            
-                        autopsy_score_label = (
-                            "ELITE"     if autopsy_score_val >= 75 else
-                            "SOLID"     if autopsy_score_val >= 55 else
-                            "MARGINAL"  if autopsy_score_val >= 35 else
-                            "WEAK"
-                        )
-
-                        with st.expander(f"🔬 View Bet Autopsy  —  {miss_type}", expanded=False):
-                            html_str = (
-                                f'<div style="background-color:#0f172a; border:1px solid {miss_color}; border-radius:8px; padding:16px; font-size:13px; line-height:1.7;">'
-                                f'<div style="font-size:15px; font-weight:900; color:{miss_color}; margin-bottom:12px; letter-spacing:1px;">'
-                                f'{miss_type} &nbsp;·&nbsp; <span style="color:#94a3b8; font-size:12px; font-weight:400;">Miss Distance: {abs_miss} units</span></div>'
-                                f'<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:14px;">'
-                                f'<div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">'
-                                f'<div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">AI Projected</div>'
-                                f'<div style="color:#00E5FF; font-size:20px; font-weight:900;">{proj_val}</div></div>'
-                                f'<div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">'
-                                f'<div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">Vegas Line</div>'
-                                f'<div style="color:#FFD700; font-size:20px; font-weight:900;">{line_val}</div></div>'
-                                f'<div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">'
-                                f'<div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">Actual Result</div>'
-                                f'<div style="color:{miss_color}; font-size:20px; font-weight:900;">{actual_raw}</div></div></div>'
-                                f'<div style="background:#1e293b; border-radius:6px; padding:12px; margin-bottom:12px; border-left:3px solid {miss_color};">'
-                                f'<div style="color:#94a3b8; font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:4px;">Likely Cause</div>'
-                                f'<div style="color:#f8fafc;">{likely_cause}</div></div>'
-                                f'<div style="display:flex; gap:12px; font-size:12px;">'
-                                f'<div style="color:#94a3b8;">Setup Score at Lock: <span style="color:#fff; font-weight:bold;">{autopsy_score_val}/100 ({autopsy_score_label})</span></div>'
-                                f'<div style="color:#94a3b8;">Win Prob at Lock: <span style="color:#fff; font-weight:bold;">{prob_str}</span></div></div></div>'
-                            )
-                            st.markdown(html_str, unsafe_allow_html=True)
 
                 # MAIN BET SLIP
                 st.markdown(f"""
-                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
+                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px; height: 90%;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
                         <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
                         <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
@@ -2226,7 +2181,37 @@ with t_roi:
                 """, unsafe_allow_html=True)
                 
             with sc2:
-                st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+                # 🔬 COMPACT AUTOPSY CARD
+                if has_autopsy:
+                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(
+                        row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', '')
+                    )
+                    if miss_type:
+                        proj_val = row.get('Proj', 'N/A')
+                        st.markdown(f"""
+                        <div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 6px; padding: 10px; margin-bottom: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                            <div style="font-size: 12px; font-weight: 900; color: {miss_color}; margin-bottom: 8px; letter-spacing: 0.5px;">
+                                {miss_type}
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 8px; color: #94a3b8;">
+                                <div style="text-align: center; background: #1e293b; padding: 4px; border-radius: 4px; flex: 1; margin-right: 4px;">
+                                    <div style="font-size: 9px; text-transform: uppercase; font-weight: bold;">Proj</div>
+                                    <div style="color: #00E5FF; font-weight: bold;">{proj_val}</div>
+                                </div>
+                                <div style="text-align: center; background: #1e293b; padding: 4px; border-radius: 4px; flex: 1; margin-left: 4px;">
+                                    <div style="font-size: 9px; text-transform: uppercase; font-weight: bold;">Actual</div>
+                                    <div style="color: {miss_color}; font-weight: bold;">{actual_raw}</div>
+                                </div>
+                            </div>
+                            <div style="font-size: 10px; color: #f8fafc; line-height: 1.4; background: #1e293b; padding: 6px 8px; border-radius: 4px; border-left: 2px solid {miss_color};">
+                                {likely_cause}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+                    
+                # RENDER THE GRADE DROPDOWN
                 opts = ["Pending", "Win", "Loss", "Push"]
                 start_idx = opts.index(status) if status in opts else 0
                 new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
