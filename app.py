@@ -1525,9 +1525,9 @@ def render_syndicate_board(league_key):
                 graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
                 ledger_hash = str(hash(str(sorted(graded_counts.items()))))
 
-    df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, _ = run_ml_board(
-        df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
-    )
+                df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, _ = run_ml_board(
+                    df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
+                )
 
                 # ✅ OPT-4: Apply Skynet HERE (outside cache) so it always uses fresh ledger data
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
