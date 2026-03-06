@@ -1385,9 +1385,14 @@ def render_syndicate_board(league_key):
                         st.session_state.pop(f"{lk}.line_move_dir", None)        
 
         with c3:
-            start_line = float(f_line) if (sync and f_line is not None) else 0.5
-            if stat_type in ["Moneyline"]: start_line = 0.0
-            line = st.number_input("Line / Target", value=start_line, step=0.5, key=f"{lk}.line")
+            if stat_type in ["Double Double", "Triple Double"]:
+                st.text_input("Line / Target", value="Yes (0.5)", disabled=True, key=f"{lk}.line_dd")
+                line = 0.5
+            else:
+                start_line = float(f_line) if (sync and f_line is not None) else 0.5
+                if stat_type in ["Moneyline"]: start_line = 0.0
+                line = st.number_input("Line / Target", value=start_line, step=0.5, key=f"{lk}.line")
+                
             if sync and f_line is not None and f_odds is not None and stat_type not in game_lines:
                 st.session_state[f"{lk}.odds"] = estimate_alt_odds(float(f_line), int(f_odds), line, stat_type)
             elif f"{lk}.odds" not in st.session_state: st.session_state[f"{lk}.odds"] = -110
@@ -1485,8 +1490,8 @@ def render_syndicate_board(league_key):
                 final_consensus = raw_consensus * skynet_data["mod"]
                 df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
 
-                def get_final_vote(p): return ("OVER", "#00c853") if p >= line + 0.3 else (("UNDER", "#d50000") if p <= line - 0.3 else ("PASS", "#94a3b8"))
-                c_vote, c_color = get_final_vote(final_consensus)
+                dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
+                def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))                c_vote, c_color = get_final_vote(final_consensus)
                 c_proj = final_consensus
                 skynet_msg, skynet_color = skynet_data["msg"], skynet_data["color"]
 
@@ -1600,7 +1605,11 @@ def render_syndicate_board(league_key):
                             lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
                         # 🟢 RADIO GOES IN COL 3 (Right next to it!)
                         with btn_c3:
-                            final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
+                            if stat_type in ["Double Double", "Triple Double"]:
+                                side_choice = st.radio("Side", ["YES", "NO"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side_dd", label_visibility="collapsed")
+                                final_side = "OVER" if side_choice == "YES" else "UNDER"
+                            else:
+                                final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
 
                     if lock_pressed:
                         # 🟢 AUTO-INVERT MATH
@@ -1670,7 +1679,11 @@ def render_syndicate_board(league_key):
                         
                     sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
                     with sum_c1:
-                        st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{c_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
+                        display_vote = c_vote
+                        if stat_type in ["Double Double", "Triple Double"] and c_vote in ["OVER", "UNDER"]:
+                            display_vote = "YES" if c_vote == "OVER" else "NO"
+                            
+                        st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{display_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
                     with sum_c2:
                         if c_vote == "PASS" or edge_pct <= 0:
                             st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">RECOMMENDED RISK</div><div style="font-size:22px; font-weight:900; color:#94a3b8;">$0.00 (PASS)</div><div style="font-size:12px; color:#94a3b8;">Negative EV or too tight.</div></div>', unsafe_allow_html=True)
