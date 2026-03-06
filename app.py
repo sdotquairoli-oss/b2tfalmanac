@@ -1922,8 +1922,8 @@ with t_parlay:
                 st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{book_html}{row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${payout:.2f}</span></div></div>""", unsafe_allow_html=True)
             with pc2:
                 st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-                opts = ["Pending", "Win", "Loss", "Push"]
-                # Selectbox directly updates session_state; button above reads from it.
+                opts = ["Pending", "Win", "Loss"]
+                if row['Result'] == "Push": opts.append("Push")
                 st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
 
 with t_roi:
@@ -2234,7 +2234,10 @@ with t_roi:
                     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
                     
                 # RENDER THE GRADE DROPDOWN
-                opts = ["Pending", "Win", "Loss", "Push"]
+                opts = ["Pending", "Win", "Loss"]
+                if status == "Push": 
+                    opts.append("Push")
+                    
                 start_idx = opts.index(status) if status in opts else 0
                 new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
                 if new_val != status:
