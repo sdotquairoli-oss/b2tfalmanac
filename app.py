@@ -1642,7 +1642,13 @@ def render_syndicate_board(league_key):
                             color=alt.condition(alt.datum[s_col] > line, alt.value('#00c853'), alt.value('#d50000')),
                             stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
                             strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
-                            tooltip=[alt.Tooltip('ShortDate', title='Date'), alt.Tooltip('Matchup_Formatted', title='Opponent'), alt.Tooltip(s_col, title='Actual Stats'), alt.Tooltip('AI_Proj', title='AI Projection', format='.2f')]
+                            tooltip=[
+                                alt.Tooltip('ShortDate', title='Date'), 
+                                alt.Tooltip('Matchup_Formatted', title='Opponent'), 
+                                alt.Tooltip('MINS', title='Minutes', format='.1f'), 
+                                alt.Tooltip(s_col, title='Actual Stats'), 
+                                alt.Tooltip('AI_Proj', title='AI Projection', format='.2f')
+                            ]
                         ).properties(height=350)
                         vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
                         ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
