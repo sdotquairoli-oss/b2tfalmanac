@@ -852,15 +852,45 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ✅ OPT-8: Pre-fetch bad_defs once here, pass to all defense modifier calls
     bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
-    # 🟢 THESE ARE THE MISSING LINES: Calculate context modifiers BEFORE the blowout check
+    # 🟢 1. DEFENSE MODIFIER (This function we know exists from your historical array block)
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs)
-    current_split_mod, home_mod, away_mod, split_text, split_desc = get_split_modifier(df_ml, s_col, is_home_current)
-    fatigue_val, fatigue_desc = get_fatigue_modifier(league, rest)
+
+    # 🟢 2. VENUE SPLIT MODIFIERS (Calculated inline to prevent NameErrors)
+    s_mean = df_ml[s_col].mean()
+    if pd.isna(s_mean) or s_mean == 0:
+        home_mod, away_mod, current_split_mod = 1.0, 1.0, 1.0
+        split_text, split_desc = "Neutral", "Not enough data for venue splits."
+    else:
+        home_mean = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
+        away_mean = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
+        
+        h_mod = (home_mean / s_mean) if pd.notna(home_mean) and len(df_ml[df_ml['Is_Home'] == 1]) > 0 else 1.0
+        a_mod = (away_mean / s_mean) if pd.notna(away_mean) and len(df_ml[df_ml['Is_Home'] == 0]) > 0 else 1.0
+        
+        # Dampen extremes so a wild split doesn't break the projection
+        home_mod = np.clip(1.0 + ((h_mod - 1.0) * 0.5), 0.8, 1.2)
+        away_mod = np.clip(1.0 + ((a_mod - 1.0) * 0.5), 0.8, 1.2)
+        
+        current_split_mod = home_mod if is_home_current == 1 else away_mod
+        split_text = "Home" if is_home_current == 1 else "Away"
+        split_desc = f"{split_text} Split: {current_split_mod:.2f}x production."
+
+    # 🟢 3. FATIGUE MODIFIERS (Calculated inline)
+    rest_str = str(rest)
+    if "B2B" in rest_str:
+        fatigue_val, fatigue_desc = 0.90, "⚠️ B2B: Heavy legs expected (-10%)."
+    elif "3 in 4" in rest_str:
+        fatigue_val, fatigue_desc = 0.95, "⚠️ 3 in 4 Nights: Slight fatigue (-5%)."
+    elif "3+" in rest_str:
+        fatigue_val, fatigue_desc = 1.05, "🔋 3+ Days Rest: Fully rested (+5%)."
+    else:
+        fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
 
     trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std = build_models(
         df_ml, s_col, weights, league, is_home_current, rest
     )
 
+    is_blowout_risk = False
     is_blowout_risk = False
     if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25:
         is_blowout_risk = True
