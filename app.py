@@ -212,7 +212,7 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
     append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual"])
 
 @st.cache_data(ttl=120)
-def get_suppressed_stats(league, min_bets=10, max_win_rate=0.25):
+def get_suppressed_stats(league, min_bets=10, max_win_rate=0.40):
     """Returns set of stat types with provably bad ledger history for this league."""
     try:
         ledger = load_ledger()
