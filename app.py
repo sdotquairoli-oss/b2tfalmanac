@@ -2285,14 +2285,12 @@ with t_wallet:
             t_amount = st.number_input("Amount ($)", min_value=0.01, step=1.00, format="%.2f")
             if st.form_submit_button("Log Transaction"):
                 save_bankroll_transaction(t_book, "Casino" if "Casino" in t_type else "Withdrawal" if "Withdrawal" in t_type else "Deposit", -t_amount if ("Withdrawal" in t_type or "Loss" in t_type) else t_amount)
-                # ✅ OPT-1: Clear wallet cache after transaction so balance updates immediately
                 get_wallet_breakdown.clear()
                 st.success("Transaction Logged!"); time.sleep(1); st.rerun()
 
     total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
 
     with bw_c2:
-        # Cleaned up variables to prevent f-string parsing crashes
         c_col = "#00E676" if tot_cas >= 0 else "#ff0055"
         s_col_color = "#00E676" if tot_sports >= 0 else "#ff0055"
         oop = max((tot_dep - tot_wit), 0.0)
@@ -2309,6 +2307,7 @@ with t_wallet:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
     st.markdown("---")
     with st.form("manual_ml_form"):
         st.markdown("#### 📝 Log Manual Team Bet (Moneyline/Spread)")
