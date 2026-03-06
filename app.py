@@ -181,8 +181,9 @@ def overwrite_sheet(sheet_name, df):
 # ✅ OPT-9: load_ledger now cached — filtering logic runs once per TTL, not every render
 @st.cache_data(ttl=120)
 def load_ledger():
-    # Added "User_Prob" to the expected columns array
-    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual", "User_Prob"])
+    # Updated column order to match the new Google Sheet layout
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"]
+    df = load_sheet_df("ROI_Ledger", new_cols)
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
@@ -198,18 +199,19 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "League": league,
         "Player": player.split('(')[0].strip(),
         "Stat": stat,
-        "Line": line,
         "Odds": odds,
+        "Line": line,
         "Proj": round(proj, 2),
         "Vote": vote,
+        "Actual": "",
         "Result": "Pending",
         "Win_Prob": float(win_prob),
         "Is_Boosted": is_boosted,
         "Setup_Score": int(setup_score),
-        "Actual": "",
         "User_Prob": float(user_prob)
     }
-    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual", "User_Prob"])
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"]
+    append_to_sheet("ROI_Ledger", row, new_cols)
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=10, max_win_rate=0.40):
     """Returns set of stat types with provably bad ledger history for this league."""
@@ -2283,7 +2285,7 @@ with t_roi:
                         gc = get_gc()
                         if gc:
                             ws = gc.open("B2TF_Database").worksheet("ROI_Ledger")
-                            ws.update_acell(f"I{target_row}", new_val)
+                            ws.update_acell(f"J{target_row}", new_val)
                         load_sheet_df.clear()
                         load_ledger.clear()
                         st.success("Grade locked!")
