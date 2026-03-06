@@ -1491,7 +1491,9 @@ def render_syndicate_board(league_key):
                 df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
 
                 dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
-                def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))                c_vote, c_color = get_final_vote(final_consensus)
+                def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
+                
+                c_vote, c_color = get_final_vote(final_consensus)
                 c_proj = final_consensus
                 skynet_msg, skynet_color = skynet_data["msg"], skynet_data["color"]
 
