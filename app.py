@@ -2266,17 +2266,26 @@ with t_wallet:
         oop = max((tot_dep - tot_wit), 0.0)
         lb = get_liquid_balance()
 
-        st.markdown(f"""
-        <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;">
-            <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div>
-            <div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${lb:,.2f}</div>
-            <div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;">
-                <span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${oop:,.2f}</span></span>
-                <span style="color: #94a3b8;">Net Casino: <span style="color: {c_col};">{tot_cas:+,.2f}</span></span>
-                <span style="color: #94a3b8;">Sports Profit: <span style="color: {s_col_color};">${tot_sports:+,.2f}</span></span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        # MAIN BET SLIP - Correctly outdented to render unconditionally!
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
+                        <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
+                        <div>{proj_html}</div>
+                        <div style="font-size: 11px; text-align: right;">
+                            🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
+                            👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
+                </div>
+                """, unsafe_allow_html=True)
     st.markdown("---")
     with st.form("manual_ml_form"):
         st.markdown("#### 📝 Log Manual Team Bet (Moneyline/Spread)")
