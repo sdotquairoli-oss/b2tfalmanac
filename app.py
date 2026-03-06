@@ -182,7 +182,7 @@ def overwrite_sheet(sheet_name, df):
 @st.cache_data(ttl=120)
 def load_ledger():
     # Added "User_Prob" to the expected columns
-    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"])
+    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual"])
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
@@ -193,7 +193,7 @@ def load_ledger():
     if "User_Prob" not in df.columns: df["User_Prob"] = df["Win_Prob"] 
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55):
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0):
     row = {
         "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
         "League": league,
@@ -202,14 +202,14 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Line": line,
         "Odds": odds,
         "Proj": round(proj, 2),
-        "Vote": vote, # This will now be YOUR final vote
+        "Vote": vote,
         "Result": "Pending",
-        "Win_Prob": float(win_prob), # AI's conviction
-        "User_Prob": float(user_prob), # YOUR conviction
+        "Win_Prob": float(win_prob),
         "Is_Boosted": is_boosted,
-        "Setup_Score": int(setup_score)
+        "Setup_Score": int(setup_score),
+        "Actual": ""           
     }
-    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"])
+    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual"])
 
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=10, max_win_rate=0.42):
@@ -344,6 +344,8 @@ def auto_grade_ledger():
                 val, line_val = g_row.iloc[0][s_col], float(r['Line'])
                 if r['Vote'] == "OVER": df.at[idx, 'Result'] = 'Win' if val > line_val else 'Loss' if val < line_val else 'Push'
                 elif r['Vote'] == "UNDER": df.at[idx, 'Result'] = 'Win' if val < line_val else 'Loss' if val > line_val else 'Push'
+                # ✅ Store actual stat value permanently for autopsy analysis
+                df.at[idx, 'Actual'] = round(float(val), 2)
                 updated += 1
         except: continue
 
@@ -1233,6 +1235,64 @@ def render_league_scanners(league_name):
             st.dataframe(st.session_state[f'{lk}.radar.bb'], use_container_width=True, hide_index=True,
                 column_config={"Team": st.column_config.TextColumn("🛡️ Target Team", width="medium"), "Opp": st.column_config.TextColumn("🎯 Weak Opponent", width="medium"), "Opp Status": st.column_config.TextColumn("🚨 Defense Metric", width="large")})
 
+def classify_miss(proj, line, actual, vote):
+    """
+    Dissects a losing bet into a miss type, distance, and likely cause.
+    Returns (miss_type, abs_miss, likely_cause, color)
+    """
+    try:
+        proj   = float(proj)
+        line   = float(line)
+        actual = float(actual)
+    except (ValueError, TypeError):
+        return None, None, None, None
+
+    # Calculate how far the actual landed from the line
+    if vote == "OVER":
+        line_miss = line - actual      # positive number means we fell short by X units
+    elif vote == "UNDER":
+        line_miss = actual - line      # positive number means we went over by X units
+    else:
+        return None, None, None, None
+        
+    abs_miss = abs(line_miss)
+    
+    # Calculate percentage miss based on the line to scale across different stats
+    pct_miss = abs_miss / line if line > 0 else 0
+
+    # BAD BEAT: Missed the line by <= 10% OR by <= 1.5 raw units
+    if pct_miss <= 0.10 or abs_miss <= 1.5:
+        miss_type    = "😔 BAD BEAT"
+        likely_cause = (
+            "The model's direction was correct and the projection was close — "
+            "this was pure variance. No model adjustment needed. "
+            "At your recorded win probability, some losses are always expected."
+        )
+        color = "#FFD700"
+
+    # MODEL MISS: Missed the line by 10-25% OR by <= 3.5 raw units
+    elif pct_miss <= 0.25 or abs_miss <= 3.5:
+        miss_type    = "⚠️ MODEL MISS"
+        likely_cause = (
+            "The projection was in the right ballpark but overconfident. "
+            "Check whether the opponent defense modifier or fatigue flag was active — "
+            "context modifiers may have been too aggressive on this setup."
+        )
+        color = "#f59e0b"
+
+    # BLOWOUT: Missed by > 25% of the line and > 3.5 raw units
+    else:
+        miss_type    = "💥 BLOWOUT MISS"
+        likely_cause = (
+            "The actual result fell well outside the projected range. "
+            "Likely causes: in-game blowout (minutes slashed), undisclosed injury, "
+            "surprise lineup change, or an archetype mismatch vs this opponent. "
+            "If Setup Score was ELITE (75+), this warrants a manual review."
+        )
+        color = "#ff0055"
+
+    return miss_type, round(abs_miss, 1), likely_cause, color
+    
 def render_syndicate_board(league_key):
     lk = league_key.lower()
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
@@ -1913,6 +1973,113 @@ with t_roi:
             st.info("🟣 Skynet requires at least 2 graded bets to generate the Performance Analytics dashboard. Keep feeding the machine!")
 
         st.markdown("---")
+        # ═══════════════════════════════════════════════
+        # 🔬 LOSS PATTERN REPORT
+        # ═══════════════════════════════════════════════
+        losses_with_actual = df[
+            (df['Result'] == 'Loss') &
+            (df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
+        ]
+
+        if len(losses_with_actual) >= 3:
+            with st.expander(f"🔬 Loss Pattern Report  ({len(losses_with_actual)} analysed losses)", expanded=False):
+
+                # Classify every loss
+                miss_types = []
+                for _, lr in losses_with_actual.iterrows():
+                    mt, dist, _, _ = classify_miss(
+                        lr.get('Proj', 0), lr.get('Line', 0),
+                        lr.get('Actual', 0), lr.get('Vote', '')
+                    )
+                    if mt: miss_types.append({
+                        'type': mt, 'dist': dist,
+                        'stat': lr.get('Stat', ''),
+                        'league': lr.get('League', ''),
+                        'score': lr.get('Setup_Score', 0)
+                    })
+
+                total = len(miss_types)
+                bad_beats  = [m for m in miss_types if "BAD BEAT"  in m['type']]
+                model_miss = [m for m in miss_types if "MODEL"     in m['type']]
+                blowouts   = [m for m in miss_types if "BLOWOUT"   in m['type']]
+
+                # ── Top-line metrics
+                pr1, pr2, pr3 = st.columns(3)
+                pr1.metric(
+                    "😔 Bad Beats",
+                    f"{len(bad_beats)}/{total}",
+                    f"{len(bad_beats)/total*100:.0f}% of losses",
+                    delta_color="off"
+                )
+                pr2.metric(
+                    "⚠️ Model Misses",
+                    f"{len(model_miss)}/{total}",
+                    f"{len(model_miss)/total*100:.0f}% of losses",
+                    delta_color="off"
+                )
+                pr3.metric(
+                    "💥 Blowout Misses",
+                    f"{len(blowouts)}/{total}",
+                    f"{len(blowouts)/total*100:.0f}% of losses",
+                    delta_color="off"
+                )
+
+                st.markdown("---")
+
+                # ── Interpretation guidance
+                if total >= 5:
+                    bad_beat_rate  = len(bad_beats)  / total
+                    blowout_rate   = len(blowouts)   / total
+
+                    if bad_beat_rate >= 0.50:
+                        st.success(
+                            "✅ **Your model is working.** Over half your losses are bad beats — "
+                            "the direction was right and you ran into variance. "
+                            "Increase volume on high-conviction setups rather than changing the model."
+                        )
+                    if blowout_rate >= 0.35:
+                        # Find which stat type blowouts cluster on
+                        blowout_stats = pd.Series([m['stat'] for m in blowouts]).value_counts()
+                        top_blowout_stat = blowout_stats.index[0] if not blowout_stats.empty else "Unknown"
+                        st.warning(
+                            f"⚠️ **High blowout rate ({blowout_rate*100:.0f}%).** "
+                            f"Most blowout misses cluster on **{top_blowout_stat}**. "
+                            f"This suggests a model blind spot — likely minute volatility or lineup changes "
+                            f"that the archetype engine isn't catching. Consider raising the edge threshold "
+                            f"for this stat type in `PASS_THRESHOLDS`."
+                        )
+
+                # ── High Setup Score losses (the most instructive ones)
+                try:
+                    elite_losses = [
+                        m for m in miss_types
+                        if int(float(m.get('score', 0) or 0)) >= 70
+                    ]
+                    if elite_losses:
+                        el_blowouts = [m for m in elite_losses if "BLOWOUT" in m['type']]
+                        st.markdown(
+                            f"**🎯 High-Score Losses (Setup ≥ 70):** "
+                            f"{len(elite_losses)} bet(s) with SOLID/ELITE scores still lost. "
+                            + (
+                                f"**{len(el_blowouts)} were blowout misses** — "
+                                f"investigate these manually for lineup/injury patterns."
+                                if el_blowouts else
+                                "Most were bad beats or tight misses — expected at this confidence level."
+                            )
+                        )
+                except: pass
+
+                # ── Worst performing stat types from losses
+                if miss_types:
+                    loss_by_stat = pd.Series([m['stat'] for m in miss_types]).value_counts()
+                    if not loss_by_stat.empty:
+                        st.markdown("**📉 Most Frequent Loss Markets:**")
+                        for stat_name, cnt in loss_by_stat.head(3).items():
+                            pct = cnt / total * 100
+                            st.markdown(
+                                f"&nbsp;&nbsp;• **{stat_name}**: {cnt} losses ({pct:.0f}% of all losses)",
+                                unsafe_allow_html=True
+                            )
         st.markdown("#### 🎫 Your Bet Slips")
 
         # ✅ OPT-5: Paginate ROI slips — rendering 50+ st.markdown blocks is extremely slow
@@ -1988,6 +2155,89 @@ with t_roi:
                 
                 try: user_prob_str = f"{float(raw_user if str(raw_user).strip() != '' else raw_ai)*100:.1f}%"
                 except: user_prob_str = "N/A"
+            
+            # 🔬 AUTOPSY CARD — only renders on graded losses with a stored actual value
+            actual_raw = str(row.get('Actual', '')).strip()
+            if status == 'Loss' and actual_raw not in ['', 'nan', 'None']:
+                miss_type, abs_miss, likely_cause, miss_color = classify_miss(
+                    row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', '')
+                )
+                if miss_type:
+                    proj_val   = row.get('Proj', 'N/A')
+                    line_val   = row.get('Line', 'N/A')
+                    score_val  = row.get('Setup_Score', 0)
+                    
+                    # Safely handle the probability string
+                    try:
+                        prob_val = float(row.get('Win_Prob', 0))
+                        prob_str = f"{prob_val * 100:.1f}%" if prob_val <= 1.0 else f"{prob_val:.1f}%"
+                    except:
+                        prob_str = "N/A"
+
+                    try: 
+                        score_val = int(float(score_val))
+                    except: 
+                        score_val = 0
+                        
+                    score_label = (
+                        "ELITE"     if score_val >= 75 else
+                        "SOLID"     if score_val >= 55 else
+                        "MARGINAL"  if score_val >= 35 else
+                        "WEAK"
+                    )
+
+                    with st.expander(f"🔬 View Bet Autopsy  —  {miss_type}", expanded=False):
+                        st.markdown(f"""
+                        <div style="background-color:#0f172a; border:1px solid {miss_color};
+                             border-radius:8px; padding:16px; font-size:13px; line-height:1.7;">
+
+                            <div style="font-size:15px; font-weight:900; color:{miss_color};
+                                 margin-bottom:12px; letter-spacing:1px;">
+                                {miss_type} &nbsp;·&nbsp;
+                                <span style="color:#94a3b8; font-size:12px; font-weight:400;">
+                                    Miss Distance: {abs_miss} units
+                                </span>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr;
+                                 gap:12px; margin-bottom:14px;">
+                                <div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">
+                                    <div style="color:#94a3b8; font-size:10px; font-weight:bold;
+                                         text-transform:uppercase; margin-bottom:4px;">AI Projected</div>
+                                    <div style="color:#00E5FF; font-size:20px; font-weight:900;">{proj_val}</div>
+                                </div>
+                                <div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">
+                                    <div style="color:#94a3b8; font-size:10px; font-weight:bold;
+                                         text-transform:uppercase; margin-bottom:4px;">Vegas Line</div>
+                                    <div style="color:#FFD700; font-size:20px; font-weight:900;">{line_val}</div>
+                                </div>
+                                <div style="background:#1e293b; border-radius:6px; padding:10px; text-align:center;">
+                                    <div style="color:#94a3b8; font-size:10px; font-weight:bold;
+                                         text-transform:uppercase; margin-bottom:4px;">Actual Result</div>
+                                    <div style="color:{miss_color}; font-size:20px; font-weight:900;">{actual_raw}</div>
+                                </div>
+                            </div>
+
+                            <div style="background:#1e293b; border-radius:6px; padding:12px;
+                                 margin-bottom:12px; border-left:3px solid {miss_color};">
+                                <div style="color:#94a3b8; font-size:10px; font-weight:bold;
+                                     text-transform:uppercase; margin-bottom:4px;">Likely Cause</div>
+                                <div style="color:#f8fafc;">{likely_cause}</div>
+                            </div>
+
+                            <div style="display:flex; gap:12px; font-size:12px;">
+                                <div style="color:#94a3b8;">
+                                    Setup Score at Lock:
+                                    <span style="color:#fff; font-weight:bold;">{score_val}/100 ({score_label})</span>
+                                </div>
+                                <div style="color:#94a3b8;">
+                                    Win Prob at Lock:
+                                    <span style="color:#fff; font-weight:bold;">{prob_str}</span>
+                                </div>
+                            </div>
+
+                        </div>
+                        """, unsafe_allow_html=True)        
 
                 st.markdown(f"""<div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
 <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
