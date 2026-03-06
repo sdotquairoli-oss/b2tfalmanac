@@ -17,8 +17,9 @@ import streamlit.components.v1 as components
 from concurrent.futures import ThreadPoolExecutor
 
 # --- ML IMPORTS ---
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor
+from sklearn.linear_model import PoissonRegressor
+from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
+from xgboost import XGBRegressor
 from sklearn.metrics.pairwise import euclidean_distances
 
 # --- CONFIGURATION & GLOBAL CONSTANTS ---
@@ -716,17 +717,12 @@ def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
         score += min(15, max(0, ((gap / thresh) - 1.0) * 15))
     return max(0, min(100, int(score)))
 
-def build_models(df_ml, s_col, weights, league):
-    if league == "MLB":
-        mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
-        df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
-        df_ml['Per_Min'] = df_ml['Per_Min'].clip(0, 10)
-    else:
-        mins = df_ml['MINS'].replace(0, 1.0).fillna(1.0)
-        df_ml['Per_Min'] = df_ml[s_col].fillna(0) / mins
-
+def build_models(df_ml, s_col, weights, league, is_home_current, rest_status):
     y = df_ml[s_col].fillna(0).values
-    X = np.arange(len(df_ml)).reshape(-1, 1)
+
+    # 🟢 1. FEATURE ENRICHMENT: Calculate Rest Days
+    df_ml['Rest_Days'] = df_ml['ValidDate'].diff().dt.days.fillna(3.0).clip(0, 7)
+
     expected_mins = df_ml['MINS'].tail(5).mean()
     mins_std = df_ml['MINS'].tail(10).std()
     if pd.isna(mins_std) or mins_std == 0: mins_std = 2.0
@@ -740,47 +736,50 @@ def build_models(df_ml, s_col, weights, league):
         elif league == "NHL": expected_mins = np.clip(expected_mins, 10.0, 28.0)
         else: expected_mins = np.clip(expected_mins, 5.0, 42.0)
 
+    # 🟢 2. POISSON SETUP: Predicts raw count using Minutes and Time Index
+    X_poi_train = df_ml[['MINS']].copy()
+    X_poi_train['Trend'] = np.arange(len(df_ml))
+
+    # 🟢 3. RANDOM FOREST SETUP: Now sees Form + Context
     df_ml['Roll3'] = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
-    X_rf = df_ml[['Roll3', 'MINS']].fillna(0).values
+    X_rf_train = df_ml[['Roll3', 'MINS', 'Is_Home', 'Rest_Days']].fillna(0).values
 
-    s_mean = df_ml[s_col].mean()
-    if pd.isna(s_mean): s_mean = 0.0
+    # 🟢 4. XGBOOST SETUP: Replaces old Gradient Boosting
+    s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
     df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
-    X_gb = df_ml[['MINS', 'Dev']].fillna(0).values
+    X_xgb_train = df_ml[['MINS', 'Dev']].fillna(0).values
 
+    # 🟢 5. BASELINE SETUP: HistGradientBoosting
     df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
-    X_hgbr = df_ml[['EWMA', 'MINS']].fillna(0).values
+    X_hgbr_train = df_ml[['EWMA', 'MINS']].fillna(0).values
 
-    per_min_vals = df_ml['Per_Min'].values
-
-    # ✅ OPT-11: Parallel model training with ThreadPoolExecutor
-    # Models are independent — train simultaneously instead of sequentially
-    def train_ridge():
-        return Ridge(alpha=1.0).fit(X, per_min_vals, sample_weight=weights)
+    # ⚡ PARALLEL TRAINING
+    def train_poisson():
+        return PoissonRegressor(alpha=1e-3, max_iter=500).fit(X_poi_train.values, y, sample_weight=weights)
     def train_rf():
-        return RandomForestRegressor(n_estimators=50, random_state=42).fit(X_rf, y, sample_weight=weights)
-    def train_gb():
-        return GradientBoostingRegressor(n_estimators=50, random_state=42).fit(X_gb, y, sample_weight=weights)
+        return RandomForestRegressor(n_estimators=50, random_state=42).fit(X_rf_train, y, sample_weight=weights)
+    def train_xgb():
+        return XGBRegressor(n_estimators=50, learning_rate=0.05, random_state=42, objective='reg:squarederror').fit(X_xgb_train, y, sample_weight=weights)
     def train_hgbr():
-        return HistGradientBoostingRegressor(max_iter=50, random_state=42).fit(X_hgbr, y, sample_weight=weights)
+        return HistGradientBoostingRegressor(max_iter=50, random_state=42).fit(X_hgbr_train, y, sample_weight=weights)
 
     try:
         with ThreadPoolExecutor(max_workers=4) as executor:
-            f_lr = executor.submit(train_ridge)
-            f_rf = executor.submit(train_rf)
-            f_gb = executor.submit(train_gb)
-            f_hgbr = executor.submit(train_hgbr)
-            lr, rf, gb, hgbr = f_lr.result(), f_rf.result(), f_gb.result(), f_hgbr.result()
+            f_poi, f_rf, f_xgb, f_hgbr = executor.submit(train_poisson), executor.submit(train_rf), executor.submit(train_xgb), executor.submit(train_hgbr)
+            poi, rf, xgb, hgbr = f_poi.result(), f_rf.result(), f_xgb.result(), f_hgbr.result()
     except Exception:
-        # Fallback to sequential if threading fails
-        lr = train_ridge(); rf = train_rf(); gb = train_gb(); hgbr = train_hgbr()
+        poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
 
-    trend_proj = lr.predict([[len(X)]])[0] * expected_mins
-    stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins]])[0]
-    con_proj = gb.predict([[expected_mins, trend_proj - s_mean]])[0]
+    # Format tonight's contextual inputs
+    tonight_rest = 1.0 if "B2B" in rest_status else (0.0 if "3 in 4" in rest_status else 3.0)
+
+    # 🎯 GENERATE TONIGHT'S PROJECTIONS
+    trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+    stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest]])[0]
+    con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
-    return trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins, mins_std
+    return trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std
 
 def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
@@ -853,16 +852,23 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ✅ OPT-8: Pre-fetch bad_defs once here, pass to all defense modifier calls
     bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
-    trend_proj, stat_proj, con_proj, base_proj, lr, rf, gb, hgbr, X, X_rf, X_gb, X_hgbr, expected_mins, mins_std = build_models(df_ml, s_col, weights, league)
-    mod_val, mod_desc, fatigue_val, fatigue_desc, current_split_mod, split_text, split_desc, home_mod, away_mod = apply_context_mods(df_ml, s_col, league, opp, rest, is_home_current, archetype)
+    trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std = build_models(
+        df_ml, s_col, weights, league, is_home_current, rest
+    )
 
     is_blowout_risk = False
     if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25:
         is_blowout_risk = True
         expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
-        trend_proj = lr.predict([[len(X)]])[0] * expected_mins
-        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins]])[0]
-        con_proj = gb.predict([[expected_mins, trend_proj - df_ml[s_col].mean()]])[0]
+        
+        # Calculate tonight's rest to feed into the Random Forest recalculation
+        tonight_rest = 1.0 if "B2B" in rest else (0.0 if "3 in 4" in rest else 3.0)
+        s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+        
+        # Recalculate using the NEW models and inputs
+        trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest]])[0]
+        con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
     guru_proj = ((trend_proj + stat_proj) / 2) * mod_val * fatigue_val * current_split_mod
@@ -904,22 +910,23 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     def get_final_vote(p): return ("OVER", "#00c853") if p >= line + threshold else (("UNDER", "#d50000") if p <= line - threshold else ("PASS", "#94a3b8"))
     f_vote, f_color = get_final_vote(final_consensus)
 
-    lr_hist = lr.predict(X) * df_ml['MINS'].replace(0, 1.0).values
-    rf_hist = rf.predict(X_rf)
-    gb_hist = gb.predict(X_gb)
-    hgbr_hist = hgbr.predict(X_hgbr)
+    poi_hist = poi.predict(X_poi_train.values)
+    rf_hist = rf.predict(X_rf_train)
+    xgb_hist = xgb.predict(X_xgb_train)
+    hgbr_hist = hgbr.predict(X_hgbr_train)
 
     # ✅ OPT-8: Pass pre-fetched bad_defs to avoid N repeated get_nhl_bad_defenses() calls
     unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
     mods = df_ml['MATCHUP'].map(unique_mods).values
     hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
-    guru_hist = ((lr_hist + rf_hist) / 2) * mods * 1.0 * hist_split_mods
-    df_ml['AI_Proj'] = (lr_hist + rf_hist + gb_hist + hgbr_hist + guru_hist) / 5  # Skynet applied by caller
+    
+    guru_hist = ((poi_hist + rf_hist) / 2) * mods * 1.0 * hist_split_mods
+    df_ml['AI_Proj'] = (poi_hist + rf_hist + xgb_hist + hgbr_hist + guru_hist) / 5  # Skynet applied by caller
 
     board = [
-        {"name": "⏱️ MIN Maximizer", "model": "Ridge Regression", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"Projects {trend_proj:.1f} by weighting recent mins."},
+        {"name": "⏱️ MIN Maximizer", "model": "Poisson Regressor", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"Projects {trend_proj:.1f} by weighting recent mins."},
         {"name": "📊 Statistician", "model": "Random Forest", "proj": stat_proj, "vote": get_raw_vote(stat_proj), "color": get_final_vote(stat_proj)[1], "quote": f"Deep Memory sets stable floor. Trees favor {get_raw_vote(stat_proj)}."},
-        {"name": "🃏 Contrarian", "model": "Gradient Boosting", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"Flags variance {'regression' if con_proj < df_ml[s_col].mean() else 'spike'} from season norms."},
+        {"name": "🃏 Contrarian", "model": "XGBoost", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"Flags variance {'regression' if con_proj < df_ml[s_col].mean() else 'spike'} from season norms."},
         {"name": "🛡️ Baseline", "model": "Hist-Gradient Boosting", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": "Weighted multi-year mapping using exponentially weighted moving averages."},
         {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors Context and Volatility."}
     ]
