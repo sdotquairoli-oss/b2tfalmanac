@@ -840,8 +840,7 @@ def apply_skynet(raw_vote, stat_type, league):
 #    - df_hash and ledger_hash params added as cheap cache invalidation keys
 # ✅ OPT-6: df_hash param prevents re-hashing the entire DataFrame on every cache check
 @st.cache_data(show_spinner=False, ttl=300)
-def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, df_hash="", ledger_hash=""):
-    df_ml = df.copy()
+def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash=""):    df_ml = df.copy()
     archetype = get_player_archetype(df_ml, league)
 
     if len(df_ml) < 5:
@@ -891,8 +890,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     )
 
     is_blowout_risk = False
-    is_blowout_risk = False
-    if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25:
+    if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25 and not ignore_blowout:
         is_blowout_risk = True
         expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
         
@@ -1439,8 +1437,10 @@ def render_syndicate_board(league_key):
             if sync and f_line is not None and f_odds is not None and stat_type not in game_lines:
                 st.session_state[f"{lk}.odds"] = estimate_alt_odds(float(f_line), int(f_odds), line, stat_type)
             elif f"{lk}.odds" not in st.session_state: st.session_state[f"{lk}.odds"] = -110
+            
             odds = st.number_input("Odds", step=5, key=f"{lk}.odds")
             is_boosted = st.checkbox("🚀 Odds Boost Applied", key=f"{lk}.boost")
+            ignore_blowout = st.checkbox("🛡️ Ignore Blowout Risk", key=f"{lk}.no_blowout")
             implied_prob = calculate_implied_prob(odds)
             if implied_prob > 0:
                 if implied_prob >= 66.0: juice_color, juice_msg = "#ff0055", "🚨 TOXIC JUICE: Requires extreme win rate."
@@ -1524,9 +1524,9 @@ def render_syndicate_board(league_key):
                 graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
                 ledger_hash = str(hash(str(sorted(graded_counts.items()))))
 
-                df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, _ = run_ml_board(
-                    df, s_col, line, opp, league_key, rest, is_home_current, stat_type, df_hash, ledger_hash
-                )
+    df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, _ = run_ml_board(
+        df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
+    )
 
                 # ✅ OPT-4: Apply Skynet HERE (outside cache) so it always uses fresh ledger data
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
