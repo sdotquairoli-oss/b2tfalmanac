@@ -852,6 +852,11 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ✅ OPT-8: Pre-fetch bad_defs once here, pass to all defense modifier calls
     bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
+    # 🟢 THESE ARE THE MISSING LINES: Calculate context modifiers BEFORE the blowout check
+    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs)
+    current_split_mod, home_mod, away_mod, split_text, split_desc = get_split_modifier(df_ml, s_col, is_home_current)
+    fatigue_val, fatigue_desc = get_fatigue_modifier(league, rest)
+
     trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std = build_models(
         df_ml, s_col, weights, league, is_home_current, rest
     )
