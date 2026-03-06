@@ -181,19 +181,18 @@ def overwrite_sheet(sheet_name, df):
 # ✅ OPT-9: load_ledger now cached — filtering logic runs once per TTL, not every render
 @st.cache_data(ttl=120)
 def load_ledger():
-    # Added "User_Prob" to the expected columns
-    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual"])
+    # Added "User_Prob" to the expected columns array
+    df = load_sheet_df("ROI_Ledger", ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual", "User_Prob"])
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     if "Setup_Score" not in df.columns: df["Setup_Score"] = 0
-    # Ensure User_Prob exists
     if "User_Prob" not in df.columns: df["User_Prob"] = df["Win_Prob"] 
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0):
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55):
     row = {
         "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
         "League": league,
@@ -207,10 +206,10 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Win_Prob": float(win_prob),
         "Is_Boosted": is_boosted,
         "Setup_Score": int(setup_score),
-        "Actual": ""           
+        "Actual": "",
+        "User_Prob": float(user_prob)
     }
-    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual"])
-
+    append_to_sheet("ROI_Ledger", row, ["Date", "League", "Player", "Stat", "Line", "Odds", "Proj", "Vote", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "Actual", "User_Prob"])
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=10, max_win_rate=0.40):
     """Returns set of stat types with provably bad ledger history for this league."""
