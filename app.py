@@ -2233,7 +2233,7 @@ with t_roi:
                             </div>
                             """, unsafe_allow_html=True)       
                             
-                st.markdown(f"""\<div style="background-color: \#0f172a; border: 1px solid \#1e293b; border-left: 4px solid {b\color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;"\>
+            st.markdown(f"""\<div style="background-color: \#{b\\ color}; border: 1px solid \#1e293b; border-left: 4px solid {b\\ color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;"\>
 <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
 <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
 <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
@@ -2260,7 +2260,7 @@ with t_wallet:
     total_liquid, book_balances, tot_dep, tot_wit, tot_cas, tot_sports = get_wallet_breakdown()
 
     with bw_c2:
-# Cleaned up variables to prevent f-string parsing crashes
+        # Cleaned up variables to prevent f-string parsing crashes
         c_col = "#00E676" if tot_cas >= 0 else "#ff0055"
         s_col_color = "#00E676" if tot_sports >= 0 else "#ff0055"
         oop = max((tot_dep - tot_wit), 0.0)
@@ -2269,11 +2269,11 @@ with t_wallet:
         st.markdown(f"""
         <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;">
             <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div>
-            \<div style="color: \#00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;"\>${lb:.2f}\</div\>
+            <div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${lb:,.2f}</div>
             <div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;">
-                <span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${oop:.2f}</span></span>
-                <span style="color: #94a3b8;">Net Casino: <span style="color: {c_col};">{tot_cas:+.2f}</span></span>
-                <span style="color: #94a3b8;">Sports Profit: <span style="color: {s_col_color};">${tot_sports:+.2f}</span></span>
+                <span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${oop:,.2f}</span></span>
+                <span style="color: #94a3b8;">Net Casino: <span style="color: {c_col};">{tot_cas:+,.2f}</span></span>
+                <span style="color: #94a3b8;">Sports Profit: <span style="color: {s_col_color};">${tot_sports:+,.2f}</span></span>
             </div>
         </div>
         """, unsafe_allow_html=True)
