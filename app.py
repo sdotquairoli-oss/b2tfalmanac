@@ -1697,13 +1697,25 @@ def render_syndicate_board(league_key):
                         df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
                         df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
                         df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
+                        
                         bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
                             x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
                             y=alt.Y(s_col, title=stat_type),
-                            # Changed > to >= for the color condition
-                            color=alt.condition(alt.datum[s_col] >= line, alt.value('#00c853'), alt.value('#d50000')),
-                            stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
-                            strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
+                            color=alt.condition(
+                                alt.datum[s_col] >= line, 
+                                alt.value('#00c853'), 
+                                alt.value('#d50000')
+                            ),
+                            stroke=alt.condition(
+                                alt.datum.Is_Target_Opp, 
+                                alt.value('#FFD700'), 
+                                alt.value('transparent')
+                            ),
+                            strokeWidth=alt.condition(
+                                alt.datum.Is_Target_Opp, 
+                                alt.value(3), 
+                                alt.value(0)
+                            ),
                             tooltip=[
                                 alt.Tooltip('ShortDate', title='Date'), 
                                 alt.Tooltip('Matchup_Formatted', title='Opponent'), 
@@ -1712,18 +1724,13 @@ def render_syndicate_board(league_key):
                                 alt.Tooltip('AI_Proj', title='AI Projection', format='.2f')
                             ]
                         ).properties(height=350)
+                        
                         vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
                         ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
                         text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
+                        
                         st.altair_chart((bars + vegas_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
                         st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
-                        ).properties(height=350)
-                        vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
-                        ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
-                        text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
-                        st.altair_chart((bars + vegas_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
-                        st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
-                    with side_col:
                         with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
                             player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
                             team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
