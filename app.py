@@ -2233,7 +2233,7 @@ with t_roi:
                             </div>
                             """, unsafe_allow_html=True)       
                             
-                st.markdown(f"""\<div style="background-color: \#0f172a; border: 1px solid \#1e293b; border-left: 4px solid {b\_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;"\>
+                st.markdown(f"""\<div style="background-color: \#0f172a; border: 1px solid \#1e293b; border-left: 4px solid {b\color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;"\>
 <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
 <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
 <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
