@@ -1976,9 +1976,9 @@ with t_roi:
         # ═══════════════════════════════════════════════
         # 🔬 LOSS PATTERN REPORT
         # ═══════════════════════════════════════════════
-        losses_with_actual = df[
-            (df['Result'] == 'Loss') &
-            (df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
+        losses_with_actual = ledger_df[
+            (ledger_df['Result'] == 'Loss') &
+            (ledger_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
         ]
 
         if len(losses_with_actual) >= 3:
