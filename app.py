@@ -740,9 +740,9 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status):
     X_poi_train = df_ml[['MINS']].copy()
     X_poi_train['Trend'] = np.arange(len(df_ml))
 
-    # 🟢 3. RANDOM FOREST SETUP: Now sees Form + Context
+    # 🟢 3. RANDOM FOREST SETUP: Now sees Form + Context + Defense
     df_ml['Roll3'] = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
-    X_rf_train = df_ml[['Roll3', 'MINS', 'Is_Home', 'Rest_Days']].fillna(0).values
+    X_rf_train = df_ml[['Roll3', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']].fillna(0).values
 
     # 🟢 4. XGBOOST SETUP: Replaces old Gradient Boosting
     s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
@@ -775,7 +775,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status):
 
     # 🎯 GENERATE TONIGHT'S PROJECTIONS
     trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-    stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest]])[0]
+    stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest, tonight_def_mod]])[0]
     con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
@@ -852,9 +852,12 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ✅ OPT-8: Pre-fetch bad_defs once here, pass to all defense modifier calls
     bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
-    # 🟢 1. DEFENSE MODIFIER (This function we know exists from your historical array block)
+    # 🟢 1. DEFENSE MODIFIER & HISTORICAL MAPPING
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs)
-
+    
+    # Pre-calculate the defense modifier for EVERY game in the log
+    unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
+    df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
     # 🟢 2. VENUE SPLIT MODIFIERS (Calculated inline to prevent NameErrors)
     s_mean = df_ml[s_col].mean()
     if pd.isna(s_mean) or s_mean == 0:
@@ -887,7 +890,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
 
     trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std = build_models(
-        df_ml, s_col, weights, league, is_home_current, rest
+        df_ml, s_col, weights, league, is_home_current, rest, mod_val
     )
 
     is_blowout_risk = False
@@ -905,7 +908,10 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
-    guru_proj = ((trend_proj + stat_proj) / 2) * mod_val * fatigue_val * current_split_mod
+    # 🟢 MATH FIX: The Random Forest (stat_proj) already knows the defense, venue, and rest internally!
+    # We only apply the external multipliers to the Poisson model (trend_proj).
+    adjusted_trend = trend_proj * mod_val * fatigue_val * current_split_mod
+    guru_proj = (adjusted_trend + stat_proj) / 2
     raw_consensus = (trend_proj + stat_proj + con_proj + base_proj + guru_proj) / 5
 
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
@@ -950,12 +956,12 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     hgbr_hist = hgbr.predict(X_hgbr_train)
 
     # ✅ OPT-8: Pass pre-fetched bad_defs to avoid N repeated get_nhl_bad_defenses() calls
-    unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
-    mods = df_ml['MATCHUP'].map(unique_mods).values
     hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
+    mods = df_ml['Opp_Def_Mod'].values  # We already built this column in Step 1!
     
-    guru_hist = ((poi_hist + rf_hist) / 2) * mods * 1.0 * hist_split_mods
-    df_ml['AI_Proj'] = (poi_hist + rf_hist + xgb_hist + hgbr_hist + guru_hist) / 5  # Skynet applied by caller
+    # Only scale the Poisson historicals, leave the RF historicals alone
+    guru_hist = ((poi_hist * mods * 1.0 * hist_split_mods) + rf_hist) / 2
+    df_ml['AI_Proj'] = (poi_hist + rf_hist + xgb_hist + hgbr_hist + guru_hist) / 5
 
     board = [
         {"name": "⏱️ MIN Maximizer", "model": "Poisson Regressor", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"Projects {trend_proj:.1f} by weighting recent mins."},
