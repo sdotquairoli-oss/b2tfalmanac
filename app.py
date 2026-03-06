@@ -1692,7 +1692,8 @@ def render_syndicate_board(league_key):
                         b_cols[i].markdown(f'<div class="board-member"><div class="board-name">{m["name"]}</div><div class="board-model">{m["model"]}</div><div style="font-size:11px; color:#94a3b8; font-style:italic; line-height:1.3; margin-bottom:12px; min-height:45px;">"{m["quote"]}"</div><div style="color:#94a3b8; font-size:12px; border-top:1px dashed #334155; padding-top:8px;">Proj: <span style="color:#fff; font-weight:bold;">{m["proj"]:.2f}</span></div><div class="board-vote" style="color:{m["color"]}; margin-top:2px;">{m["vote"]}</div></div>', unsafe_allow_html=True)
 
                     st.markdown("#### 📊 L10 Performance vs Line")
-                    chart_col, side_col = st.columns([3.2, 1.2])
+                    chart_col, side_col = st.columns([3.2, 1.4])
+                    
                     with chart_col:
                         df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
                         df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
@@ -1731,11 +1732,14 @@ def render_syndicate_board(league_key):
                         
                         st.altair_chart((bars + vegas_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
                         st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
+                        
+                    with side_col:
                         with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
                             player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
                             team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
                             opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
                             st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
+                            
                             if league_key == "NBA":
                                 st.caption("**🧬 AI Player Archetype & Rotation**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
@@ -1743,19 +1747,20 @@ def render_syndicate_board(league_key):
                             else:
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
                                 st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
-                            st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**⚔️ History vs {opp} (All Time)**")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            st.caption(f"**⚔️ History vs {opp} (All Time)**")
+                            
                             df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
                             opp_total = len(df_opp)
 
                             if opp_total >= 5:
-                                # ✅ Statistically meaningful — show H2H hit rate normally
                                 opp_hits = int((df_opp[s_col] >= line).sum())
                                 opp_win_pct = (opp_hits / opp_total) * 100
                                 h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
                                 st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
 
                             elif opp_total >= 2:
-                                # ⚠️ Small sample — show data but flag unreliability
                                 opp_hits = int((df_opp[s_col] >= line).sum())
                                 opp_win_pct = (opp_hits / opp_total) * 100
                                 h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
@@ -1763,11 +1768,13 @@ def render_syndicate_board(league_key):
                                 st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
 
                             else:
-                                # ❌ Insufficient data — suppress entirely to avoid misleading modifiers
                                 st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
-                            st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🏟️ Venue Advantage ({split_text})**")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            st.caption(f"**🏟️ Venue Advantage ({split_text})**")
                             st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
-                            st.markdown("<br>", unsafe_allow_html=True); st.caption(f"**🔋 Energy Levels**")
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            st.caption(f"**🔋 Energy Levels**")
                             st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
 
 def render_league_tab(league_name, get_sched_func):
