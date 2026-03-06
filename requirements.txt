@@ -6,3 +6,4 @@ scikit-learn
 pytz
 gspread
 nba_api
+xgboost==2.0.3
