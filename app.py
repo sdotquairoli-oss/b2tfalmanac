@@ -2231,15 +2231,47 @@ with t_roi:
                                 </div>
 
                             </div>
-                            """, unsafe_allow_html=True)       
-                            
-            st.markdown(f"""\<div style="background-color: \#{b\\ color}; border: 1px solid \#1e293b; border-left: 4px solid {b\\ color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;"\>
-<div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-<div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
-<div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
-</div>
-<div style="margin-bottom: 15px;">
-<div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right:
+                            """, unsafe_allow_html=True)        
+
+                # MAIN BET SLIP
+                st.markdown(f"""
+                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
+                        <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
+                        <div>{proj_html}</div>
+                        <div style="font-size: 11px; text-align: right;">
+                            🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
+                            👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with sc2:
+                st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+                opts = ["Pending", "Win", "Loss", "Push"]
+                start_idx = opts.index(status) if status in opts else 0
+                new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
+                if new_val != status:
+                    if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
+                        orig_idx = int(row['index'])
+                        target_row = orig_idx + 2
+                        gc = get_gc()
+                        if gc:
+                            ws = gc.open("B2TF_Database").worksheet("ROI_Ledger")
+                            ws.update_acell(f"I{target_row}", new_val)
+                        load_sheet_df.clear()
+                        load_ledger.clear()
+                        st.success("Grade locked!")
+                        time.sleep(1)
+                        st.rerun()
 
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
@@ -2266,56 +2298,47 @@ with t_wallet:
         oop = max((tot_dep - tot_wit), 0.0)
         lb = get_liquid_balance()
 
-        # MAIN BET SLIP - Correctly outdented to render unconditionally!
-                st.markdown(f"""
-                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                        <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
-                        <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
-                        <div>{proj_html}</div>
-                        <div style="font-size: 11px; text-align: right;">
-                            🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
-                            👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
-                        </div>
-                    </div>
-                    <div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
-    st.markdown("---")
-    with st.form("manual_ml_form"):
-        st.markdown("#### 📝 Log Manual Team Bet (Moneyline/Spread)")
-        c1, c2, c3 = st.columns(3)
-        m_league = c1.selectbox("League", ["NBA", "NHL", "MLB"])
-        m_team = c2.text_input("Team Name", placeholder="e.g. Spurs")
-        m_market = c3.selectbox("Market", ["Moneyline", "Spread", "Total (O/U)"])
-        c4, c5 = st.columns(2)
-        m_odds = c4.number_input("Odds", value=-110, step=10)
-        m_line = c5.text_input("Line / Target (Optional)", value="ML")
-        if st.form_submit_button("Log Team Bet to ROI Ledger", type="primary"):
-            if m_team:
-                save_to_ledger(m_league, m_team, m_market, m_line, m_odds, 0.0, "TEAM", 0.50, False)
-                st.success(f"{m_market} Logged to ROI Ledger!")
-                time.sleep(1); st.rerun()
-            else: st.error("Please enter a team name.")
+        st.markdown(f"""
+        <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;">
+            <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div>
+            <div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${lb:,.2f}</div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;">
+                <span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${oop:,.2f}</span></span>
+                <span style="color: #94a3b8;">Net Casino: <span style="color: {c_col};">{tot_cas:+,.2f}</span></span>
+                <span style="color: #94a3b8;">Sports Profit: <span style="color: {s_col_color};">${tot_sports:+,.2f}</span></span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+st.markdown("---")
+with st.form("manual_ml_form"):
+    st.markdown("#### 📝 Log Manual Team Bet (Moneyline/Spread)")
+    c1, c2, c3 = st.columns(3)
+    m_league = c1.selectbox("League", ["NBA", "NHL", "MLB"])
+    m_team = c2.text_input("Team Name", placeholder="e.g. Spurs")
+    m_market = c3.selectbox("Market", ["Moneyline", "Spread", "Total (O/U)"])
+    c4, c5 = st.columns(2)
+    m_odds = c4.number_input("Odds", value=-110, step=10)
+    m_line = c5.text_input("Line / Target (Optional)", value="ML")
+    if st.form_submit_button("Log Team Bet to ROI Ledger", type="primary"):
+        if m_team:
+            save_to_ledger(m_league, m_team, m_market, m_line, m_odds, 0.0, "TEAM", 0.50, False)
+            st.success(f"{m_market} Logged to ROI Ledger!")
+            time.sleep(1); st.rerun()
+        else: st.error("Please enter a team name.")
 
-    if book_balances:
-        st.markdown("#### 📱 Portfolio Breakdown")
-        st.markdown("<br>", unsafe_allow_html=True)
-        breakdown_left, breakdown_right = st.columns([2, 1])
-        with breakdown_right:
-            df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
-            df_pie = df_pie[df_pie['Balance'] > 0]
-            if not df_pie.empty:
-                chart = alt.Chart(df_pie).mark_arc(innerRadius=60, outerRadius=100, cornerRadius=6).encode(theta=alt.Theta(field="Balance", type="quantitative"), color=alt.Color(field="Sportsbook", type="nominal", legend=alt.Legend(title="Liquidity Location", orient="bottom", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=12, labelFontSize=11)), tooltip=[alt.Tooltip('Sportsbook', title='Book'), alt.Tooltip('Balance', format='$.2f')]).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
-                st.altair_chart(chart, use_container_width=True, theme="streamlit")
-        with breakdown_left:
-            port_cols = st.columns(min(len(book_balances), 2) if len(book_balances) > 1 else 1)
-            for i, (book, bal) in enumerate(book_balances.items()):
-                logo_img = BOOK_LOGOS.get(book, "")
-                logo_html = f'<img src="{logo_img}" width="20" height="20" style="border-radius: 50%; vertical-align: middle; margin-right: 8px;"> <span style="font-size: 15px; font-weight: bold; color: #00E5FF; vertical-align: middle;">{book}</span>' if logo_img else f'<span style="font-size: 15px; font-weight: bold; color: #00E5FF;">{book}</span>'
-                port_cols[i % len(port_cols)].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal > 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
+if book_balances:
+    st.markdown("#### 📱 Portfolio Breakdown")
+    st.markdown("<br>", unsafe_allow_html=True)
+    breakdown_left, breakdown_right = st.columns([2, 1])
+    with breakdown_right:
+        df_pie = pd.DataFrame(list(book_balances.items()), columns=['Sportsbook', 'Balance'])
+        df_pie = df_pie[df_pie['Balance'] > 0]
+        if not df_pie.empty:
+            chart = alt.Chart(df_pie).mark_arc(innerRadius=60, outerRadius=100, cornerRadius=6).encode(theta=alt.Theta(field="Balance", type="quantitative"), color=alt.Color(field="Sportsbook", type="nominal", legend=alt.Legend(title="Liquidity Location", orient="bottom", labelColor="#94a3b8", titleColor="#00E5FF", titleFontSize=12, labelFontSize=11)), tooltip=[alt.Tooltip('Sportsbook', title='Book'), alt.Tooltip('Balance', format='$.2f')]).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_arc(stroke="#0f172a", strokeWidth=3)
+            st.altair_chart(chart, use_container_width=True, theme="streamlit")
+    with breakdown_left:
+        port_cols = st.columns(min(len(book_balances), 2) if len(book_balances) > 1 else 1)
+        for i, (book, bal) in enumerate(book_balances.items()):
+            logo_img = BOOK_LOGOS.get(book, "")
+            logo_html = f'<img src="{logo_img}" width="20" height="20" style="border-radius: 50%; vertical-align: middle; margin-right: 8px;"> <span style="font-size: 15px; font-weight: bold; color: #00E5FF; vertical-align: middle;">{book}</span>' if logo_img else f'<span style="font-size: 15px; font-weight: bold; color: #00E5FF;">{book}</span>'
+            port_cols[i % len(port_cols)].markdown(f'<div style="background-color: #0f172a; border-left: 4px solid {"#00E676" if bal > 0 else "#ff0055"}; border-radius: 6px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155;"><div style="margin-bottom: 5px;">{logo_html}</div><div style="font-size: 20px; font-weight: 900; color: #fff;">${max(bal, 0.0):.2f}</div></div>', unsafe_allow_html=True)
