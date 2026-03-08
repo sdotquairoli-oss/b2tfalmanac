@@ -1387,24 +1387,25 @@ def render_syndicate_board(league_key):
     placeholder_home = top_c2.empty()
 
     # 🕵️ TEMPORARY VAULT VIEWER (Main Page)
-    with st.expander("🔐 View Prediction Vault (Live Receipts)", expanded=True):
-        import os
-        import pandas as pd
-        if os.path.exists("saved_projections.csv"):
-            st.dataframe(pd.read_csv("saved_projections.csv"), use_container_width=True)
-                
-            # Download button so you can pull it to your actual computer
-            with open("saved_projections.csv", "rb") as file:
-                st.download_button("📥 Download Receipts CSV", file, "saved_projections.csv", "text/csv")
-        else:
-                st.info("Vault is currently empty. Run a player projection to generate a receipt!")
-            # 🧪 RED DOT TESTER
-            if target_player:
-                if st.button("🧪 Inject Fake Past Receipt (Test Red Dot)"):
-                    # We will spoof a projection of 10.0 for a game a few days ago
-                    fake_date = "2026-03-04" 
-                    log_prediction_receipt(target_player, stat_type, 10.0, fake_date)
-                    st.rerun()
+with st.expander("🔐 View Prediction Vault (Live Receipts)", expanded=True):
+    import os
+    import pandas as pd
+    if os.path.exists("saved_projections.csv"):
+        st.dataframe(pd.read_csv("saved_projections.csv"), use_container_width=True)
+        
+        # Download button
+        with open("saved_projections.csv", "rb") as file:
+            st.download_button("📥 Download Receipts CSV", file, "saved_projections.csv", "text/csv")
+        
+        # 🧪 RED DOT TESTER - Indented exactly to match the block above
+        if target_player:
+            if st.button("🧪 Inject Fake Past Receipt (Test Red Dot)"):
+                # We will spoof a projection of 10.0 for a game a few days ago
+                fake_date = "2026-03-04" 
+                log_prediction_receipt(target_player, stat_type, 10.0, fake_date)
+                st.rerun()
+    else:
+        st.info("Vault is currently empty. Run a player projection to generate a receipt!")
 
     with st.container():
         c1, c2, c3, c4 = st.columns([2, 1.5, 1, 1.5])
