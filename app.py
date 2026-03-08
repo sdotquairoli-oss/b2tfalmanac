@@ -641,20 +641,52 @@ def get_live_nba_team_stats():
     except: return {}
 
 def get_player_archetype(df, league):
-    if df.empty or league != "NBA": return "Unknown Profile"
-    avg_mins = df['MINS'].mean()
-    if pd.isna(avg_mins) or avg_mins < 5: avg_mins = 15.0
-    pts_36 = (df.get('PTS', pd.Series([0])).mean() / avg_mins) * 36
-    trb_36 = (df.get('TRB', pd.Series([0])).mean() / avg_mins) * 36
-    ast_36 = (df.get('AST', pd.Series([0])).mean() / avg_mins) * 36
-    fg3m_36 = (df.get('FG3M', pd.Series([0])).mean() / avg_mins) * 36
-    clusters = {"👑 Primary Playmaker (High USG)": [26.0, 6.0, 9.5, 2.5], "🦍 Paint Beast / Rim Runner": [17.0, 13.5, 2.0, 0.1], "🧬 Versatile Point-Forward": [21.0, 9.0, 6.0, 1.5], "🎯 3&D Wing / Spot-Up Shooter": [15.0, 5.0, 2.0, 3.8], "🛡️ Two-Way Connector": [13.0, 4.5, 5.5, 1.5]}
-    player_vec = [[pts_36, trb_36, ast_36, fg3m_36]]
-    best_match, min_dist = "Unknown", float('inf')
-    for name, centroid in clusters.items():
-        dist = euclidean_distances(player_vec, [centroid])[0][0]
-        if dist < min_dist: min_dist = dist; best_match = name
-    return best_match
+    if df.empty: return "Unknown Profile"
+    
+    if league == "NBA":
+        avg_mins = df['MINS'].mean()
+        if pd.isna(avg_mins) or avg_mins < 5: avg_mins = 15.0
+        pts_36 = (df.get('PTS', pd.Series([0])).mean() / avg_mins) * 36
+        trb_36 = (df.get('TRB', pd.Series([0])).mean() / avg_mins) * 36
+        ast_36 = (df.get('AST', pd.Series([0])).mean() / avg_mins) * 36
+        fg3m_36 = (df.get('FG3M', pd.Series([0])).mean() / avg_mins) * 36
+        clusters = {"👑 Primary Playmaker (High USG)": [26.0, 6.0, 9.5, 2.5], "🦍 Paint Beast / Rim Runner": [17.0, 13.5, 2.0, 0.1], "🧬 Versatile Point-Forward": [21.0, 9.0, 6.0, 1.5], "🎯 3&D Wing / Spot-Up Shooter": [15.0, 5.0, 2.0, 3.8], "🛡️ Two-Way Connector": [13.0, 4.5, 5.5, 1.5]}
+        player_vec = [[pts_36, trb_36, ast_36, fg3m_36]]
+        best_match, min_dist = "Unknown", float('inf')
+        for name, centroid in clusters.items():
+            dist = euclidean_distances(player_vec, [centroid])[0][0]
+            if dist < min_dist: min_dist = dist; best_match = name
+        return best_match
+        
+    elif league == "NHL":
+        avg_mins = df['MINS'].mean()
+        if pd.isna(avg_mins) or avg_mins < 5: avg_mins = 15.0
+        # Calculate Per-60 metrics for NHL clustering
+        g_60 = (df.get('G', pd.Series([0])).mean() / avg_mins) * 60
+        a_60 = (df.get('A', pd.Series([0])).mean() / avg_mins) * 60
+        sog_60 = (df.get('SOG', pd.Series([0])).mean() / avg_mins) * 60
+        clusters = {"🎯 Volume Sniper": [1.5, 0.8, 10.0], "🧬 Playmaking Center": [0.6, 2.0, 6.0], "🛡️ Two-Way Defenseman": [0.2, 1.0, 4.0], "🔥 Offensive Dynamo": [1.2, 1.8, 8.5]}
+        player_vec = [[g_60, a_60, sog_60]]
+        best_match, min_dist = "Unknown Profile", float('inf')
+        for name, centroid in clusters.items():
+            dist = euclidean_distances(player_vec, [centroid])[0][0]
+            if dist < min_dist: min_dist = dist; best_match = name
+        return best_match
+        
+    elif league == "MLB":
+        # Pitcher vs Hitter Auto-Detection
+        if 'K' in df.columns and df['K'].mean() > 2.0:
+            k_rate = df['K'].mean()
+            if k_rate >= 5.5: return "🔥 Strikeout Artist"
+            else: return "🛡️ Groundball/Control Pitcher"
+        else:
+            hr_rate = df.get('HR', pd.Series([0])).mean()
+            h_rate = df.get('H', pd.Series([0])).mean()
+            if hr_rate >= 0.20: return "💥 Power Slugger"
+            elif h_rate >= 1.0: return "🏃 Contact Specialist"
+            else: return "⚖️ Utility Hitter"
+            
+    return "Unknown Profile"
 
 def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None):
     if league == "NBA":
@@ -674,17 +706,32 @@ def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None):
             if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]: return 0.90, "Elite Defense (-10%)"
             elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]: return 1.10, "Weak Defense (+10%)"
             return 1.00, "Average Def (Neutral)"
+            
     elif league == "MLB":
-        if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]: return 0.90, "Elite Pitching (-10%)"
-        elif opp in ["COL", "OAK", "CHW", "KC", "WSH"]: return 1.10, "Weak Pitching (+10%)"
-        return 1.00, "Average Pitching (Neutral)"
-    else:
+        mod_val, mod_desc = 1.0, "Average Pitching (Neutral)"
+        if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]: 
+            mod_val = 0.90
+            mod_desc = "Elite Pitching (-10%). "
+            if "Slugger" in archetype: mod_desc += "🛑 Fade: Tough matchups for power."
+        elif opp in ["COL", "OAK", "CHW", "KC", "WSH"]: 
+            mod_val = 1.10
+            mod_desc = "Weak Pitching (+10%). "
+            if "Slugger" in archetype or "Strikeout" in archetype: mod_desc += "🚨 Exploit: Highly favorable matchup."
+        return mod_val, mod_desc
+        
+    else: # NHL
         defs = bad_defs if bad_defs is not None else get_nhl_bad_defenses()
+        mod_val, mod_desc = 1.0, "Average Def (Neutral)"
         if opp in defs:
             sog_allowed = defs[opp]
-            return 1.10, f"Swiss Cheese Def (+10%, {sog_allowed} SOG/G allowed)"
-        if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"]: return 0.90, "Elite Goalie (-10%)"
-        return 1.00, "Average Def (Neutral)"
+            mod_val = 1.10
+            mod_desc = f"Swiss Cheese Def (+10%, {sog_allowed} SOG/G). "
+            if "Sniper" in archetype or "Dynamo" in archetype: mod_desc += "🚨 Exploit: High shot volume expected."
+        elif opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"]: 
+            mod_val = 0.90
+            mod_desc = "Elite Goalie/Def (-10%). "
+            if "Sniper" in archetype: mod_desc += "🛑 Fade: Elite shot suppression."
+        return mod_val, mod_desc
 
 def get_fatigue_modifier(rest_status):
     if "B2B" in rest_status: return 0.95, "Tired Legs (-5%)"
@@ -1774,13 +1821,25 @@ with top_bar_c1: st.markdown(f"### 🏦 Liquid Bankroll: <span style='color:#00E
 with top_bar_c2:
     if st.button("🧹 Clear Skynet Cache", use_container_width=True): st.cache_data.clear(); st.rerun()
 
-t_nba, t_nhl, t_mlb, t_parlay, t_roi, t_wallet = st.tabs(["🏀 NBA", "🏒 NHL", "⚾ MLB", "🎟️ Parlay Builder", "🏦 ROI Ledger", "💵 Wallet"])
+t_nba, t_nhl, t_mlb, t_nfl, t_parlay, t_roi, t_wallet = st.tabs(["🏀 NBA", "🏒 NHL", "⚾ MLB", "🏈 NFL", "🎟️ Parlay Builder", "🏦 ROI Ledger", "💵 Wallet"])
 
 with t_nba: render_league_tab("NBA", get_nba_schedule)
 with t_nhl: render_league_tab("NHL", get_nhl_schedule)
 with t_mlb: render_league_tab("MLB", get_mlb_schedule)
 
+with t_nfl:
+    st.markdown("### 🏈 NFL Skynet Engine (Under Construction)")
+    st.info("The NFL Skynet Engine is currently offline for off-season maintenance. Training camps and pre-season models will boot up in August.")
+    st.markdown("""
+    <div style="background-color: #1e293b; border: 1px dashed #FFD700; border-radius: 8px; padding: 40px; text-align: center; margin-top: 20px;">
+        <div style="font-size: 50px; margin-bottom: 10px;">🚧</div>
+        <div style="font-size: 24px; font-weight: 900; color: #FFD700;">SYSTEM SUSPENDED UNTIL KICKOFF</div>
+        <div style="color: #94a3b8; margin-top: 10px;">Modules pending: Quarterback Archetypes, WR/CB Matchup Data, Weather Modifiers, and Rushing Expected Volume...</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 with t_parlay:
+# (Leave the rest of the t_parlay and t_roi blocks exactly as they are below this)
     st.markdown("## 🎟️ Syndicate Parlay Builder")
     ledger_df = load_ledger()
     pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
