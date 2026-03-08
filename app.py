@@ -1958,7 +1958,7 @@ with t_parlay:
 
 with t_roi:
     roi_col1, roi_col2 = st.columns([4, 1])
-    with roi_col1: st.markdown("### 🏦 The Bankroll (Single Units)")
+    with roi_col1: st.markdown("### 🏦 Syndicate Analytics & ROI")
     with roi_col2:
         if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
             with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
@@ -1966,43 +1966,98 @@ with t_roi:
 
     ledger_df = load_ledger()
     if not ledger_df.empty:
-        graded_df = ledger_df[ledger_df['Result'].isin(['Win', 'Loss'])]
-        wins, losses, profit = len(graded_df[graded_df['Result'] == 'Win']), len(graded_df[graded_df['Result'] == 'Loss']), 0.0
-        for _, row in graded_df.iterrows():
-            o = pd.to_numeric(row['Odds'], errors='coerce')
-            profit += ((100 / (abs(o)/100)) if o < 0 else o) if row['Result'] == 'Win' else -100
+        graded_df = ledger_df[ledger_df['Result'].isin(['Win', 'Loss'])].copy()
+        
+        # 🎛️ FILTERS
+        f_c1, f_c2 = st.columns(2)
+        league_filter = f_c1.selectbox("League Filter", ["All", "NBA", "NHL", "MLB"], label_visibility="collapsed")
+        time_filter = f_c2.selectbox("Time Filter", ["All Time", "Last 7 Days", "Last 30 Days"], label_visibility="collapsed")
 
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Graded Picks", f"{wins + losses}")
-        m2.metric("Win Rate", f"{(wins / (wins + losses) * 100) if (wins + losses) > 0 else 0.0:.1f}%")
-        m3.metric("Net Profit (from $100 bets)", f"${profit:+.2f}")
-        m4.metric("ROI (%)", f"{(profit / ((wins + losses) * 100) * 100) if (wins + losses) > 0 else 0.0:+.1f}%")
-
-        st.markdown("---")
-        st.markdown("#### 📈 Syndicate Performance Analytics")
-        if len(graded_df) > 1:
-            analytics_df = graded_df.copy()
-            analytics_df['Date_DT'] = pd.to_datetime(analytics_df['Date'])
-            analytics_df = analytics_df.sort_values('Date_DT')
+        if league_filter != "All": graded_df = graded_df[graded_df['League'] == league_filter]
+        if time_filter != "All Time":
+            graded_df['Date_DT'] = pd.to_datetime(graded_df['Date'])
+            cutoff = pd.to_datetime(datetime.now() - pd.Timedelta(days=7 if "7" in time_filter else 30))
+            graded_df = graded_df[graded_df['Date_DT'] >= cutoff]
+        
+        if graded_df.empty:
+            st.warning(f"No graded bets found for {league_filter} in {time_filter}.")
+        else:
+            # CALCULATE PROFIT
             def row_profit(r):
                 o_val = pd.to_numeric(r['Odds'], errors='coerce')
                 return ((100 / (abs(o_val)/100)) if o_val < 0 else o_val) if r['Result'] == 'Win' else -100.0
-            analytics_df['Profit_Per_Bet'] = analytics_df.apply(row_profit, axis=1)
-            analytics_df['Cumulative_Profit'] = analytics_df['Profit_Per_Bet'].cumsum()
-            ac1, ac2 = st.columns([2, 1])
+            graded_df['Profit_Per_Bet'] = graded_df.apply(row_profit, axis=1)
+            
+            wins = len(graded_df[graded_df['Result'] == 'Win'])
+            losses = len(graded_df[graded_df['Result'] == 'Loss'])
+            profit = graded_df['Profit_Per_Bet'].sum()
+
+            # TOP METRICS
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Total Graded Picks", f"{wins + losses}")
+            m2.metric("Win Rate", f"{(wins / (wins + losses) * 100) if (wins+losses) > 0 else 0.0:.1f}%")
+            m3.metric("Net Profit (1 Unit = $100)", f"${profit:+.2f}")
+            m4.metric("ROI (%)", f"{(profit / ((wins + losses) * 100) * 100) if (wins+losses) > 0 else 0.0:+.1f}%")
+            
+            st.markdown("---")
+            
+            # CHARTS & LEAK FINDER
+            graded_df['Date_DT'] = pd.to_datetime(graded_df['Date'])
+            graded_df = graded_df.sort_values('Date_DT')
+            graded_df['Cumulative_Profit'] = graded_df['Profit_Per_Bet'].cumsum()
+            
+            ac1, ac2 = st.columns([2, 1.2])
             with ac1:
-                st.caption("**Bankroll Trajectory (Cumulative Profit)**")
-                line_chart = alt.Chart(analytics_df).mark_area(line={'color':'#00E5FF'}, color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='#00E5FF', offset=0), alt.GradientStop(color='rgba(0, 229, 255, 0)', offset=1)], x1=1, x2=1, y1=1, y2=0)).encode(x=alt.X('Date_DT:T', title='Date'), y=alt.Y('Cumulative_Profit:Q', title='Net Profit ($)'), tooltip=[alt.Tooltip('Date:N'), alt.Tooltip('Player:N'), alt.Tooltip('Stat:N'), alt.Tooltip('Profit_Per_Bet:Q', title='Bet Result', format='+.2f'), alt.Tooltip('Cumulative_Profit:Q', title='Total Bankroll', format='+.2f')]).properties(height=260, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
+                st.markdown("#### 📈 Bankroll Trajectory")
+                line_chart = alt.Chart(graded_df).mark_area(
+                    line={'color':'#00E5FF'}, 
+                    color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='#00E5FF', offset=0), alt.GradientStop(color='rgba(0, 229, 255, 0)', offset=1)], x1=1, x2=1, y1=1, y2=0)
+                ).encode(
+                    x=alt.X('Date_DT:T', title='Date'), 
+                    y=alt.Y('Cumulative_Profit:Q', title='Net Profit ($)'), 
+                    tooltip=['Date:N', 'Player:N', 'Stat:N', alt.Tooltip('Profit_Per_Bet:Q', title='Bet Result', format='+.2f'), alt.Tooltip('Cumulative_Profit:Q', title='Total Bankroll', format='+.2f')]
+                ).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
                 st.altair_chart(line_chart, use_container_width=True)
+            
             with ac2:
-                st.caption("**The Leak Finder (Profit by Stat)**")
-                stat_profit = analytics_df.groupby('Stat')['Profit_Per_Bet'].sum().reset_index()
-                bar_chart = alt.Chart(stat_profit).mark_bar(cornerRadiusEnd=4).encode(y=alt.Y('Stat:N', sort='-x', title=None, axis=alt.Axis(labelLimit=120)), x=alt.X('Profit_Per_Bet:Q', title='Net Profit ($)'), color=alt.condition(alt.datum.Profit_Per_Bet > 0, alt.value('#00c853'), alt.value('#ff0055')), tooltip=[alt.Tooltip('Stat:N'), alt.Tooltip('Profit_Per_Bet:Q', title='Net Profit', format='+.2f')]).properties(height=260, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
-                st.altair_chart(bar_chart, use_container_width=True)
-        else:
-            st.info("🟣 Skynet requires at least 2 graded bets to generate the Performance Analytics dashboard. Keep feeding the machine!")
+                st.markdown("#### 🎯 The Leak Finder")
+                stat_profit = graded_df.groupby('Stat').agg(
+                    Net_Profit=('Profit_Per_Bet', 'sum'),
+                    Bets=('Result', 'count'),
+                    Wins=('Result', lambda x: (x == 'Win').sum())
+                ).reset_index()
+                stat_profit['Win_Rate'] = (stat_profit['Wins'] / stat_profit['Bets'] * 100).round(1)
+                
+                st.dataframe(
+                    stat_profit.sort_values('Net_Profit', ascending=False),
+                    column_config={
+                        "Stat": "Market",
+                        "Net_Profit": st.column_config.NumberColumn("Profit", format="$%.2f"),
+                        "Win_Rate": st.column_config.NumberColumn("Win %", format="%.1f%%"),
+                        "Bets": st.column_config.NumberColumn("Vol")
+                    },
+                    hide_index=True, use_container_width=True, height=280
+                )
+            
+            st.markdown("---")
+            
+            # PLAYER LEADERBOARD
+            st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
+            pc1, pc2 = st.columns(2)
+            player_profit = graded_df.groupby('Player')['Profit_Per_Bet'].sum().reset_index().sort_values('Profit_Per_Bet', ascending=False)
+            
+            with pc1:
+                st.caption("🏆 **Most Profitable Athletes**")
+                st.dataframe(player_profit.head(5), hide_index=True, use_container_width=True, column_config={"Player": "Athlete", "Profit_Per_Bet": st.column_config.NumberColumn("Net Profit", format="$%.2f")})
+            with pc2:
+                st.caption("🗑️ **The Blacklist (Biggest Losers)**")
+                st.dataframe(player_profit.tail(5).sort_values('Profit_Per_Bet', ascending=True), hide_index=True, use_container_width=True, column_config={"Player": "Athlete", "Profit_Per_Bet": st.column_config.NumberColumn("Net Loss", format="$%.2f")})
 
         st.markdown("---")
+        
+        # ═══════════════════════════════════════════════
+        # 🔬 LOSS PATTERN REPORT
+        # ═══════════════════════════════════════════════
         losses_with_actual = ledger_df[
             (ledger_df['Result'] == 'Loss') &
             (ledger_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
@@ -2202,7 +2257,6 @@ with t_roi:
                         st.success("Grade locked!")
                         time.sleep(1)
                         st.rerun()
-
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
