@@ -11,8 +11,6 @@ import base64
 import json
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
-import pytz
 from io import StringIO
 import streamlit.components.v1 as components
 from concurrent.futures import ThreadPoolExecutor
@@ -47,7 +45,6 @@ BOOK_LOGOS = {
     "Hard Rock": "https://www.google.com/s2/favicons?domain=hardrock.bet&sz=128",
     "bet365": "https://www.google.com/s2/favicons?domain=bet365.com&sz=128"
 }
-# ✅ OPT-3: Defined ONCE at module level — never recreated inside loops
 LEAGUE_SHIELDS = {
     "NBA": "https://a.espncdn.com/i/teamlogos/leagues/500/nba.png",
     "NHL": "https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png",
@@ -55,64 +52,10 @@ LEAGUE_SHIELDS = {
     "NFL": "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png"
 }
 
-def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
-    """Saves a permanent receipt of the live AI projection to Google Sheets."""
-    # 🚨 TEMPORARY: NO TRY/EXCEPT TO FORCE ERROR VISIBILITY
-    import gspread
-    from google.oauth2.service_account import Credentials
-    from datetime import datetime
-    import streamlit as st
-    
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-    client = gspread.authorize(creds)
-    
-    # Open the Sheet
-    sheet = client.open("B2TF_Vault").sheet1
-    
-    # Check for duplicates
-    existing_data = sheet.get_all_records()
-    game_date_str = str(game_date)[:10]
-    
-    is_duplicate = any(
-        str(r.get('Player', '')) == str(player_name) and 
-        str(r.get('Stat', '')) == str(stat_type) and 
-        str(r.get('Game_Date', '')) == game_date_str 
-        for r in existing_data
-    )
-    
-    if not is_duplicate:
-        new_row = [
-            player_name, 
-            stat_type, 
-            game_date_str, 
-            round(float(proj_value), 2), 
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ]
-        sheet.append_row(new_row)
-        st.toast(f"✅ GOOGLE API CONFIRMED WRITE!", icon="🔥")
-    else:
-        st.warning("⚠️ Vault skipped: Duplicate entry detected for today.")
-        
-def get_team_logo(league, abbr):
-    """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
-    abbr_upper = str(abbr).upper()
-    nba_map = {"GSW": "gs", "NOP": "no", "NYK": "ny", "SAS": "sa", "UTA": "utah"}
-    nhl_map = {"SJS": "sj", "TBL": "tb", "LAK": "la", "NJD": "nj", "WSH": "wsh"}
-    mlb_map = {"CHW": "cws"}
-    if league == "NBA":
-        espn_abbr = nba_map.get(abbr_upper, abbr_upper).lower()
-        return f"https://a.espncdn.com/i/teamlogos/nba/500/{espn_abbr}.png"
-    elif league == "NHL":
-        espn_abbr = nhl_map.get(abbr_upper, abbr_upper).lower()
-        return f"https://a.espncdn.com/i/teamlogos/nhl/500/{espn_abbr}.png"
-    elif league == "MLB":
-        espn_abbr = mlb_map.get(abbr_upper, abbr_upper).lower()
-        return f"https://a.espncdn.com/i/teamlogos/mlb/500/{espn_abbr}.png"
-    return ""
+# Pre-compiled maps for logo fetching
+NBA_LOGO_MAP = {"GSW": "gs", "NOP": "no", "NYK": "ny", "SAS": "sa", "UTA": "utah"}
+NHL_LOGO_MAP = {"SJS": "sj", "TBL": "tb", "LAK": "la", "NJD": "nj", "WSH": "wsh"}
+MLB_LOGO_MAP = {"CHW": "cws"}
 
 NBA_FULL_TO_ABBREV = {'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'Charlotte Hornets': 'CHA', 'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE', 'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN', 'Detroit Pistons': 'DET', 'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND', 'LA Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM', 'Miami Heat': 'MIA', 'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN', 'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK', 'Oklahoma City Thunder': 'OKC', 'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX', 'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS', 'Toronto Raptors': 'TOR', 'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS'}
 ODDS_MEGA_MAP = {**NBA_FULL_TO_ABBREV, "ANA": "Anaheim Ducks", "BUF": "Sabres", "CGY": "Flames", "CAR": "Hurricanes", "COL": "Avalanche", "CBJ": "Blue Jackets", "EDM": "Oilers", "FLA": "Panthers", "LAK": "Kings", "MTL": "Canadiens", "NSH": "Predators", "NJD": "Devils", "NYI": "Islanders", "NYR": "Rangers", "OTT": "Senators", "PIT": "Penguins", "SJS": "Sharks", "SEA": "Kraken", "STL": "Blues", "TBL": "Lightning", "VAN": "Canucks", "VGK": "Knights", "WPG": "Jets"}
@@ -123,18 +66,16 @@ S_MAP = {
     "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H",
     "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K",
     "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD",
-    "Blocks": "BLK", "Steals": "STL" # 🟢 Added Defense
+    "Blocks": "BLK", "Steals": "STL"
 }
 
-# 🎯 Minimum projection gap required to fire a bet (prevents coin-flip calls)
 PASS_THRESHOLDS = {
     "PTS": 1.5, "TRB": 0.8, "AST": 0.8, "FG3M": 0.6, "PRA": 2.0, "PR": 1.5,
     "PA": 1.5, "RA": 1.0, "SOG": 0.75, "G": 0.3, "A": 0.4, "H": 0.5,
     "HR": 0.25, "TB": 0.75, "K": 1.0, "ER": 0.5, "DD": 0.10, "TD": 0.08,
-    "MINS": 2.0, "PPP": 0.3, 
-    "BLK": 0.35, # 🟢 Low volume stat, requires smaller edge
-    "STL": 0.35  # 🟢 Low volume stat, requires smaller edge
+    "MINS": 2.0, "PPP": 0.3, "BLK": 0.35, "STL": 0.35 
 }
+
 # --- THEME CSS ---
 st.markdown("""
 <style>
@@ -161,10 +102,60 @@ div.stContainer { background-color: #1e293b; border-radius: 12px; border: 1px so
 # ==========================================
 def get_gc():
     try:
-        if "google_credentials" in st.secrets:
-            return gspread.service_account_from_dict(json.loads(st.secrets["google_credentials"]))
+        if "gcp_service_account" in st.secrets:
+            return gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     except Exception as e: st.error(f"🚨 Google Sheets Auth Error: {e}")
     return None
+
+def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
+    """Saves a permanent receipt of the live AI projection to Google Sheets."""
+    try:
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        client = gspread.authorize(creds)
+        
+        sheet = client.open("B2TF_Vault").sheet1
+        existing_data = sheet.get_all_records()
+        game_date_str = str(game_date)[:10]
+        
+        is_duplicate = any(
+            str(r.get('Player', '')) == str(player_name) and 
+            str(r.get('Stat', '')) == str(stat_type) and 
+            str(r.get('Game_Date', '')) == game_date_str 
+            for r in existing_data
+        )
+        
+        if not is_duplicate:
+            new_row = [
+                player_name, 
+                stat_type, 
+                game_date_str, 
+                round(float(proj_value), 2), 
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ]
+            sheet.append_row(new_row)
+            st.toast(f"✅ GOOGLE API CONFIRMED WRITE!", icon="🔥")
+        else:
+            st.warning("⚠️ Vault skipped: Duplicate entry detected for today.")
+    except Exception as e:
+        st.error(f"🚨 GOOGLE API ERROR: {e}")
+
+def get_team_logo(league, abbr):
+    """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
+    abbr_upper = str(abbr).upper()
+    if league == "NBA":
+        espn_abbr = NBA_LOGO_MAP.get(abbr_upper, abbr_upper).lower()
+        return f"https://a.espncdn.com/i/teamlogos/nba/500/{espn_abbr}.png"
+    elif league == "NHL":
+        espn_abbr = NHL_LOGO_MAP.get(abbr_upper, abbr_upper).lower()
+        return f"https://a.espncdn.com/i/teamlogos/nhl/500/{espn_abbr}.png"
+    elif league == "MLB":
+        espn_abbr = MLB_LOGO_MAP.get(abbr_upper, abbr_upper).lower()
+        return f"https://a.espncdn.com/i/teamlogos/mlb/500/{espn_abbr}.png"
+    return ""
 
 @st.cache_data(ttl=600)
 def load_sheet_df(sheet_name, expected_cols=None):
@@ -200,7 +191,6 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
         try: ws.update(values=[clean_row], range_name=f'A{next_row}', value_input_option="USER_ENTERED")
         except TypeError: ws.update(f'A{next_row}', [clean_row], value_input_option="USER_ENTERED")
         load_sheet_df.clear()
-        # ✅ OPT-9: Clear load_ledger cache when sheet is updated
         load_ledger.clear()
     except Exception as e:
         st.error(f"Failed to save to database: {e}")
@@ -218,14 +208,11 @@ def overwrite_sheet(sheet_name, df):
         try: ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
         except TypeError: ws.update('A1', new_values, value_input_option="USER_ENTERED")
         load_sheet_df.clear()
-        # ✅ OPT-9: Clear load_ledger cache when sheet is overwritten
         load_ledger.clear()
     except Exception as e: st.error(f"Failed to update database: {e}")
 
-# ✅ OPT-9: load_ledger now cached — filtering logic runs once per TTL, not every render
 @st.cache_data(ttl=120)
 def load_ledger():
-    # Updated column order to match the new Google Sheet layout
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"]
     df = load_sheet_df("ROI_Ledger", new_cols)
     df = df[df['Player'].astype(str).str.strip() != '']
@@ -256,16 +243,13 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
     }
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"]
     append_to_sheet("ROI_Ledger", row, new_cols)
+
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=10, max_win_rate=0.2):
-    """Returns set of stat types with provably bad ledger history for this league."""
     try:
         ledger = load_ledger()
         if ledger.empty: return set()
-        graded = ledger[
-            (ledger['Result'].isin(['Win', 'Loss'])) &
-            (ledger['League'] == league)
-        ]
+        graded = ledger[(ledger['Result'].isin(['Win', 'Loss'])) & (ledger['League'] == league)]
         suppress = set()
         for stat, group in graded.groupby('Stat'):
             if len(group) >= min_bets:
@@ -273,8 +257,7 @@ def get_suppressed_stats(league, min_bets=10, max_win_rate=0.2):
                 if win_rate <= max_win_rate:
                     suppress.add(stat)
         return suppress
-    except:
-        return set()
+    except: return set()
 
 def load_parlay_ledger():
     df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
@@ -297,8 +280,6 @@ def save_bankroll_transaction(book, trans_type, amount):
     row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
     append_to_sheet("Bankroll_Ledger", row, ["Date", "Sportsbook", "Type", "Amount"])
 
-# ✅ OPT-1: Cached — was called 3+ times per render with no caching
-# ✅ OPT-2: Vectorized pandas ops replace slow .iterrows() loops
 @st.cache_data(ttl=120)
 def get_wallet_breakdown():
     b_df, p_df = load_bankroll(), load_parlay_ledger()
@@ -309,16 +290,11 @@ def get_wallet_breakdown():
         b_df['Amount'] = pd.to_numeric(b_df['Amount'], errors='coerce').fillna(0)
         b_df['Sportsbook'] = b_df['Sportsbook'].astype(str).str.strip()
         b_df['Type'] = b_df['Type'].astype(str)
-
-        # ✅ OPT-2: Vectorized groupby instead of iterrows
         for bk, grp in b_df.groupby('Sportsbook'):
             total = grp['Amount'].sum()
-            if bk in book_balances:
-                book_balances[bk] += total
-            elif bk:
-                book_balances[bk] = total
+            if bk in book_balances: book_balances[bk] += total
+            elif bk: book_balances[bk] = total
 
-        # ✅ OPT-2: Vectorized category sums
         tot_dep = b_df[b_df['Type'].str.contains('Deposit', na=False)]['Amount'].sum()
         tot_wit = b_df[b_df['Type'].str.contains('Withdrawal', na=False)]['Amount'].abs().sum()
         tot_cas = b_df[b_df['Type'].str.contains('Casino', na=False)]['Amount'].sum()
@@ -328,7 +304,6 @@ def get_wallet_breakdown():
         p_df['Risk_num'] = pd.to_numeric(p_df['Risk'], errors='coerce')
         p_df['Is_Free'] = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
 
-        # ✅ OPT-2: Vectorized profit calculation
         def calc_profit(row):
             o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
             if pd.isna(o) or pd.isna(r): return 0.0, row.get('Sportsbook', '')
@@ -389,7 +364,6 @@ def auto_grade_ledger():
                 val, line_val = g_row.iloc[0][s_col], float(r['Line'])
                 if r['Vote'] == "OVER": df.at[idx, 'Result'] = 'Win' if val > line_val else 'Loss' if val < line_val else 'Push'
                 elif r['Vote'] == "UNDER": df.at[idx, 'Result'] = 'Win' if val < line_val else 'Loss' if val > line_val else 'Push'
-                # ✅ Store actual stat value permanently for autopsy analysis
                 df.at[idx, 'Actual'] = round(float(val), 2)
                 updated += 1
         except: continue
@@ -419,8 +393,7 @@ def search_nba_players(query):
             for p in r.json().get('data', []):
                 if p.get('team'):
                     full_name = f"{p['first_name']} {p['last_name']}"
-                    if query.lower() in full_name.lower():
-                        matches.append(f"{full_name} ({p['team']['abbreviation']})")
+                    if query.lower() in full_name.lower(): matches.append(f"{full_name} ({p['team']['abbreviation']})")
             return matches
     except: pass; return []
 
@@ -522,7 +495,7 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "Threes Made": "player_threes", "Hits": "batter_hits", "Home Runs": "batter_home_runs", 
         "Pitcher Strikeouts": "pitcher_strikeouts", "Double Double": "player_double_double", 
         "Triple Double": "player_triple_double", 
-        "Blocks": "player_blocks", "Steals": "player_steals" # 🟢 Added to Odds API Sync
+        "Blocks": "player_blocks", "Steals": "player_steals"
     }
     market = m_map.get(stat_type, "player_points")
     clean_name = player_label.split("(")[0].strip().lower()
@@ -684,7 +657,6 @@ def get_player_archetype(df, league):
     return best_match
 
 def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None):
-    """bad_defs: pre-fetched NHL bad defenses dict (pass to avoid repeated calls in loops)"""
     if league == "NBA":
         live_stats = get_live_nba_team_stats()
         if opp in live_stats:
@@ -707,7 +679,6 @@ def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None):
         elif opp in ["COL", "OAK", "CHW", "KC", "WSH"]: return 1.10, "Weak Pitching (+10%)"
         return 1.00, "Average Pitching (Neutral)"
     else:
-        # ✅ OPT-8: Accept pre-fetched bad_defs to avoid repeated API calls in tight loops
         defs = bad_defs if bad_defs is not None else get_nhl_bad_defenses()
         if opp in defs:
             sog_allowed = defs[opp]
@@ -738,22 +709,14 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
     return 5 * round(new_odds/5)
 
 def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
-    """
-    0–100 score rating the quality of a bet setup.
-    Higher = cleaner setup with more converging signals.
-    """
     score = 0
-    # Component 1: Win probability above 50% baseline (max 35 pts)
     score += min(35, max(0, (win_prob - 0.50) * 200))
-    # Component 2: Edge over implied odds (max 25 pts)
     score += min(25, max(0, edge_pct * 2.5))
-    # Component 3: Board agreement (max 25 pts)
     if board:
         votes = [m['vote'] for m in board]
         top_vote = max(set(votes), key=votes.count)
         agreement = votes.count(top_vote)
         score += {5: 25, 4: 15, 3: 5}.get(agreement, 0)
-    # Component 4: Projection conviction
     thresh = PASS_THRESHOLDS.get(S_MAP.get(stat_type, ""), 0.75)
     gap = abs(c_proj - line)
     if thresh > 0:
@@ -761,12 +724,9 @@ def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
     return max(0, min(100, int(score)))
 
 def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, tonight_def_mod):
-    # 🟢 SAFETY CLIP: Forcing a floor of 0 because Poisson crashes on negative numbers
     y = df_ml[s_col].fillna(0).clip(lower=0).values
 
-    # 🟢 1. FEATURE ENRICHMENT: Calculate Rest Days
     df_ml['Rest_Days'] = df_ml['ValidDate'].diff().dt.days.fillna(3.0).clip(0, 7)
-
     expected_mins = df_ml['MINS'].tail(5).mean()
     mins_std = df_ml['MINS'].tail(10).std()
     if pd.isna(mins_std) or mins_std == 0: mins_std = 2.0
@@ -780,24 +740,19 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         elif league == "NHL": expected_mins = np.clip(expected_mins, 10.0, 28.0)
         else: expected_mins = np.clip(expected_mins, 5.0, 42.0)
 
-    # 🟢 2. POISSON SETUP: Predicts raw count using Minutes and Time Index
     X_poi_train = df_ml[['MINS']].copy()
     X_poi_train['Trend'] = np.arange(len(df_ml))
 
-    # 🟢 3. RANDOM FOREST SETUP: Now sees Form + Context + Defense
     df_ml['Roll3'] = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
     X_rf_train = df_ml[['Roll3', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']].fillna(0).values
 
-    # 🟢 4. XGBOOST SETUP: Replaces old Gradient Boosting
     s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
     df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
     X_xgb_train = df_ml[['MINS', 'Dev']].fillna(0).values
 
-    # 🟢 5. BASELINE SETUP: HistGradientBoosting
     df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
     X_hgbr_train = df_ml[['EWMA', 'MINS']].fillna(0).values
 
-    # ⚡ PARALLEL TRAINING
     def train_poisson():
         return PoissonRegressor(alpha=1e-3, max_iter=500).fit(X_poi_train.values, y, sample_weight=weights)
     def train_rf():
@@ -814,10 +769,8 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
     except Exception:
         poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
 
-    # Format tonight's contextual inputs
     tonight_rest = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
 
-    # 🎯 GENERATE TONIGHT'S PROJECTIONS
     trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
     stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest, tonight_def_mod]])[0]
     con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
@@ -878,12 +831,6 @@ def apply_skynet(raw_vote, stat_type, league):
     except: pass
     return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
 
-# ✅ OPT-4: Skynet moved OUTSIDE the cached function.
-#    - Skynet result no longer gets frozen in the 300s ML cache
-#    - New graded bets immediately affect Skynet modifier on next render
-#    - df_hash and ledger_hash params added as cheap cache invalidation keys
-# ✅ OPT-6: df_hash param prevents re-hashing the entire DataFrame on every cache check
-
 @st.cache_data(show_spinner=False, ttl=300)
 def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash=""):
     df_ml = df.copy()
@@ -893,17 +840,12 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data", "#94a3b8"
 
     weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
-
-    # ✅ OPT-8: Pre-fetch bad_defs once here, pass to all defense modifier calls
     bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
-    # 🟢 1. DEFENSE MODIFIER & HISTORICAL MAPPING
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs)
-    
-    # Pre-calculate the defense modifier for EVERY game in the log
     unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
     df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
-    # 🟢 2. VENUE SPLIT MODIFIERS (Calculated inline to prevent NameErrors)
+    
     s_mean = df_ml[s_col].mean()
     if pd.isna(s_mean) or s_mean == 0:
         home_mod, away_mod, current_split_mod = 1.0, 1.0, 1.0
@@ -911,28 +853,19 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     else:
         home_mean = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
         away_mean = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
-        
         h_mod = (home_mean / s_mean) if pd.notna(home_mean) and len(df_ml[df_ml['Is_Home'] == 1]) > 0 else 1.0
         a_mod = (away_mean / s_mean) if pd.notna(away_mean) and len(df_ml[df_ml['Is_Home'] == 0]) > 0 else 1.0
-        
-        # Dampen extremes so a wild split doesn't break the projection
         home_mod = np.clip(1.0 + ((h_mod - 1.0) * 0.5), 0.8, 1.2)
         away_mod = np.clip(1.0 + ((a_mod - 1.0) * 0.5), 0.8, 1.2)
-        
         current_split_mod = home_mod if is_home_current == 1 else away_mod
         split_text = "Home" if is_home_current == 1 else "Away"
         split_desc = f"{split_text} Split: {current_split_mod:.2f}x production."
 
-    # 🟢 3. FATIGUE MODIFIERS (Calculated inline)
     rest_str = str(rest)
-    if "B2B" in rest_str:
-        fatigue_val, fatigue_desc = 0.90, "⚠️ B2B: Heavy legs expected (-10%)."
-    elif "3 in 4" in rest_str:
-        fatigue_val, fatigue_desc = 0.95, "⚠️ 3 in 4 Nights: Slight fatigue (-5%)."
-    elif "3+" in rest_str:
-        fatigue_val, fatigue_desc = 1.05, "🔋 3+ Days Rest: Fully rested (+5%)."
-    else:
-        fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
+    if "B2B" in rest_str: fatigue_val, fatigue_desc = 0.90, "⚠️ B2B: Heavy legs expected (-10%)."
+    elif "3 in 4" in rest_str: fatigue_val, fatigue_desc = 0.95, "⚠️ 3 in 4 Nights: Slight fatigue (-5%)."
+    elif "3+" in rest_str: fatigue_val, fatigue_desc = 1.05, "🔋 3+ Days Rest: Fully rested (+5%)."
+    else: fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
 
     trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std = build_models(
         df_ml, s_col, weights, league, is_home_current, rest, mod_val
@@ -942,20 +875,13 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25 and not ignore_blowout:
         is_blowout_risk = True
         expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
-        
-        # Calculate tonight's rest to feed into the Random Forest recalculation
         tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-        
-        # Recalculate using the NEW models and inputs
         trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-        # 🟢 Added mod_val to the rf.predict line so the Random Forest has all 5 inputs
         stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]])[0]
         con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
         
-    # 🟢 MATH FIX: The Random Forest (stat_proj) already knows the defense, venue, and rest internally!
-    # We only apply the external multipliers to the Poisson model (trend_proj).
     adjusted_trend = trend_proj * mod_val * fatigue_val * current_split_mod
     guru_proj = (adjusted_trend + stat_proj) / 2
     raw_consensus = (trend_proj + stat_proj + con_proj + base_proj + guru_proj) / 5
@@ -963,36 +889,25 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
     ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
 
-    SAMPLE_GATES = {
-        "NBA": {"min_games": 15, "min_recent": 5},
-        "NHL": {"min_games": 10, "min_recent": 3},
-        "MLB": {"min_games": 10, "min_recent": 4},
-    }
+    SAMPLE_GATES = {"NBA": {"min_games": 15, "min_recent": 5}, "NHL": {"min_games": 10, "min_recent": 3}, "MLB": {"min_games": 10, "min_recent": 4}}
     gate = SAMPLE_GATES.get(league, {"min_games": 10, "min_recent": 3})
     recent_games = int((df_ml['Days_Ago'] <= 30).sum()) if 'Days_Ago' in df_ml.columns else len(df_ml)
     low_sample_warning = ""
 
-    if len(df_ml) < gate["min_games"]:
-        low_sample_warning = f"⚠️ <b>THIN SAMPLE:</b> Only {len(df_ml)} career games found (need {gate['min_games']}). Confidence is reduced.<br>"
-    elif recent_games < gate["min_recent"]:
-        low_sample_warning = f"⚠️ <b>STALE DATA:</b> Only {recent_games} games in the last 30 days. Player may be returning from injury.<br>"
+    if len(df_ml) < gate["min_games"]: low_sample_warning = f"⚠️ <b>THIN SAMPLE:</b> Only {len(df_ml)} career games found (need {gate['min_games']}). Confidence is reduced.<br>"
+    elif recent_games < gate["min_recent"]: low_sample_warning = f"⚠️ <b>STALE DATA:</b> Only {recent_games} games in the last 30 days. Player may be returning from injury.<br>"
 
-    # 🟢 BUILD THE UI WARNING STRING
     vol_warning = ""
     if is_blowout_risk: vol_warning += f"🚨 BLOWOUT RISK: Matchup is highly lopsided. Slashed expected minutes.<br>"
     if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}.<br>"
     elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m).<br>"
     
     mod_desc = vol_warning + low_sample_warning + mod_desc
-
-    threshold = PASS_THRESHOLDS.get(s_col, 0.5) # Defaults to 0.5 if stat isn't listed
+    threshold = PASS_THRESHOLDS.get(s_col, 0.5)
 
     def get_raw_vote(p): return "OVER" if p >= line + threshold else ("UNDER" if p <= line - threshold else "PASS")
     raw_vote = get_raw_vote(raw_consensus)
-
-    # ✅ OPT-4: Return raw_vote so caller can apply fresh Skynet outside the cache
-    final_consensus = raw_consensus  # Skynet applied by caller after this returns
-
+    final_consensus = raw_consensus 
     def get_final_vote(p): return ("OVER", "#00c853") if p >= line + threshold else (("UNDER", "#d50000") if p <= line - threshold else ("PASS", "#94a3b8"))
     f_vote, f_color = get_final_vote(final_consensus)
 
@@ -1001,11 +916,8 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     xgb_hist = xgb.predict(X_xgb_train)
     hgbr_hist = hgbr.predict(X_hgbr_train)
 
-    # ✅ OPT-8: Pass pre-fetched bad_defs to avoid N repeated get_nhl_bad_defenses() calls
     hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
-    mods = df_ml['Opp_Def_Mod'].values  # We already built this column in Step 1!
-    
-    # Only scale the Poisson historicals, leave the RF historicals alone
+    mods = df_ml['Opp_Def_Mod'].values
     guru_hist = ((poi_hist * mods * 1.0 * hist_split_mods) + rf_hist) / 2
     df_ml['AI_Proj'] = (poi_hist + rf_hist + xgb_hist + hgbr_hist + guru_hist) / 5
 
@@ -1017,7 +929,6 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors Context and Volatility."}
     ]
 
-    # Return raw_vote and raw_consensus — Skynet modifier applied by caller
     return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, f_color
 
 @st.cache_data(ttl=3600)
@@ -1059,7 +970,6 @@ def run_nba_heaters(stat_choice="Points"):
                     if s_col == "PR": df['PR'] = df['PTS'] + df['TRB']
                     if s_col == "PA": df['PA'] = df['PTS'] + df['AST']
                     if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
-                    # ✅ OPT-4: Pass df_hash; Skynet=1.0 (heaters don't need live Skynet correction)
                     dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
                     _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
                         df, s_col, float(season_val), opp, "NBA", "Rested (1+ Days)", is_home, stat_choice, dh
@@ -1107,7 +1017,6 @@ def run_nhl_heaters(stat_choice="Points"):
                         df, s_col, float(season_val), opp, "NHL", "Rested (1+ Days)", is_home, stat_choice, dh
                     )
                     ai_proj = round(c_proj, 1)
-                # ✅ OPT-10: NHL/MLB use different APIs with higher rate limits — reduced from 0.5s
                 time.sleep(0.2)
                 heaters.append({"Player": player_name, "Team": team_abbr, "Season Stat": season_val, "AI Proj": ai_proj, "Status": matchup_status})
         if not heaters: return None, f"No top {stat_choice} leaders playing tonight."
@@ -1230,7 +1139,6 @@ def run_mlb_heaters(stat_choice="Hits"):
                     df, s_col, 0.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice, dh
                 )
                 ai_proj = round(c_proj, 2)
-            # ✅ OPT-10: MLB API has no rate limit issues — reduced from 0.5s
             time.sleep(0.2)
             heaters.append({"Player": player_name, "Team": team_abbr, "Season Stat": season_val, "AI Proj": ai_proj, "Status": matchup_status})
         if not heaters: return None, f"No top {stat_choice} leaders playing today."
@@ -1330,10 +1238,6 @@ def render_league_scanners(league_name):
                 column_config={"Team": st.column_config.TextColumn("🛡️ Target Team", width="medium"), "Opp": st.column_config.TextColumn("🎯 Weak Opponent", width="medium"), "Opp Status": st.column_config.TextColumn("🚨 Defense Metric", width="large")})
 
 def classify_miss(proj, line, actual, vote):
-    """
-    Dissects a losing bet into a miss type, distance, and likely cause.
-    Returns (miss_type, abs_miss, likely_cause, color)
-    """
     try:
         proj   = float(proj)
         line   = float(line)
@@ -1341,48 +1245,24 @@ def classify_miss(proj, line, actual, vote):
     except (ValueError, TypeError):
         return None, None, None, None
 
-    # Calculate how far the actual landed from the line
-    if vote == "OVER":
-        line_miss = line - actual      # positive number means we fell short by X units
-    elif vote == "UNDER":
-        line_miss = actual - line      # positive number means we went over by X units
-    else:
-        return None, None, None, None
+    if vote == "OVER": line_miss = line - actual
+    elif vote == "UNDER": line_miss = actual - line
+    else: return None, None, None, None
         
     abs_miss = abs(line_miss)
-    
-    # Calculate percentage miss based on the line to scale across different stats
     pct_miss = abs_miss / line if line > 0 else 0
 
-    # BAD BEAT: Missed the line by <= 10% OR by <= 1.5 raw units
     if pct_miss <= 0.10 or abs_miss <= 1.5:
         miss_type    = "😔 BAD BEAT"
-        likely_cause = (
-            "The model's direction was correct and the projection was close — "
-            "this was pure variance. No model adjustment needed. "
-            "At your recorded win probability, some losses are always expected."
-        )
+        likely_cause = "The model's direction was correct and the projection was close — this was pure variance. No model adjustment needed. At your recorded win probability, some losses are always expected."
         color = "#FFD700"
-
-    # MODEL MISS: Missed the line by 10-25% OR by <= 3.5 raw units
     elif pct_miss <= 0.25 or abs_miss <= 3.5:
         miss_type    = "⚠️ MODEL MISS"
-        likely_cause = (
-            "The projection was in the right ballpark but overconfident. "
-            "Check whether the opponent defense modifier or fatigue flag was active — "
-            "context modifiers may have been too aggressive on this setup."
-        )
+        likely_cause = "The projection was in the right ballpark but overconfident. Check whether the opponent defense modifier or fatigue flag was active — context modifiers may have been too aggressive on this setup."
         color = "#f59e0b"
-
-    # BLOWOUT: Missed by > 25% of the line and > 3.5 raw units
     else:
         miss_type    = "💥 BLOWOUT MISS"
-        likely_cause = (
-            "The actual result fell well outside the projected range. "
-            "Likely causes: in-game blowout (minutes slashed), undisclosed injury, "
-            "surprise lineup change, or an archetype mismatch vs this opponent. "
-            "If Setup Score was ELITE (75+), this warrants a manual review."
-        )
+        likely_cause = "The actual result fell well outside the projected range. Likely causes: in-game blowout (minutes slashed), undisclosed injury, surprise lineup change, or an archetype mismatch vs this opponent. If Setup Score was ELITE (75+), this warrants a manual review."
         color = "#ff0055"
 
     return miss_type, round(abs_miss, 1), likely_cause, color
@@ -1435,8 +1315,6 @@ def render_syndicate_board(league_key):
 
         with c2:
             game_lines = ["Moneyline", "Spread", "Total (O/U)"]
-            
-            # 🟢 Added "Blocks" and "Steals" to the NBA dropdown list
             player_props = ["Points", "Rebounds", "Assists", "Threes Made", "Blocks", "Steals", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Double Double", "Triple Double", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
             stat_type = st.selectbox("Stat / Market", game_lines + player_props, key=f"{lk}.stat")
             live_odds_display = st.empty()
@@ -1451,30 +1329,21 @@ def render_syndicate_board(league_key):
             elif f_odds is not None: live_odds_display.markdown(f'<div style="background-color: rgba(255, 215, 0, 0.1); border: 1px solid #FFD700; padding: 10px; border-radius: 6px; margin-top: 10px;"><div style="font-size: 11px; font-weight: 900; color: #FFD700; letter-spacing: 1px;">🟡 MARKET PARTIAL SYNC</div><div style="font-size: 16px; font-weight: bold; color: #fff;">{stat_type} Odds <span style="color: #94a3b8; font-size: 14px;">({"+"+str(f_odds) if f_odds>0 else f_odds})</span></div></div>', unsafe_allow_html=True)
             else: live_odds_display.caption(f"🟡 {msg}")
         
-            # 📈 LINE MOVEMENT TRACKER: Record opening line on first sync, compare on subsequent syncs
             opening_key = f"{lk}.opening_line.{player_name}.{stat_type}"
             if f_line is not None:
                 if opening_key not in st.session_state:
-                    # First time we've seen this line — store it as the opener
                     st.session_state[opening_key] = f_line
                 else:
                     opener = st.session_state[opening_key]
                     move = round(f_line - opener, 1)
                     if abs(move) >= 0.5:
                         if move > 0:
-                            st.session_state[f"{lk}.line_move_msg"] = (
-                                f"📈 Line moved UP {move:+.1f} (opened {opener}) — "
-                                f"sharp money may be on the OVER."
-                            )
+                            st.session_state[f"{lk}.line_move_msg"] = f"📈 Line moved UP {move:+.1f} (opened {opener}) — sharp money may be on the OVER."
                             st.session_state[f"{lk}.line_move_dir"] = "up"
                         else:
-                            st.session_state[f"{lk}.line_move_msg"] = (
-                                f"📉 Line moved DOWN {move:+.1f} (opened {opener}) — "
-                                f"sharp money may be on the UNDER."
-                            )
+                            st.session_state[f"{lk}.line_move_msg"] = f"📉 Line moved DOWN {move:+.1f} (opened {opener}) — sharp money may be on the UNDER."
                             st.session_state[f"{lk}.line_move_dir"] = "down"
                     else:
-                        # Movement too small to be meaningful — clear any old warning
                         st.session_state.pop(f"{lk}.line_move_msg", None)
                         st.session_state.pop(f"{lk}.line_move_dir", None)        
 
@@ -1520,23 +1389,16 @@ def render_syndicate_board(league_key):
             with m_c1: st.metric("Target Line", line if stat_type != "Moneyline" else "Win")
             with m_c2: st.metric("Odds", odds)
             
-            # Removed c_vote to fix NameError
             user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True)
 
             if st.button(f"🔒 Lock {league_key} Pick"):
-                # Removed literal "..." to fix SyntaxError
                 save_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50)
                 st.success(f"Team Pick Locked: {user_side}")
         else:
-            # 🛑 AUTO-SUPPRESSION: Block markets with a proven losing record
             suppressed = get_suppressed_stats(league_key)
             if stat_type in suppressed:
                 graded = load_ledger()
-                graded = graded[
-                    (graded['Result'].isin(['Win', 'Loss'])) &
-                    (graded['League'] == league_key) &
-                    (graded['Stat'] == stat_type)
-                ]
+                graded = graded[(graded['Result'].isin(['Win', 'Loss'])) & (graded['League'] == league_key) & (graded['Stat'] == stat_type)]
                 wins = len(graded[graded['Result'] == 'Win'])
                 total = len(graded)
                 wr = wins / total * 100 if total > 0 else 0
@@ -1570,8 +1432,6 @@ def render_syndicate_board(league_key):
                         df['DD'] = (tens >= 2).astype(int)
                         df['TD'] = (tens >= 3).astype(int)
 
-                # ✅ OPT-4: Compute df_hash and ledger_hash BEFORE calling run_ml_board
-                # This forces cache invalidation when player data or graded bets change
                 df_hash = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.2f}" if s_col in df.columns else str(len(df))
                 current_ledger = load_ledger()
                 graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
@@ -1581,11 +1441,9 @@ def render_syndicate_board(league_key):
                     df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
                 )
 
-                # ✅ OPT-4: Apply Skynet HERE (outside cache) so it always uses fresh ledger data
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
                 final_consensus = raw_consensus * skynet_data["mod"]
                 df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
-
 
                 dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
                 def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
@@ -1604,7 +1462,6 @@ def render_syndicate_board(league_key):
 
                     if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB', 'Double Double', 'Triple Double']:
                         lam_val = max(0.001, c_proj)
-                        # ✅ OPT-7: 5,000 samples is statistically identical to 10,000 at this precision
                         sims = np.random.poisson(lam=lam_val, size=5000)
                     else:
                         sims = np.random.normal(loc=c_proj, scale=residual_std, size=5000)
@@ -1647,11 +1504,9 @@ def render_syndicate_board(league_key):
                     rec_stake = rec_stake * min(memory_mult, 2.0)
                     memory_html = f"<div style='margin-top:12px; padding-top:10px; border-top:1px dashed #334155; font-size:12px; color:#FFD700; line-height:1.4;'>{'<br>'.join(mem_notes)}</div>" if mem_notes else ""
 
-                    # 🟢 CHECK THE SUPPRESSION BLACKLIST
                     suppressed_stats = get_suppressed_stats(league_key)
                     is_suppressed = stat_type in suppressed_stats
 
-                    # 🟢 THE +EV AI VETO PROTOCOL & SUMMARY BUILDER
                     if is_suppressed:
                         c_vote = "VETO"
                         c_color = "#ff0055"
@@ -1666,25 +1521,19 @@ def render_syndicate_board(league_key):
                         ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                         if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
                         elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
-                        
-                        # Add the Skynet Audit and Memory Loop to the bottom
                         ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
                         ai_summary_short += memory_html
 
-                    # 🟢 THE BOARD UNANIMITY FILTER (4/5 Required)
                     votes = [m['vote'] for m in board]
                     agree_count = max(votes.count("OVER"), votes.count("UNDER"), votes.count("PASS"))
                     is_near_unanimous = agree_count >= 4
                     consensus_pct = int((agree_count / len(board)) * 100)
 
                     if not is_near_unanimous and c_vote not in ["PASS", "VETO"]:
-                        # 1. Override the AI's final vote to PASS
                         c_vote = "PASS"
                         c_color = "#94a3b8"
                         rec_stake = 0.0
-                        # 2. Overwrite the Consensus Box text
                         ai_summary_short = f"⚠️ <b>SPLIT BOARD ({agree_count}/5):</b> The models are divided. Vegas has priced this line efficiently. Pass."
-                        # 3. Render Claude's warning banner
                         st.markdown(f"""
                         <div style="background-color: rgba(255,69,0,0.1); border: 1px solid #ff4500; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
                             <span style="font-size:16px; font-weight:900; color:#ff4500;">⚠️ SPLIT BOARD — NO BET RECOMMENDED</span>
@@ -1699,10 +1548,8 @@ def render_syndicate_board(league_key):
                     final_side = c_vote
                     
                     if c_vote not in ["PASS", "VETO"]:
-                        # 🟢 BUTTON GOES IN COL 2
                         with btn_c2:
                             lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
-                        # 🟢 RADIO GOES IN COL 3 (Right next to it!)
                         with btn_c3:
                             if stat_type in ["Double Double", "Triple Double"]:
                                 side_choice = st.radio("Side", ["YES", "NO"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side_dd", label_visibility="collapsed")
@@ -1711,7 +1558,6 @@ def render_syndicate_board(league_key):
                                 final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
 
                     if lock_pressed:
-                        # 🟢 AUTO-INVERT MATH
                         if final_side != c_vote:
                             auto_user_p = 1.0 - win_prob
                             user_edge_pct = (auto_user_p - implied_prob) * 100
@@ -1722,25 +1568,13 @@ def render_syndicate_board(league_key):
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p)
                         
-                        # 🟢 FIRE THE RECEIPT TO GOOGLE VAULT
                         today_date = datetime.now().strftime("%Y-%m-%d")
                         log_prediction_receipt(target_player, stat_type, c_proj, today_date)
                         
                         st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {auto_user_p*100:.1f}%)")
-                        st.toast(f"✅ Pre-Game Projection Locked in Google Vault!", icon="🔐")
                         
-                    ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
-                        
-                    ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
-                    if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
-                    elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
-                    ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
-
                     if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
-                        # 🟢 CALCULATE SCORE FOR THE BANNER
                         s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
-                        
-                        # 🟢 DETERMINE LABEL (Now includes the AI's actual vote)
                         if s_score >= 75: banner_label = f"🌟 ELITE AI TOP PICK: {c_vote} 🌟"
                         elif s_score >= 55: banner_label = f"✅ SOLID AI TOP PICK: {c_vote}"
                         else: banner_label = f"🎯 AI TOP PICK: {c_vote}"
@@ -1756,27 +1590,16 @@ def render_syndicate_board(league_key):
                         </div>
                         """, unsafe_allow_html=True)
 
-                    # 📈 LINE MOVEMENT WARNING DISPLAY
                     move_msg = st.session_state.get(f"{lk}.line_move_msg")
                     move_dir = st.session_state.get(f"{lk}.line_move_dir")
                     if move_msg and c_vote != "PASS":
-                        is_against = (
-                            (c_vote == "OVER" and move_dir == "down") or
-                            (c_vote == "UNDER" and move_dir == "up")
-                        )
+                        is_against = ((c_vote == "OVER" and move_dir == "down") or (c_vote == "UNDER" and move_dir == "up"))
                         border_color = "#ff4500" if is_against else "#00E676"
                         icon = "🚨" if is_against else "✅"
-                        severity = (
-                            "Sharp money appears to be on the **same side** as your pick. Good sign."
-                            if not is_against else
-                            "Sharp money appears to be **against** your pick. Proceed with caution or reduce stake."
-                        )
+                        severity = "Sharp money appears to be on the **same side** as your pick. Good sign." if not is_against else "Sharp money appears to be **against** your pick. Proceed with caution or reduce stake."
                         st.markdown(f"""
-                        <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {border_color};
-                             border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                            <span style="font-size:15px; font-weight:900; color:{border_color};">
-                                {icon} LINE MOVEMENT ALERT
-                            </span>
+                        <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {border_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                            <span style="font-size:15px; font-weight:900; color:{border_color};">{icon} LINE MOVEMENT ALERT</span>
                             <div style="font-size:13px; color:#f8fafc; margin-top:4px;">{move_msg}</div>
                             <div style="font-size:12px; color:#94a3b8; margin-top:4px;">{severity}</div>
                         </div>
@@ -1787,7 +1610,6 @@ def render_syndicate_board(league_key):
                         display_vote = c_vote
                         if stat_type in ["Double Double", "Triple Double"] and c_vote in ["OVER", "UNDER"]:
                             display_vote = "YES" if c_vote == "OVER" else "NO"
-                            
                         st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{display_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
                     with sum_c2:
                         if c_vote == "PASS" or edge_pct <= 0:
@@ -1796,7 +1618,6 @@ def render_syndicate_board(league_key):
                             st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #00E5FF; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#00E5FF; letter-spacing: 1px;">HALF-KELLY STAKE</div><div style="font-size:26px; font-weight:900; color:#00E5FF; margin: 4px 0px;">${rec_stake:.2f}</div><div style="font-size:12px; color:#94a3b8;">EV: ${ev_dollars:+.2f}/$100 | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
                     with sum_c3:
                         df_l10, df_l5 = df_with_ml.tail(10).reset_index(drop=True), df_with_ml.tail(5)
-                        # Changed > to >= so exact hits count as wins
                         l10_hits, l5_hits = int((df_l10[s_col] >= line).sum()), int((df_l5[s_col] >= line).sum())
                         hit_color = "#00c853" if l10_hits >= 6 else ("#d50000" if l10_hits <= 4 else "#FFD700")
                         st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">HIT RATE (OVER {line})</div><div style="font-size:22px; font-weight:900; color:{hit_color};">{l10_hits}/10</div><div style="font-size:13px;">L5: {l5_hits}/5</div></div>', unsafe_allow_html=True)
@@ -1817,29 +1638,19 @@ def render_syndicate_board(league_key):
                         df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
                         df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
                         
-                        # 🔴 RED DOT INJECTION: Fetch permanent receipts from Google Sheets
                         df_l10['Saved_Proj'] = np.nan
                         try:
-                            import gspread
-                            from google.oauth2.service_account import Credentials
-                            
-                            scope = [
-                                "https://www.googleapis.com/auth/spreadsheets",
-                                "https://www.googleapis.com/auth/drive"
-                            ]
+                            scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
                             creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
                             client = gspread.authorize(creds)
                             sheet = client.open("B2TF_Vault").sheet1
-                            
                             receipts = pd.DataFrame(sheet.get_all_records())
-                            
                             if not receipts.empty:
                                 receipts = receipts[(receipts['Player'] == target_player) & (receipts['Stat'] == stat_type)]
                                 if not receipts.empty:
                                     date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
                                     df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
                                     receipts_date_strs = pd.to_datetime(receipts['Game_Date']).dt.strftime('%Y-%m-%d')
-                                    
                                     receipt_dict = dict(zip(receipts_date_strs, receipts['Live_Proj']))
                                     df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
                         except Exception as e:
@@ -1848,21 +1659,9 @@ def render_syndicate_board(league_key):
                         bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
                             x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
                             y=alt.Y(s_col, title=stat_type),
-                            color=alt.condition(
-                                alt.datum[s_col] >= line, 
-                                alt.value('#00c853'), 
-                                alt.value('#d50000')
-                            ),
-                            stroke=alt.condition(
-                                alt.datum.Is_Target_Opp, 
-                                alt.value('#FFD700'), 
-                                alt.value('transparent')
-                            ),
-                            strokeWidth=alt.condition(
-                                alt.datum.Is_Target_Opp, 
-                                alt.value(3), 
-                                alt.value(0)
-                            ),
+                            color=alt.condition(alt.datum[s_col] >= line, alt.value('#00c853'), alt.value('#d50000')),
+                            stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
+                            strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
                             tooltip=[
                                 alt.Tooltip('ShortDate', title='Date'), 
                                 alt.Tooltip('Matchup_Formatted', title='Opponent'), 
@@ -1876,17 +1675,12 @@ def render_syndicate_board(league_key):
                         vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
                         ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
                         
-                        # 🔴 RED DOT LAYER: Plots the pre-game stamp if it exists
                         red_dots = alt.Chart(df_l10).mark_circle(color='#ff0055', size=150, opacity=1).encode(
                             x=alt.X('Matchup_Label', sort=None),
                             y=alt.Y('Saved_Proj')
-                        ).transform_filter(
-                            "isValid(datum.Saved_Proj)" # Only draw a dot if we have a saved receipt
-                        )
+                        ).transform_filter("isValid(datum.Saved_Proj)")
 
                         text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
-                        
-                        # Layer it all together (+ red_dots)
                         final_chart = (bars + vegas_rule + ai_line + red_dots + text)
                         
                         st.altair_chart(final_chart.configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
@@ -1918,14 +1712,12 @@ def render_syndicate_board(league_key):
                                 opp_win_pct = (opp_hits / opp_total) * 100
                                 h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
                                 st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
-
                             elif opp_total >= 2:
                                 opp_hits = int((df_opp[s_col] >= line).sum())
                                 opp_win_pct = (opp_hits / opp_total) * 100
                                 h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
                                 st.markdown(f"<div style='font-size:18px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:12px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
                                 st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
-
                             else:
                                 st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
                             
@@ -2059,7 +1851,6 @@ with t_parlay:
 
         st.markdown("---")
         
-        # 🟢 THE NEW TOP-LEVEL HEADER & SAVE BUTTON
         header_c1, header_c2 = st.columns([3, 1])
         with header_c1:
             st.markdown("#### 🎫 Your Live / Parlay Slips")
@@ -2081,7 +1872,6 @@ with t_parlay:
                 else:
                     st.info("No new grades to save.")
 
-        # Render the slips below the button
         for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
             orig_idx = row['index']
             odds_raw = pd.to_numeric(row['Odds'], errors='coerce')
@@ -2154,9 +1944,6 @@ with t_roi:
             st.info("🟣 Skynet requires at least 2 graded bets to generate the Performance Analytics dashboard. Keep feeding the machine!")
 
         st.markdown("---")
-        # ═══════════════════════════════════════════════
-        # 🔬 LOSS PATTERN REPORT
-        # ═══════════════════════════════════════════════
         losses_with_actual = ledger_df[
             (ledger_df['Result'] == 'Loss') &
             (ledger_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
@@ -2165,7 +1952,6 @@ with t_roi:
         if len(losses_with_actual) >= 3:
             with st.expander(f"🔬 Loss Pattern Report  ({len(losses_with_actual)} analysed losses)", expanded=False):
 
-                # Classify every loss
                 miss_types = []
                 for _, lr in losses_with_actual.iterrows():
                     mt, dist, _, _ = classify_miss(
@@ -2184,86 +1970,40 @@ with t_roi:
                 model_miss = [m for m in miss_types if "MODEL"     in m['type']]
                 blowouts   = [m for m in miss_types if "BLOWOUT"   in m['type']]
 
-                # ── Top-line metrics
                 pr1, pr2, pr3 = st.columns(3)
-                pr1.metric(
-                    "😔 Bad Beats",
-                    f"{len(bad_beats)}/{total}",
-                    f"{len(bad_beats)/total*100:.0f}% of losses",
-                    delta_color="off"
-                )
-                pr2.metric(
-                    "⚠️ Model Misses",
-                    f"{len(model_miss)}/{total}",
-                    f"{len(model_miss)/total*100:.0f}% of losses",
-                    delta_color="off"
-                )
-                pr3.metric(
-                    "💥 Blowout Misses",
-                    f"{len(blowouts)}/{total}",
-                    f"{len(blowouts)/total*100:.0f}% of losses",
-                    delta_color="off"
-                )
-
+                pr1.metric("😔 Bad Beats", f"{len(bad_beats)}/{total}", f"{len(bad_beats)/total*100:.0f}% of losses", delta_color="off")
+                pr2.metric("⚠️ Model Misses", f"{len(model_miss)}/{total}", f"{len(model_miss)/total*100:.0f}% of losses", delta_color="off")
+                pr3.metric("💥 Blowout Misses", f"{len(blowouts)}/{total}", f"{len(blowouts)/total*100:.0f}% of losses", delta_color="off")
                 st.markdown("---")
 
-                # ── Interpretation guidance
                 if total >= 5:
                     bad_beat_rate  = len(bad_beats)  / total
                     blowout_rate   = len(blowouts)   / total
 
                     if bad_beat_rate >= 0.50:
-                        st.success(
-                            "✅ **Your model is working.** Over half your losses are bad beats — "
-                            "the direction was right and you ran into variance. "
-                            "Increase volume on high-conviction setups rather than changing the model."
-                        )
+                        st.success("✅ **Your model is working.** Over half your losses are bad beats — the direction was right and you ran into variance. Increase volume on high-conviction setups rather than changing the model.")
                     if blowout_rate >= 0.35:
-                        # Find which stat type blowouts cluster on
                         blowout_stats = pd.Series([m['stat'] for m in blowouts]).value_counts()
                         top_blowout_stat = blowout_stats.index[0] if not blowout_stats.empty else "Unknown"
-                        st.warning(
-                            f"⚠️ **High blowout rate ({blowout_rate*100:.0f}%).** "
-                            f"Most blowout misses cluster on **{top_blowout_stat}**. "
-                            f"This suggests a model blind spot — likely minute volatility or lineup changes "
-                            f"that the archetype engine isn't catching. Consider raising the edge threshold "
-                            f"for this stat type in `PASS_THRESHOLDS`."
-                        )
+                        st.warning(f"⚠️ **High blowout rate ({blowout_rate*100:.0f}%).** Most blowout misses cluster on **{top_blowout_stat}**. This suggests a model blind spot — likely minute volatility or lineup changes that the archetype engine isn't catching. Consider raising the edge threshold for this stat type in `PASS_THRESHOLDS`.")
 
-                # ── High Setup Score losses (the most instructive ones)
                 try:
-                    elite_losses = [
-                        m for m in miss_types
-                        if int(float(m.get('score', 0) or 0)) >= 70
-                    ]
+                    elite_losses = [m for m in miss_types if int(float(m.get('score', 0) or 0)) >= 70]
                     if elite_losses:
                         el_blowouts = [m for m in elite_losses if "BLOWOUT" in m['type']]
-                        st.markdown(
-                            f"**🎯 High-Score Losses (Setup ≥ 70):** "
-                            f"{len(elite_losses)} bet(s) with SOLID/ELITE scores still lost. "
-                            + (
-                                f"**{len(el_blowouts)} were blowout misses** — "
-                                f"investigate these manually for lineup/injury patterns."
-                                if el_blowouts else
-                                "Most were bad beats or tight misses — expected at this confidence level."
-                            )
-                        )
+                        st.markdown(f"**🎯 High-Score Losses (Setup ≥ 70):** {len(elite_losses)} bet(s) with SOLID/ELITE scores still lost. " + (f"**{len(el_blowouts)} were blowout misses** — investigate these manually for lineup/injury patterns." if el_blowouts else "Most were bad beats or tight misses — expected at this confidence level."))
                 except: pass
 
-                # ── Worst performing stat types from losses
                 if miss_types:
                     loss_by_stat = pd.Series([m['stat'] for m in miss_types]).value_counts()
                     if not loss_by_stat.empty:
                         st.markdown("**📉 Most Frequent Loss Markets:**")
                         for stat_name, cnt in loss_by_stat.head(3).items():
                             pct = cnt / total * 100
-                            st.markdown(
-                                f"&nbsp;&nbsp;• **{stat_name}**: {cnt} losses ({pct:.0f}% of all losses)",
-                                unsafe_allow_html=True
-                            )
+                            st.markdown(f"&nbsp;&nbsp;• **{stat_name}**: {cnt} losses ({pct:.0f}% of all losses)", unsafe_allow_html=True)
+                            
         st.markdown("#### 🎫 Your Bet Slips")
 
-        # ✅ OPT-5: Paginate ROI slips — rendering 50+ st.markdown blocks is extremely slow
         ROI_PAGE_SIZE = 25
         total_slips = len(ledger_df)
         slips_to_render = ledger_df.reset_index().iloc[::-1].head(ROI_PAGE_SIZE)
@@ -2290,25 +2030,16 @@ with t_roi:
             is_boosted = str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True
             boost_html = '<span style="color: #f59e0b; font-size: 10px; font-weight: 900; letter-spacing: 1px;">🚀 BOOSTED</span> &nbsp;' if is_boosted else ''
 
-            # 🟢 NEW SETUP SCORE HTML
             raw_score = row.get('Setup_Score', 0)
             try: setup_score_val = int(float(raw_score))
             except: setup_score_val = 0
 
-            if setup_score_val >= 75:
-                score_color, score_label = "#00E676", "ELITE"
-            elif setup_score_val >= 55:
-                score_color, score_label = "#FFD700", "SOLID"
-            elif setup_score_val >= 35:
-                score_color, score_label = "#f59e0b", "MARGINAL"
-            else:
-                score_color, score_label = "#94a3b8", "WEAK"
+            if setup_score_val >= 75: score_color, score_label = "#00E676", "ELITE"
+            elif setup_score_val >= 55: score_color, score_label = "#FFD700", "SOLID"
+            elif setup_score_val >= 35: score_color, score_label = "#f59e0b", "MARGINAL"
+            else: score_color, score_label = "#94a3b8", "WEAK"
 
-            score_html = (
-                f"<span style='color:{score_color}; font-weight:900;'>"
-                f"⚡ {setup_score_val}/100</span> "
-                f"<span style='color:{score_color}; font-size:10px; font-weight:bold;'>{score_label}</span>"
-            ) if setup_score_val > 0 else ""
+            score_html = (f"<span style='color:{score_color}; font-weight:900;'>⚡ {setup_score_val}/100</span> <span style='color:{score_color}; font-size:10px; font-weight:bold;'>{score_label}</span>") if setup_score_val > 0 else ""
             
             if stat in ["Moneyline", "Spread", "Total (O/U)"]:
                 market_html = f"<b>{player}</b> ({stat} {line})"
@@ -2317,32 +2048,23 @@ with t_roi:
                 market_html = f"<b>{player}</b> ({stat} {vote} {line})"
                 proj_html = f"🤖 AI Proj: <span style='color: #00E5FF; font-weight: bold;'>{proj}</span>"
 
-            # 🟢 DYNAMIC LAYOUT: Give the Autopsy card room if it exists
             actual_raw = str(row.get('Actual', '')).strip()
             has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
             
-            if has_autopsy:
-                # Widens the right column significantly to fit the full rich Autopsy breakdown
-                sc1, sc2 = st.columns([2.4, 1.6]) 
-            else:
-                # Normal layout for Pending/Wins
-                sc1, sc2 = st.columns([4, 1])     
+            if has_autopsy: sc1, sc2 = st.columns([2.4, 1.6]) 
+            else: sc1, sc2 = st.columns([4, 1])     
 
             shield_url = LEAGUE_SHIELDS.get(league, "")
             league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
 
             with sc1:
-                # 🟢 SAFE PARSER FOR LEGACY BETS
                 raw_ai = row.get('Win_Prob', 0)
                 raw_user = row.get('User_Prob', '')
-                
                 try: ai_prob_str = f"{float(raw_ai if str(raw_ai).strip() != '' else 0)*100:.1f}%"
                 except: ai_prob_str = "N/A"
-                
                 try: user_prob_str = f"{float(raw_user if str(raw_user).strip() != '' else raw_ai)*100:.1f}%"
                 except: user_prob_str = "N/A"
 
-                # MAIN BET SLIP
                 st.markdown(f"""
                 <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px; height: 90%;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
@@ -2364,32 +2086,21 @@ with t_roi:
                 """, unsafe_allow_html=True)
                 
             with sc2:
-                # 🔬 FULL AUTOPSY CARD (SIDE-BY-SIDE)
                 if has_autopsy:
-                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(
-                        row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', '')
-                    )
+                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''))
                     if miss_type:
                         proj_val = row.get('Proj', 'N/A')
                         line_val = row.get('Line', 'N/A')
-                        
                         try: autopsy_score_val = int(float(row.get('Setup_Score', 0)))
                         except: autopsy_score_val = 0
                             
-                        autopsy_score_label = (
-                            "ELITE"     if autopsy_score_val >= 75 else
-                            "SOLID"     if autopsy_score_val >= 55 else
-                            "MARGINAL"  if autopsy_score_val >= 35 else
-                            "WEAK"
-                        )
-                        
+                        autopsy_score_label = ("ELITE" if autopsy_score_val >= 75 else "SOLID" if autopsy_score_val >= 55 else "MARGINAL"  if autopsy_score_val >= 35 else "WEAK")
                         try: 
                             prob_val = float(row.get('Win_Prob', 0))
                             prob_str = f"{prob_val * 100:.1f}%" if prob_val <= 1.0 else f"{prob_val:.1f}%"
                         except: 
                             prob_str = "N/A"
 
-                        # Using safe parenthesis concatenation to prevent markdown indentation bugs
                         autopsy_html = (
                             f'<div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.4);">'
                             f'<div style="font-size: 13px; font-weight: 900; color: {miss_color}; margin-bottom: 10px; letter-spacing: 0.5px; display: flex; justify-content: space-between;">'
@@ -2414,10 +2125,8 @@ with t_roi:
                 else:
                     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
                     
-                # RENDER THE GRADE DROPDOWN
                 opts = ["Pending", "Win", "Loss"]
-                if status == "Push": 
-                    opts.append("Push")
+                if status == "Push": opts.append("Push")
                     
                 start_idx = opts.index(status) if status in opts else 0
                 new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
