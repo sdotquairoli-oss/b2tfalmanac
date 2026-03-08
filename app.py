@@ -1591,9 +1591,9 @@ def render_syndicate_board(league_key):
                 else:
                     df_with_ml['Residual'] = df_with_ml[s_col] - df_with_ml['AI_Proj']
                     residual_std = df_with_ml['Residual'].std()
-                    if pd.isna(residual_std) or residual_std == 0:
+                    if np.isnan(residual_std) or residual_std == 0:
                         residual_std = df_with_ml[s_col].std()
-                        if pd.isna(residual_std) or residual_std == 0: residual_std = 1.0
+                        if np.isnan(residual_std) or residual_std == 0: residual_std = 1.0
 
                     if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB', 'Double Double', 'Triple Double']:
                         lam_val = max(0.001, c_proj)
