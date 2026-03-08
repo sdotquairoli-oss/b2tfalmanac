@@ -57,42 +57,45 @@ LEAGUE_SHIELDS = {
 
 def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
     """Saves a permanent receipt of the live AI projection to Google Sheets."""
-    try:
-        # 1. Setup Credentials from Streamlit Secrets
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
+    # 🚨 TEMPORARY: NO TRY/EXCEPT TO FORCE ERROR VISIBILITY
+    import gspread
+    from google.oauth2.service_account import Credentials
+    from datetime import datetime
+    import streamlit as st
+    
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+    client = gspread.authorize(creds)
+    
+    # Open the Sheet
+    sheet = client.open("B2TF_Vault").sheet1
+    
+    # Check for duplicates
+    existing_data = sheet.get_all_records()
+    game_date_str = str(game_date)[:10]
+    
+    is_duplicate = any(
+        str(r.get('Player', '')) == str(player_name) and 
+        str(r.get('Stat', '')) == str(stat_type) and 
+        str(r.get('Game_Date', '')) == game_date_str 
+        for r in existing_data
+    )
+    
+    if not is_duplicate:
+        new_row = [
+            player_name, 
+            stat_type, 
+            game_date_str, 
+            round(float(proj_value), 2), 
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ]
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-        client = gspread.authorize(creds)
-        
-        # 2. Open the Sheet (Ensure your Google Sheet is named exactly "B2TF_Vault")
-        sheet = client.open("B2TF_Vault").sheet1
-        
-        # 3. Check for duplicates to prevent double-logging
-        existing_data = sheet.get_all_records()
-        game_date_str = str(game_date)[:10]
-        
-        is_duplicate = any(
-            str(r.get('Player', '')) == str(player_name) and 
-            str(r.get('Stat', '')) == str(stat_type) and 
-            str(r.get('Game_Date', '')) == game_date_str 
-            for r in existing_data
-        )
-        
-        if not is_duplicate:
-            new_row = [
-                player_name, 
-                stat_type, 
-                game_date_str, 
-                round(float(proj_value), 2), 
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ]
-            sheet.append_row(new_row)
-    except Exception as e:
-        import streamlit as st
-        st.error(f"🚨 Vault Sync Error: {e}") # This will print the exact Google error to your screen!
-        st.toast(f"✅ Vault Saved for {player_name}!", icon="🔐")
+        sheet.append_row(new_row)
+        st.toast(f"✅ GOOGLE API CONFIRMED WRITE!", icon="🔥")
+    else:
+        st.warning("⚠️ Vault skipped: Duplicate entry detected for today.")
         
 def get_team_logo(league, abbr):
     """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
