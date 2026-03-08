@@ -1575,11 +1575,11 @@ def render_syndicate_board(league_key):
                 df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
 
                 # 🟢 SAVE THE RECEIPT: Log the pre-game stamp if today is game day
-                    if len(df_with_ml) > 0:
-                        player_name = df_with_ml['Player'].iloc[0] if 'Player' in df_with_ml.columns else df.name
-                        # Assuming the last row or today's date is passed here. If you have a specific game date variable, use it.
-                        today_date = datetime.now().strftime("%Y-%m-%d") 
-                        log_prediction_receipt(player_name, stat_type, final_consensus, today_date)
+                if len(df_with_ml) > 0:
+                    player_name = df_with_ml['Player'].iloc[0] if 'Player' in df_with_ml.columns else df.name
+                    # Assuming the last row or today's date is passed here. If you have a specific game date variable, use it.
+                    today_date = datetime.now().strftime("%Y-%m-%d") 
+                    log_prediction_receipt(player_name, stat_type, final_consensus, today_date)
 
                 dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
                 def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
