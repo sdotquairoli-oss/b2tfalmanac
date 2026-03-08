@@ -92,6 +92,7 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
     except Exception as e:
         import streamlit as st
         st.error(f"🚨 Vault Sync Error: {e}") # This will print the exact Google error to your screen!
+        st.toast(f"✅ Vault Saved for {player_name}!", icon="🔐")
         
 def get_team_logo(league, abbr):
     """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
