@@ -1386,30 +1386,6 @@ def render_syndicate_board(league_key):
     placeholder_sync = top_c1.empty()
     placeholder_home = top_c2.empty()
 
-    # 🕵️ TEMPORARY VAULT VIEWER (Moved to bottom to ensure target_player exists)
-    st.markdown("---")
-    with st.expander("🔐 View Prediction Vault (Live Receipts)", expanded=False):
-        import os
-        import pandas as pd
-        if os.path.exists("saved_projections.csv"):
-            vault_df = pd.read_csv("saved_projections.csv")
-            st.dataframe(vault_df, use_container_width=True)
-            
-            # Download button
-            with open("saved_projections.csv", "rb") as file:
-                st.download_button("📥 Download Receipts CSV", file, "saved_projections.csv", "text/csv")
-            
-            # 🧪 RED DOT TESTER
-            # We use st.session_state to ensure target_player is caught reliably
-            t_player = st.session_state.get(f"{lk}.target_player")
-            if t_player:
-                if st.button("🧪 Inject Fake Past Receipt (Test Red Dot)"):
-                    # Match this date to a game already on your bar chart!
-                    fake_date = "2026-03-04" 
-                    log_prediction_receipt(t_player, stat_type, 10.0, fake_date)
-                    st.rerun()
-        else:
-            st.info("Vault is currently empty. Run a player projection to generate a receipt!")
     with st.container():
         c1, c2, c3, c4 = st.columns([2, 1.5, 1, 1.5])
         with c1:
