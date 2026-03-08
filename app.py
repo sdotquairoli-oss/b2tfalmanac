@@ -2028,30 +2028,61 @@ with t_roi:
                 ).reset_index()
                 stat_profit['Win_Rate'] = (stat_profit['Wins'] / stat_profit['Bets'] * 100).round(1)
                 
-                st.dataframe(
-                    stat_profit.sort_values('Net_Profit', ascending=False),
-                    column_config={
-                        "Stat": "Market",
-                        "Net_Profit": st.column_config.NumberColumn("Profit", format="$%.2f"),
-                        "Win_Rate": st.column_config.NumberColumn("Win %", format="%.1f%%"),
-                        "Bets": st.column_config.NumberColumn("Vol")
-                    },
-                    hide_index=True, use_container_width=True, height=280
-                )
+                bar_chart = alt.Chart(stat_profit).mark_bar(cornerRadiusEnd=4).encode(
+                    y=alt.Y('Stat:N', sort='-x', title=None, axis=alt.Axis(labelLimit=120)),
+                    x=alt.X('Net_Profit:Q', title='Net Profit ($)'),
+                    color=alt.condition(alt.datum.Net_Profit > 0, alt.value('#00c853'), alt.value('#ff0055')),
+                    tooltip=[
+                        alt.Tooltip('Stat:N', title='Market'),
+                        alt.Tooltip('Net_Profit:Q', title='Net Profit', format='+.2f'),
+                        alt.Tooltip('Win_Rate:Q', title='Win Rate (%)', format='.1f'),
+                        alt.Tooltip('Bets:Q', title='Volume')
+                    ]
+                ).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
+                st.altair_chart(bar_chart, use_container_width=True)
             
             st.markdown("---")
             
-            # PLAYER LEADERBOARD
+            # PLAYER LEADERBOARD (CUSTOM UI CARDS)
             st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
-            pc1, pc2 = st.columns(2)
-            player_profit = graded_df.groupby('Player')['Profit_Per_Bet'].sum().reset_index().sort_values('Profit_Per_Bet', ascending=False)
             
+            player_profit = graded_df.groupby('Player').agg(
+                Net_Profit=('Profit_Per_Bet', 'sum'),
+                Bets=('Result', 'count'),
+                Wins=('Result', lambda x: (x == 'Win').sum())
+            ).reset_index()
+            
+            player_profit = player_profit.sort_values('Net_Profit', ascending=False)
+            # Only show players with positive profit in Hof, and negative profit in Shame
+            top_5 = player_profit[player_profit['Net_Profit'] > 0].head(5)
+            bottom_5 = player_profit[player_profit['Net_Profit'] < 0].tail(5).sort_values('Net_Profit', ascending=True)
+
+            pc1, pc2 = st.columns(2)
             with pc1:
-                st.caption("🏆 **Most Profitable Athletes**")
-                st.dataframe(player_profit.head(5), hide_index=True, use_container_width=True, column_config={"Player": "Athlete", "Profit_Per_Bet": st.column_config.NumberColumn("Net Profit", format="$%.2f")})
+                st.markdown("<div style='color:#00E676; font-weight:bold; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;'>🏆 Most Profitable Athletes</div>", unsafe_allow_html=True)
+                if top_5.empty: st.caption("No profitable athletes yet.")
+                for _, r in top_5.iterrows():
+                    profit = r['Net_Profit']
+                    wr = (r['Wins'] / r['Bets']) * 100
+                    st.markdown(f"""
+                    <div style="background-color:#0f172a; border: 1px solid #1e293b; border-left: 3px solid #00E676; border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 14px; font-weight: bold; color: #fff;">{r['Player']} <br><span style="font-size: 11px; color: #94a3b8; font-weight: normal;">{int(r['Bets'])} bets | {wr:.0f}% Win</span></div>
+                        <div style="font-size: 16px; font-weight: 900; color: #00E676;">+${profit:.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
             with pc2:
-                st.caption("🗑️ **The Blacklist (Biggest Losers)**")
-                st.dataframe(player_profit.tail(5).sort_values('Profit_Per_Bet', ascending=True), hide_index=True, use_container_width=True, column_config={"Player": "Athlete", "Profit_Per_Bet": st.column_config.NumberColumn("Net Loss", format="$%.2f")})
+                st.markdown("<div style='color:#ff0055; font-weight:bold; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;'>🗑️ The Blacklist (Biggest Losers)</div>", unsafe_allow_html=True)
+                if bottom_5.empty: st.caption("No losing athletes yet.")
+                for _, r in bottom_5.iterrows():
+                    profit = r['Net_Profit']
+                    wr = (r['Wins'] / r['Bets']) * 100
+                    st.markdown(f"""
+                    <div style="background-color:#0f172a; border: 1px solid #1e293b; border-left: 3px solid #ff0055; border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 14px; font-weight: bold; color: #fff;">{r['Player']} <br><span style="font-size: 11px; color: #94a3b8; font-weight: normal;">{int(r['Bets'])} bets | {wr:.0f}% Win</span></div>
+                        <div style="font-size: 16px; font-weight: 900; color: #ff0055;">-${abs(profit):.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
         st.markdown("---")
         
