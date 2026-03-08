@@ -1614,11 +1614,6 @@ def render_syndicate_board(league_key):
                 final_consensus = raw_consensus * skynet_data["mod"]
                 df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
 
-                # 🟢 SAVE THE RECEIPT: Log the pre-game stamp if today is game day
-                if len(df_with_ml) > 0:
-                    # Just use the target_player variable we already have!
-                    today_date = datetime.now().strftime("%Y-%m-%d") 
-                    log_prediction_receipt(target_player, stat_type, final_consensus, today_date)
 
                 dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
                 def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
@@ -1754,7 +1749,13 @@ def render_syndicate_board(league_key):
 
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p)
+                        
+                        # 🟢 FIRE THE RECEIPT TO GOOGLE VAULT
+                        today_date = datetime.now().strftime("%Y-%m-%d")
+                        log_prediction_receipt(target_player, stat_type, c_proj, today_date)
+                        
                         st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {auto_user_p*100:.1f}%)")
+                        st.toast(f"✅ Pre-Game Projection Locked in Google Vault!", icon="🔐")
                         
                     ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
                         
