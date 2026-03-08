@@ -10,6 +10,7 @@ import os
 import base64
 import json
 import gspread
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 import pytz
 from io import StringIO
@@ -54,6 +55,43 @@ LEAGUE_SHIELDS = {
     "NFL": "https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png"
 }
 
+def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
+    """Saves a permanent receipt of the live AI projection to Google Sheets."""
+    try:
+        # 1. Setup Credentials from Streamlit Secrets
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        client = gspread.authorize(creds)
+        
+        # 2. Open the Sheet (Ensure your Google Sheet is named exactly "B2TF_Vault")
+        sheet = client.open("B2TF_Vault").sheet1
+        
+        # 3. Check for duplicates to prevent double-logging
+        existing_data = sheet.get_all_records()
+        game_date_str = str(game_date)[:10]
+        
+        is_duplicate = any(
+            str(r.get('Player', '')) == str(player_name) and 
+            str(r.get('Stat', '')) == str(stat_type) and 
+            str(r.get('Game_Date', '')) == game_date_str 
+            for r in existing_data
+        )
+        
+        if not is_duplicate:
+            new_row = [
+                player_name, 
+                stat_type, 
+                game_date_str, 
+                round(float(proj_value), 2), 
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ]
+            sheet.append_row(new_row)
+    except Exception as e:
+        pass # Fail silently so a Google API hiccup doesn't crash your dashboard
+        
 def get_team_logo(league, abbr):
     """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
     abbr_upper = str(abbr).upper()
@@ -1804,16 +1842,25 @@ def render_syndicate_board(league_key):
                         df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
                         df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
                         
-                        # 🔴 RED DOT INJECTION: Fetch saved receipts from the vault
+                        # 🔴 RED DOT INJECTION: Fetch permanent receipts from Google Sheets
                         df_l10['Saved_Proj'] = np.nan
                         try:
-                            import os
-                            import pandas as pd
-                            if os.path.exists("saved_projections.csv"):
-                                receipts = pd.read_csv("saved_projections.csv")
+                            import gspread
+                            from google.oauth2.service_account import Credentials
+                            
+                            scope = [
+                                "https://www.googleapis.com/auth/spreadsheets",
+                                "https://www.googleapis.com/auth/drive"
+                            ]
+                            creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+                            client = gspread.authorize(creds)
+                            sheet = client.open("B2TF_Vault").sheet1
+                            
+                            receipts = pd.DataFrame(sheet.get_all_records())
+                            
+                            if not receipts.empty:
                                 receipts = receipts[(receipts['Player'] == target_player) & (receipts['Stat'] == stat_type)]
                                 if not receipts.empty:
-                                    # Match date formats (YYYY-MM-DD) to map the dots to the right game
                                     date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
                                     df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
                                     receipts_date_strs = pd.to_datetime(receipts['Game_Date']).dt.strftime('%Y-%m-%d')
