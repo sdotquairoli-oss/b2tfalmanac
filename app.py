@@ -883,38 +883,7 @@ def apply_skynet(raw_vote, stat_type, league):
 #    - New graded bets immediately affect Skynet modifier on next render
 #    - df_hash and ledger_hash params added as cheap cache invalidation keys
 # ✅ OPT-6: df_hash param prevents re-hashing the entire DataFrame on every cache check
-def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
-    """Saves a tamper-proof receipt of the live, pre-game AI projection."""
-    file_path = "saved_projections.csv"
-    
-    # Format the incoming date to match your DataFrame (usually YYYY-MM-DD)
-    game_date_str = str(game_date)[:10] 
-    
-    new_record = pd.DataFrame([{
-        "Player": player_name,
-        "Stat": stat_type,
-        "Game_Date": game_date_str,
-        "Live_Proj": round(proj_value, 2),
-        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }])
-    
-    if not os.path.exists(file_path):
-        new_record.to_csv(file_path, index=False)
-        return
-        
-    try:
-        df_saved = pd.read_csv(file_path)
-        # Check if we already logged this exact player/stat/date
-        is_duplicate = not df_saved[
-            (df_saved['Player'] == player_name) & 
-            (df_saved['Stat'] == stat_type) & 
-            (df_saved['Game_Date'] == game_date_str)
-        ].empty
-        
-        if not is_duplicate:
-            new_record.to_csv(file_path, mode='a', header=False, index=False)
-    except Exception as e:
-        pass # Silently fail if CSV is locked by another thread
+
 @st.cache_data(show_spinner=False, ttl=300)
 def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash=""):
     df_ml = df.copy()
