@@ -151,7 +151,7 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
         next_row = len(dates) + 1
         clean_row = []
         for col in expected_cols:
-            val = row_dict.get(col, "")
+            val = row_dict.get(col, f"")
             if isinstance(val, bool): clean_row.append("TRUE" if val else "FALSE")
             else: clean_row.append(val)
         try: ws.update(values=[clean_row], range_name=f'A{next_row}', value_input_option="USER_ENTERED")
@@ -840,6 +840,38 @@ def apply_skynet(raw_vote, stat_type, league):
 #    - New graded bets immediately affect Skynet modifier on next render
 #    - df_hash and ledger_hash params added as cheap cache invalidation keys
 # ✅ OPT-6: df_hash param prevents re-hashing the entire DataFrame on every cache check
+def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
+    """Saves a tamper-proof receipt of the live, pre-game AI projection."""
+    file_path = "saved_projections.csv"
+    
+    # Format the incoming date to match your DataFrame (usually YYYY-MM-DD)
+    game_date_str = str(game_date)[:10] 
+    
+    new_record = pd.DataFrame([{
+        "Player": player_name,
+        "Stat": stat_type,
+        "Game_Date": game_date_str,
+        "Live_Proj": round(proj_value, 2),
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }])
+    
+    if not os.path.exists(file_path):
+        new_record.to_csv(file_path, index=False)
+        return
+        
+    try:
+        df_saved = pd.read_csv(file_path)
+        # Check if we already logged this exact player/stat/date
+        is_duplicate = not df_saved[
+            (df_saved['Player'] == player_name) & 
+            (df_saved['Stat'] == stat_type) & 
+            (df_saved['Game_Date'] == game_date_str)
+        ].empty
+        
+        if not is_duplicate:
+            new_record.to_csv(file_path, mode='a', header=False, index=False)
+    except Exception as e:
+        pass # Silently fail if CSV is locked by another thread
 @st.cache_data(show_spinner=False, ttl=300)
 def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash=""):
     df_ml = df.copy()
@@ -1542,6 +1574,13 @@ def render_syndicate_board(league_key):
                 final_consensus = raw_consensus * skynet_data["mod"]
                 df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
 
+                # 🟢 SAVE THE RECEIPT: Log the pre-game stamp if today is game day
+                    if len(df_with_ml) > 0:
+                        player_name = df_with_ml['Player'].iloc[0] if 'Player' in df_with_ml.columns else df.name
+                        # Assuming the last row or today's date is passed here. If you have a specific game date variable, use it.
+                        today_date = datetime.now().strftime("%Y-%m-%d") 
+                        log_prediction_receipt(player_name, stat_type, final_consensus, today_date)
+
                 dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
                 def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
                 
@@ -1766,6 +1805,25 @@ def render_syndicate_board(league_key):
                         df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
                         df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
                         
+                        # 🔴 RED DOT INJECTION: Fetch saved receipts from the vault
+                        df_l10['Saved_Proj'] = np.nan
+                        try:
+                            import os
+                            import pandas as pd
+                            if os.path.exists("saved_projections.csv"):
+                                receipts = pd.read_csv("saved_projections.csv")
+                                receipts = receipts[(receipts['Player'] == target_player) & (receipts['Stat'] == stat_type)]
+                                if not receipts.empty:
+                                    # Match date formats (YYYY-MM-DD) to map the dots to the right game
+                                    date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
+                                    df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
+                                    receipts_date_strs = pd.to_datetime(receipts['Game_Date']).dt.strftime('%Y-%m-%d')
+                                    
+                                    receipt_dict = dict(zip(receipts_date_strs, receipts['Live_Proj']))
+                                    df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
+                        except Exception as e:
+                            pass
+
                         bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
                             x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
                             y=alt.Y(s_col, title=stat_type),
@@ -1789,16 +1847,29 @@ def render_syndicate_board(league_key):
                                 alt.Tooltip('Matchup_Formatted', title='Opponent'), 
                                 alt.Tooltip('MINS', title='Minutes', format='.1f'), 
                                 alt.Tooltip(s_col, title='Actual Stats'), 
-                                alt.Tooltip('AI_Proj', title='AI Projection', format='.2f')
+                                alt.Tooltip('AI_Proj', title='Retro AI Projection', format='.2f'),
+                                alt.Tooltip('Saved_Proj', title='PRE-GAME Vault Proj', format='.2f')
                             ]
                         ).properties(height=350)
                         
                         vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
                         ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
+                        
+                        # 🔴 RED DOT LAYER: Plots the pre-game stamp if it exists
+                        red_dots = alt.Chart(df_l10).mark_circle(color='#ff0055', size=150, opacity=1).encode(
+                            x=alt.X('Matchup_Label', sort=None),
+                            y=alt.Y('Saved_Proj')
+                        ).transform_filter(
+                            "isValid(datum.Saved_Proj)" # Only draw a dot if we have a saved receipt
+                        )
+
                         text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
                         
-                        st.altair_chart((bars + vegas_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
-                        st.caption("🟡 Dashed Yellow Line: Vegas Line &nbsp; | &nbsp; 🔵 Solid Cyan Line: AI Projection &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Games vs Tonight's Opponent</span>", unsafe_allow_html=True)
+                        # Layer it all together (+ red_dots)
+                        final_chart = (bars + vegas_rule + ai_line + red_dots + text)
+                        
+                        st.altair_chart(final_chart.configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
+                        st.caption("🟡 Dashed Yellow: Vegas Line &nbsp; | &nbsp; 🔵 Cyan Line: Retro AI &nbsp; | &nbsp; 🔴 <span style='color:#ff0055; font-weight:bold;'>Red Dot: Pre-Game Vault</span> &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Target Opp</span>", unsafe_allow_html=True)
                         
                     with side_col:
                         with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
