@@ -1386,6 +1386,19 @@ def render_syndicate_board(league_key):
     placeholder_sync = top_c1.empty()
     placeholder_home = top_c2.empty()
 
+    # 🕵️ TEMPORARY VAULT VIEWER (Main Page)
+        with st.expander("🔐 View Prediction Vault (Live Receipts)", expanded=True):
+            import os
+            import pandas as pd
+            if os.path.exists("saved_projections.csv"):
+                st.dataframe(pd.read_csv("saved_projections.csv"), use_container_width=True)
+                
+                # Download button so you can pull it to your actual computer
+                with open("saved_projections.csv", "rb") as file:
+                    st.download_button("📥 Download Receipts CSV", file, "saved_projections.csv", "text/csv")
+            else:
+                st.info("Vault is currently empty. Run a player projection to generate a receipt!")
+
     with st.container():
         c1, c2, c3, c4 = st.columns([2, 1.5, 1, 1.5])
         with c1:
