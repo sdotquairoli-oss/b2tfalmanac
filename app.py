@@ -90,7 +90,8 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
             ]
             sheet.append_row(new_row)
     except Exception as e:
-        pass # Fail silently so a Google API hiccup doesn't crash your dashboard
+        import streamlit as st
+        st.error(f"🚨 Vault Sync Error: {e}") # This will print the exact Google error to your screen!
         
 def get_team_logo(league, abbr):
     """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
