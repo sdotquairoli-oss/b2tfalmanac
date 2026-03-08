@@ -7,3 +7,5 @@ pytz
 gspread
 nba_api
 xgboost==2.0.3
+gspread
+google-auth
