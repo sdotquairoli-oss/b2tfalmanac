@@ -498,29 +498,46 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "Blocks": "player_blocks", "Steals": "player_steals"
     }
     market = m_map.get(stat_type, "player_points")
-    clean_name = player_label.split("(")[0].strip().lower()
+    
+    # 🟢 NEW SMART NAME PARSER
+    raw_name = player_label.split("(")[0].strip().lower()
+    # Strip suffixes that mess up matching
+    clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
+    
+    name_parts = clean_name.split()
+    first_name = name_parts[0] if len(name_parts) > 0 else ""
+    last_name = name_parts[-1] if len(name_parts) > 1 else clean_name
+    
     team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
     used, rem = None, None
+    
     try:
         events_resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{sport_path}/events?apiKey={api_key}", timeout=10)
         events_data = events_resp.json()
         used, rem = events_resp.headers.get('x-requests-used'), events_resp.headers.get('x-requests-remaining')
         if not isinstance(events_data, list) or len(events_data) == 0: return None, None, "No active events", used, rem
+        
         target_team_name = ODDS_MEGA_MAP.get(team_abbr)
         events_to_check = []
         if target_team_name:
             events_to_check = [e for e in events_data if target_team_name in e.get('home_team', '') or target_team_name in e.get('away_team', '')]
         if not events_to_check: events_to_check = events_data[:2]
+        
         for event in events_to_check:
             odds_resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{sport_path}/events/{event['id']}/odds?apiKey={api_key}&regions=us&markets={market}&oddsFormat=american", timeout=10)
             odds_data = odds_resp.json()
             used, rem = odds_resp.headers.get('x-requests-used', used), odds_resp.headers.get('x-requests-remaining', rem)
+            
             for b in odds_data.get('bookmakers', []):
                 for m in b.get('markets', []):
                     for o in m.get('outcomes', []):
-                        if clean_name in o.get('description', '').lower():
+                        desc = o.get('description', '').lower()
+                        
+                        # 🟢 SMART MATCH: Exact match OR (Last name match + First 3 letters of first name)
+                        if clean_name in desc or (last_name in desc and first_name[:3] in desc):
                             if 'point' in o and 'price' in o: return float(o['point']), int(o['price']), f"Synced: {b.get('title')}", used, rem
                             elif 'price' in o: return None, int(o['price']), f"Synced Odds: {b.get('title')}", used, rem
+                            
         return None, None, "Props not posted yet.", used, rem
     except Exception as e: return None, None, f"API Error", used, rem
 
