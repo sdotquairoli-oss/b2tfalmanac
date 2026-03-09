@@ -1663,10 +1663,37 @@ def render_syndicate_board(league_key):
                         consensus_label = "🟢 UNANIMOUS (5/5)" if agree_count == 5 else "🟡 STRONG CONSENSUS (4/5)"
                         st.caption(f"{consensus_label} — Board in agreement.")
 
+                    # 🟢 CUSTOM CSS FOR THE HAZMAT OVERRIDE BUTTON
+                    st.markdown("""
+                    <style>
+                    button[title="hazmat_override"] {
+                        background: repeating-linear-gradient(45deg, #FFD700, #FFD700 10px, #1e293b 10px, #1e293b 20px) !important;
+                        border: 2px solid #ff0055 !important;
+                        box-shadow: 0px 0px 15px rgba(255, 0, 85, 0.5) !important;
+                        transition: transform 0.2s;
+                    }
+                    button[title="hazmat_override"]:hover {
+                        transform: scale(1.02);
+                        box-shadow: 0px 0px 25px rgba(255, 0, 85, 0.8) !important;
+                    }
+                    button[title="hazmat_override"] p {
+                        color: #ffffff !important;
+                        background-color: #ff0055 !important;
+                        padding: 2px 10px;
+                        border-radius: 4px;
+                        font-weight: 900 !important;
+                        font-size: 16px !important;
+                        letter-spacing: 1px;
+                        text-shadow: 1px 1px 2px #000;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
+
                     lock_pressed = False
                     final_side = c_vote
                     
                     if c_vote not in ["PASS", "VETO"]:
+                        # Standard Green Lock Button
                         with btn_c2:
                             lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
                         with btn_c3:
@@ -1675,14 +1702,35 @@ def render_syndicate_board(league_key):
                                 final_side = "OVER" if side_choice == "YES" else "UNDER"
                             else:
                                 final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
+                    else:
+                        # 🚨 THE HAZMAT OVERRIDE PROTOCOL
+                        with btn_c2:
+                            lock_pressed = st.button("🚨 OVERRIDE 🚨", help="hazmat_override", use_container_width=True, key=f"{lk}.override_lock")
+                        with btn_c3:
+                            if stat_type in ["Double Double", "Triple Double"]:
+                                side_choice = st.radio("Side", ["YES", "NO"], index=0, horizontal=True, key=f"{lk}.override_side_dd", label_visibility="collapsed")
+                                final_side = "OVER" if side_choice == "YES" else "UNDER"
+                            else:
+                                final_side = st.radio("Side", ["OVER", "UNDER"], index=0, horizontal=True, key=f"{lk}.override_side", label_visibility="collapsed")
 
                     if lock_pressed:
-                        if final_side != c_vote:
-                            auto_user_p = 1.0 - win_prob
+                        # If user overrides a PASS, calculate the true win prob for their forced choice
+                        if c_vote in ["PASS", "VETO"]:
+                            if final_side == "OVER":
+                                true_prob = np.sum(sims > line) / 5000.0
+                            else:
+                                true_prob = np.sum(sims < line) / 5000.0
+                            
+                            auto_user_p = true_prob
+                            win_prob = true_prob 
                             user_edge_pct = (auto_user_p - implied_prob) * 100
                         else:
-                            auto_user_p = win_prob
-                            user_edge_pct = edge_pct
+                            if final_side != c_vote:
+                                auto_user_p = 1.0 - win_prob
+                                user_edge_pct = (auto_user_p - implied_prob) * 100
+                            else:
+                                auto_user_p = win_prob
+                                user_edge_pct = edge_pct
 
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p)
@@ -1690,7 +1738,8 @@ def render_syndicate_board(league_key):
                         today_date = datetime.now().strftime("%Y-%m-%d")
                         log_prediction_receipt(target_player, stat_type, c_proj, today_date)
                         
-                        st.success(f"Pick locked as {final_side}! (AI: {win_prob*100:.1f}% | User: {auto_user_p*100:.1f}%)")
+                        st.success(f"Hazmat Override Locked: {final_side}! (True Prob: {auto_user_p*100:.1f}%)")
+                        st.toast(f"✅ Pre-Game Projection Locked in Google Vault!", icon="🔐")
                         
                     if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
                         s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
