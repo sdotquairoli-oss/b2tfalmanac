@@ -560,16 +560,49 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
 @st.cache_data(ttl=300)
 def get_nba_stats(player_label):
     cn = player_label.split("(")[0].strip()
+    
+    # 🟢 ALIAS OVERRIDE: Fix BallDontLie vs NBA.com naming nightmares
+    ALIASES = {
+        "nicholas claxton": "Nic Claxton",
+        "nicolas claxton": "Nic Claxton",
+        "cameron thomas": "Cam Thomas",
+        "patrick mills": "Patty Mills",
+        "marcus morris": "Marcus Morris Sr.",
+        "kelly oubre": "Kelly Oubre Jr.",
+        "timothy hardaway": "Tim Hardaway Jr.",
+        "robert williams": "Robert Williams III",
+        "karl-anthony towns": "Karl-Anthony Towns"
+    }
+    
+    if cn.lower() in ALIASES:
+        cn = ALIASES[cn.lower()]
+        
     try:
         from nba_api.stats.static import players
         from nba_api.stats.endpoints import playergamelog
         import unicodedata
+        
         def clean_name(name):
             base = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
             return base.replace(".", "").replace("'", "").replace("-", "").replace(" ", "")
+            
         nba_players = players.get_players()
         player_dict = [p for p in nba_players if clean_name(p['full_name']) == clean_name(cn)]
+        
+        # 🟢 FALLBACK: If exact match fails, try a "Fuzzy Match" (Last name + First 3 letters)
+        if not player_dict:
+            raw_parts = cn.replace(" Jr.", "").replace(" Sr.", "").replace(" III", "").replace(".", "").split()
+            if len(raw_parts) >= 2:
+                f_name_sub = raw_parts[0][:3].lower()
+                l_name = raw_parts[-1].lower()
+                for p in nba_players:
+                    p_clean = p['full_name'].replace(".", "").replace("-", " ").lower()
+                    if l_name in p_clean and f_name_sub in p_clean:
+                        player_dict = [p]
+                        break
+
         if not player_dict: return pd.DataFrame(), 404, []
+        
         pid = player_dict[0]['id']
         seasons = ['2025-26', '2024-25', '2023-24']
         df_list = []
@@ -579,27 +612,33 @@ def get_nba_stats(player_label):
                 df_list.append(log.get_data_frames()[0])
                 time.sleep(0.5)
             except: pass
+            
         if not df_list: return pd.DataFrame(), 404, []
         df = pd.concat(df_list, ignore_index=True)
         if df.empty: return pd.DataFrame(), 404, []
+        
         df['Is_Home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in x else 0)
         df['MATCHUP'] = df['MATCHUP'].apply(lambda x: x.split(' ')[-1])
         df['ValidDate'] = pd.to_datetime(df['GAME_DATE'])
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
+        
         def parse_mins(x):
             try:
                 s = str(x)
                 return float(s.split(':')[0]) + float(s.split(':')[1])/60.0 if ':' in s else float(s)
             except: return 0.0
+            
         df['MINS'] = df['MIN'].apply(parse_mins)
         df = df.rename(columns={'REB': 'TRB'})
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
+        
         final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
-    except: return pd.DataFrame(), 500, []
+    except: 
+        return pd.DataFrame(), 500, []
 
 @st.cache_data(ttl=300)
 def get_nhl_stats(player_label):
