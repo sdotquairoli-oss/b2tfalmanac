@@ -1705,7 +1705,7 @@ def render_syndicate_board(league_key):
                     else:
                         # 🚨 THE HAZMAT OVERRIDE PROTOCOL
                         with btn_c2:
-                            lock_pressed = st.button("🚨 OVERRIDE 🚨", help="hazmat_override", use_container_width=True, key=f"{lk}.override_lock")
+                            lock_pressed = st.button("🚨 OVERRIDE 🚨", use_container_width=True, key=f"{lk}.override_lock")
                         with btn_c3:
                             if stat_type in ["Double Double", "Triple Double"]:
                                 side_choice = st.radio("Side", ["YES", "NO"], index=0, horizontal=True, key=f"{lk}.override_side_dd", label_visibility="collapsed")
@@ -1713,6 +1713,23 @@ def render_syndicate_board(league_key):
                             else:
                                 final_side = st.radio("Side", ["OVER", "UNDER"], index=0, horizontal=True, key=f"{lk}.override_side", label_visibility="collapsed")
 
+                        # 🟢 JS INJECTION: Forcefully paints the Hazmat Stripes (Bypasses Streamlit's CSS blockers)
+                        import streamlit.components.v1 as components
+                        components.html(
+                            """
+                            <script>
+                            const buttons = window.parent.document.querySelectorAll('.stButton button');
+                            buttons.forEach(b => {
+                                if(b.innerText.includes('OVERRIDE')) {
+                                    b.style.cssText = 'background: repeating-linear-gradient(45deg, #FFD700, #FFD700 10px, #000000 10px, #000000 20px) !important; border: 2px solid #ff0055 !important; box-shadow: 0px 0px 15px rgba(255, 0, 85, 0.5) !important;';
+                                    const text = b.querySelector('p') || b.querySelector('div') || b;
+                                    text.style.cssText = 'color: #ffffff !important; background-color: #ff0055 !important; padding: 2px 10px !important; border-radius: 4px !important; font-weight: 900 !important; font-size: 16px !important; text-shadow: 1px 1px 2px #000 !important;';
+                                }
+                            });
+                            </script>
+                            """,
+                            height=0, width=0
+                        )
                     if lock_pressed:
                         # If user overrides a PASS, calculate the true win prob for their forced choice
                         if c_vote in ["PASS", "VETO"]:
