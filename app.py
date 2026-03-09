@@ -499,11 +499,28 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
     }
     market = m_map.get(stat_type, "player_points")
     
-    # 🟢 NEW SMART NAME PARSER
     raw_name = player_label.split("(")[0].strip().lower()
-    # Strip suffixes that mess up matching
-    clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
     
+    # 🟢 THE IRONCLAD OVERRIDE DICTIONARY
+    KNOWN_ALIASES = {
+        "nicolas claxton": "nic claxton",
+        "nicholas claxton": "nic claxton",
+        "stephen curry": "steph curry",
+        "cameron thomas": "cam thomas",
+        "michael porter": "michael porter jr",
+        "timothy hardaway": "tim hardaway jr",
+        "robert williams": "robert williams iii",
+        "p.j. washington": "pj washington",
+        "karl-anthony towns": "karl anthony towns",
+        "shai gilgeous-alexander": "shai gilgeous alexander"
+    }
+    
+    clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
+    if raw_name in KNOWN_ALIASES:
+        clean_name = KNOWN_ALIASES[raw_name]
+    elif clean_name in KNOWN_ALIASES:
+        clean_name = KNOWN_ALIASES[clean_name]
+        
     name_parts = clean_name.split()
     first_name = name_parts[0] if len(name_parts) > 0 else ""
     last_name = name_parts[-1] if len(name_parts) > 1 else clean_name
@@ -532,8 +549,7 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
                 for m in b.get('markets', []):
                     for o in m.get('outcomes', []):
                         desc = o.get('description', '').lower()
-                        
-                        # 🟢 SMART MATCH: Exact match OR (Last name match + First 3 letters of first name)
+                        # SMART MATCH
                         if clean_name in desc or (last_name in desc and first_name[:3] in desc):
                             if 'point' in o and 'price' in o: return float(o['point']), int(o['price']), f"Synced: {b.get('title')}", used, rem
                             elif 'price' in o: return None, int(o['price']), f"Synced Odds: {b.get('title')}", used, rem
