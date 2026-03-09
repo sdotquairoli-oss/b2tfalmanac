@@ -2197,11 +2197,11 @@ with t_roi:
             
             # 🟢 NEW: INJECT ACTUAL STATS BELOW PROJECTION
             if actual_raw not in ['', 'nan', 'None']:
-                proj_html += f"<br>🎯 Actual: <span style='color: #FFD700; font-weight: bold;'>{actual_raw}</span>"
+                proj_html += f"<br> Actual: <span style='color: #FFD700; font-weight: bold;'>{actual_raw}</span>"
             elif status == 'Pending':
-                proj_html += f"<br>🎯 Actual: <span style='color: #94a3b8; font-style: italic;'>Pending</span>"
+                proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>Pending</span>"
             else:
-                proj_html += f"<br>🎯 Actual: <span style='color: #94a3b8; font-style: italic;'>N/A (Manual)</span>"
+                proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>N/A (Manual)</span>"
 
             has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
             
