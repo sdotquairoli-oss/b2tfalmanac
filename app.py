@@ -141,7 +141,11 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
         else:
             st.warning("⚠️ Vault skipped: Duplicate entry detected for today.")
     except Exception as e:
-        st.error(f"🚨 GOOGLE API ERROR: {e}")
+        err_str = str(e)
+        if "502" in err_str or "html" in err_str.lower():
+            st.warning("🟡 Vault skipped: Google's servers are temporarily busy (Error 502).")
+        else:
+            st.error(f"🚨 GOOGLE API ERROR: {err_str}")
 
 def get_team_logo(league, abbr):
     """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
@@ -173,9 +177,13 @@ def load_sheet_df(sheet_name, expected_cols=None):
             df = df[expected_cols]
         return df
     except Exception as e:
-        st.error(f"Error loading {sheet_name}: {e}")
+        # 🟢 Intercept Google's ugly HTML 502 error and make it clean
+        err_str = str(e)
+        if "502" in err_str or "html" in err_str.lower():
+            st.warning(f"🟡 Google Sheets API is temporarily busy. Skipping {sheet_name} sync for now.")
+        else:
+            st.error(f"Error loading {sheet_name}: {err_str}")
         return pd.DataFrame(columns=expected_cols or [])
-
 def append_to_sheet(sheet_name, row_dict, expected_cols):
     gc = get_gc()
     if not gc: return
