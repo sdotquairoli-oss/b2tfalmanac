@@ -2229,7 +2229,7 @@ with t_roi:
                         <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
-                        <div style="line-height: 1.5;">{proj_html}</div>   <--- THIS LINE RIGHT HERE
+                        <div style="line-height: 1.5;">{proj_html}</div> 
                         <div style="font-size: 11px; text-align: right; line-height: 1.5;">
                             🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
                             👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
