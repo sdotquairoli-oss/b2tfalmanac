@@ -2194,6 +2194,15 @@ with t_roi:
                 proj_html = f"🤖 AI Proj: <span style='color: #00E5FF; font-weight: bold;'>{proj}</span>"
 
             actual_raw = str(row.get('Actual', '')).strip()
+            
+            # 🟢 NEW: INJECT ACTUAL STATS BELOW PROJECTION
+            if actual_raw not in ['', 'nan', 'None']:
+                proj_html += f"<br>🎯 Actual: <span style='color: #FFD700; font-weight: bold;'>{actual_raw}</span>"
+            elif status == 'Pending':
+                proj_html += f"<br>🎯 Actual: <span style='color: #94a3b8; font-style: italic;'>Pending</span>"
+            else:
+                proj_html += f"<br>🎯 Actual: <span style='color: #94a3b8; font-style: italic;'>N/A (Manual)</span>"
+
             has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
             
             if has_autopsy: sc1, sc2 = st.columns([2.4, 1.6]) 
@@ -2220,8 +2229,8 @@ with t_roi:
                         <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
-                        <div>{proj_html}</div>
-                        <div style="font-size: 11px; text-align: right;">
+                        <div style="line-height: 1.5;">{proj_html}</div>
+                        <div style="font-size: 11px; text-align: right; line-height: 1.5;">
                             🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
                             👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
                         </div>
