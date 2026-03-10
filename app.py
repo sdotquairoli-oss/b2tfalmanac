@@ -2189,33 +2189,77 @@ with t_roi:
             
             st.markdown("---")
             
-            # PLAYER LEADERBOARD (CUSTOM UI CARDS)
-            st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
-            
-            player_profit = graded_df.groupby('Player').agg(
-                Net_Profit=('Profit_Per_Bet', 'sum'),
-                Bets=('Result', 'count'),
-                Wins=('Result', lambda x: (x == 'Win').sum())
-            ).reset_index()
-            
-            player_profit = player_profit.sort_values('Net_Profit', ascending=False)
-            # Only show players with positive profit in Hof, and negative profit in Shame
-            top_5 = player_profit[player_profit['Net_Profit'] > 0].head(5)
-            bottom_5 = player_profit[player_profit['Net_Profit'] < 0].tail(5).sort_values('Net_Profit', ascending=True)
+            import streamlit as st
+import pandas as pd
 
-            pc1, pc2 = st.columns(2)
-            with pc1:
-                st.markdown("<div style='color:#00E676; font-weight:bold; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;'>🏆 Most Profitable Athletes</div>", unsafe_allow_html=True)
-                if top_5.empty: st.caption("No profitable athletes yet.")
-                for _, r in top_5.iterrows():
-                    profit = r['Net_Profit']
-                    wr = (r['Wins'] / r['Bets']) * 100
-                    st.markdown(f"""
-                    <div style="background-color:#0f172a; border: 1px solid #1e293b; border-left: 3px solid #00E676; border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="font-size: 14px; font-weight: bold; color: #fff;">{r['Player']} <br><span style="font-size: 11px; color: #94a3b8; font-weight: normal;">{int(r['Bets'])} bets | {wr:.0f}% Win</span></div>
-                        <div style="font-size: 16px; font-weight: 900; color: #00E676;">+${profit:.2f}</div>
+# Assuming your graded bets are stored in a DataFrame called 'df'
+# Adjust the column strings below to match your actual DataFrame schema!
+
+def render_syndicate_hall_of_fame(graded_df):
+    # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/MARKET
+    grouped = df.groupby(['Player', 'Market']).agg(
+        Total_Bets=('Result', 'count'),
+        Wins=('Result', lambda x: (x == 'Win').sum()),
+        Net_Profit=('Profit', 'sum'),
+        Total_Risk=('Risk', 'sum') # Needed for accurate ROI
+    ).reset_index()
+
+    # 2. CALCULATE ADVANCED METRICS (Win Rate & ROI)
+    grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
+    grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
+
+    # 3. APPLY MINIMUM THRESHOLD FILTER (The Syndicate "No One-Hit Wonders" Rule)
+    MIN_BETS = 3
+    qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
+
+    # 4. SORT BY ROI INSTEAD OF RAW DOLLARS
+    hall_of_fame = qualified_props.sort_values(by='ROI', ascending=False).head(5)
+    blacklist = qualified_props.sort_values(by='ROI', ascending=True).head(5)
+
+    # --- STREAMLIT UI RENDERING ---
+    st.header("👑 Syndicate Hall of Fame & Shame")
+    
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("<h4 style='color: #00FF00;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
+        if hall_of_fame.empty:
+            st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+        else:
+            for _, row in hall_of_fame.iterrows():
+                st.markdown(f"""
+                <div style="border-left: 3px solid #00FF00; padding-left: 12px; margin-bottom: 12px; background-color: rgba(0,255,0,0.05); border-radius: 4px;">
+                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px;">
+                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Market']})</span>
                     </div>
-                    """, unsafe_allow_html=True)
+                    <div style="font-size: 0.85em; color: #888; margin-bottom: 2px;">
+                        {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
+                    </div>
+                    <div style="color: #00FF00; font-weight: bold; font-size: 1.1em;">
+                        +{row['ROI']:.1f}% ROI <span style="font-size: 0.8em; color: #a0aec0; font-weight: normal;">(+${row['Net_Profit']:.2f})</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("<h4 style='color: #FF004D;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
+        if blacklist.empty:
+            st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+        else:
+            for _, row in blacklist.iterrows():
+                st.markdown(f"""
+                <div style="border-left: 3px solid #FF004D; padding-left: 12px; margin-bottom: 12px; background-color: rgba(255,0,77,0.05); border-radius: 4px;">
+                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px;">
+                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Market']})</span>
+                    </div>
+                    <div style="font-size: 0.85em; color: #888; margin-bottom: 2px;">
+                        {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
+                    </div>
+                    <div style="color: #FF004D; font-weight: bold; font-size: 1.1em;">
+                        {row['ROI']:.1f}% ROI <span style="font-size: 0.8em; color: #a0aec0; font-weight: normal;">(${row['Net_Profit']:.2f})</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                     
             with pc2:
                 st.markdown("<div style='color:#ff0055; font-weight:bold; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;'>🗑️ The Blacklist (Biggest Losers)</div>", unsafe_allow_html=True)
