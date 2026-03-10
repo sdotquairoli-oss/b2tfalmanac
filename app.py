@@ -2264,7 +2264,7 @@ def render_syndicate_hall_of_fame(df):
 
 render_syndicate_hall_of_fame(graded_df)
                     
-            with pc2:
+     with pc2:
                 st.markdown("<div style='color:#ff0055; font-weight:bold; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;'>🗑️ The Blacklist (Biggest Losers)</div>", unsafe_allow_html=True)
                 if bottom_5.empty: st.caption("No losing athletes yet.")
                 for _, r in bottom_5.iterrows():
