@@ -2189,78 +2189,75 @@ with t_roi:
             
             st.markdown("---")
             
-            import streamlit as st
-import pandas as pd
-
 # --- NEW SYNDICATE HALL OF FAME ---
-def render_syndicate_hall_of_fame(df):
-    # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/STAT
-    grouped = df.groupby(['Player', 'Stat']).agg(
-        Total_Bets=('Result', 'count'),
-        Wins=('Result', lambda x: (x == 'Win').sum()),
-        Net_Profit=('Profit_Per_Bet', 'sum')
-    ).reset_index()
+                    def render_syndicate_hall_of_fame(df):
+                        # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/STAT
+                        grouped = df.groupby(['Player', 'Stat']).agg(
+                            Total_Bets=('Result', 'count'),
+                            Wins=('Result', lambda x: (x == 'Win').sum()),
+                            Net_Profit=('Profit_Per_Bet', 'sum')
+                        ).reset_index()
 
-    # 2. CALCULATE ADVANCED METRICS (Win Rate & ROI)
-    grouped['Total_Risk'] = grouped['Total_Bets'] * 100
-    grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
-    grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
+                        # 2. CALCULATE ADVANCED METRICS (Win Rate & ROI)
+                        grouped['Total_Risk'] = grouped['Total_Bets'] * 100
+                        grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
+                        grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
 
-    # 3. APPLY MINIMUM THRESHOLD FILTER
-    MIN_BETS = 3
-    qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
+                        # 3. APPLY MINIMUM THRESHOLD FILTER
+                        MIN_BETS = 3
+                        qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
 
-    # 4. SORT BY ROI INSTEAD OF RAW DOLLARS
-    hall_of_fame = qualified_props.sort_values(by='ROI', ascending=False).head(5)
-    blacklist = qualified_props.sort_values(by='ROI', ascending=True).head(5)
+                        # 4. SORT BY ROI INSTEAD OF RAW DOLLARS
+                        hall_of_fame = qualified_props.sort_values(by='ROI', ascending=False).head(5)
+                        blacklist = qualified_props.sort_values(by='ROI', ascending=True).head(5)
 
-    # --- STREAMLIT UI RENDERING ---
-    st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
-    
-    col1, col2 = st.columns(2)
+                        # --- STREAMLIT UI RENDERING ---
+                        st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
+                        
+                        col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown("<h4 style='color: #00FF00; font-size: 14px;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
-        if hall_of_fame.empty:
-            st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
-        else:
-            for _, row in hall_of_fame.iterrows():
-                st.markdown(f"""
-                <div style="border-left: 3px solid #00FF00; padding-left: 12px; margin-bottom: 12px; background-color: rgba(0,255,0,0.05); border-radius: 4px;">
-                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
-                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Stat']})</span>
-                    </div>
-                    <div style="font-size: 0.85em; color: #94a3b8; margin-bottom: 2px;">
-                        {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
-                    </div>
-                    <div style="color: #00FF00; font-weight: bold; font-size: 1.1em;">
-                        +{row['ROI']:.1f}% ROI <span style="font-size: 0.8em; color: #a0aec0; font-weight: normal;">(+${row['Net_Profit']:.2f})</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                        with col1:
+                            st.markdown("<h4 style='color: #00FF00; font-size: 14px;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
+                            if hall_of_fame.empty:
+                                st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+                            else:
+                                for _, row in hall_of_fame.iterrows():
+                                    st.markdown(f"""
+                                    <div style="border-left: 3px solid #00FF00; padding-left: 12px; margin-bottom: 12px; background-color: rgba(0,255,0,0.05); border-radius: 4px;">
+                                        <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
+                                            {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Stat']})</span>
+                                        </div>
+                                        <div style="font-size: 0.85em; color: #94a3b8; margin-bottom: 2px;">
+                                            {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
+                                        </div>
+                                        <div style="color: #00FF00; font-weight: bold; font-size: 1.1em;">
+                                            +{row['ROI']:.1f}% ROI <span style="font-size: 0.8em; color: #a0aec0; font-weight: normal;">(+${row['Net_Profit']:.2f})</span>
+                                        </div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
 
-    with col2:
-        st.markdown("<h4 style='color: #FF004D; font-size: 14px;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
-        if blacklist.empty:
-            st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
-        else:
-            for _, row in blacklist.iterrows():
-                st.markdown(f"""
-                <div style="border-left: 3px solid #FF004D; padding-left: 12px; margin-bottom: 12px; background-color: rgba(255,0,77,0.05); border-radius: 4px;">
-                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
-                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Stat']})</span>
-                    </div>
-                    <div style="font-size: 0.85em; color: #94a3b8; margin-bottom: 2px;">
-                        {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
-                    </div>
-                    <div style="color: #FF004D; font-weight: bold; font-size: 1.1em;">
-                        {row['ROI']:.1f}% ROI <span style="font-size: 0.8em; color: #a0aec0; font-weight: normal;">(${row['Net_Profit']:.2f})</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                        with col2:
+                            st.markdown("<h4 style='color: #FF004D; font-size: 14px;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
+                            if blacklist.empty:
+                                st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+                            else:
+                                for _, row in blacklist.iterrows():
+                                    st.markdown(f"""
+                                    <div style="border-left: 3px solid #FF004D; padding-left: 12px; margin-bottom: 12px; background-color: rgba(255,0,77,0.05); border-radius: 4px;">
+                                        <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
+                                            {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Stat']})</span>
+                                        </div>
+                                        <div style="font-size: 0.85em; color: #94a3b8; margin-bottom: 2px;">
+                                            {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
+                                        </div>
+                                        <div style="color: #FF004D; font-weight: bold; font-size: 1.1em;">
+                                            {row['ROI']:.1f}% ROI <span style="font-size: 0.8em; color: #a0aec0; font-weight: normal;">(${row['Net_Profit']:.2f})</span>
+                                        </div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
 
-# 🚀 Execute the function using your actual dataframe!
-render_syndicate_hall_of_fame(graded_df)
+                    # 🚀 Execute the function using your actual dataframe!
+                    render_syndicate_hall_of_fame(graded_df)
         
         # ═══════════════════════════════════════════════
         # 🔬 LOSS PATTERN REPORT
