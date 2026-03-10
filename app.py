@@ -2203,13 +2203,17 @@ with t_roi:
                 grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
                 grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
 
-                # 3. APPLY MINIMUM THRESHOLD FILTER
-                MIN_BETS = 3
+                # 3. APPLY MINIMUM THRESHOLD FILTER (Lowered to 2 for smaller sample sizes)
+                MIN_BETS = 2
                 qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
 
-                # 4. SORT BY ROI INSTEAD OF RAW DOLLARS
-                hall_of_fame = qualified_props.sort_values(by='ROI', ascending=False).head(5)
-                blacklist = qualified_props.sort_values(by='ROI', ascending=True).head(5)
+                # 4. SPLIT BY PROFITABILITY SO NO ONE APPEARS ON BOTH LISTS
+                profitable = qualified_props[qualified_props['ROI'] > 0]
+                unprofitable = qualified_props[qualified_props['ROI'] < 0]
+
+                # 5. SORT BY ROI
+                hall_of_fame = profitable.sort_values(by='ROI', ascending=False).head(5)
+                blacklist = unprofitable.sort_values(by='ROI', ascending=True).head(5)
 
                 # --- STREAMLIT UI RENDERING ---
                 st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
