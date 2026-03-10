@@ -2203,7 +2203,7 @@ with t_roi:
                 grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
                 grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
 
-                # 3. APPLY MINIMUM THRESHOLD FILTER (Lowered to 2 for smaller sample sizes)
+                # 3. APPLY MINIMUM THRESHOLD FILTER
                 MIN_BETS = 2
                 qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
 
@@ -2211,21 +2211,21 @@ with t_roi:
                 profitable = qualified_props[qualified_props['ROI'] > 0]
                 unprofitable = qualified_props[qualified_props['ROI'] < 0]
 
-                # 5. SORT BY ROI
-                hall_of_fame = profitable.sort_values(by='ROI', ascending=False).head(5)
-                blacklist = unprofitable.sort_values(by='ROI', ascending=True).head(5)
+                # 5. SORT BY ROI (Expanded to 6 items to perfectly fill a 3x2 grid)
+                hall_of_fame = profitable.sort_values(by='ROI', ascending=False).head(6)
+                blacklist = unprofitable.sort_values(by='ROI', ascending=True).head(6)
 
                 # --- STREAMLIT UI RENDERING ---
                 st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
-                
-                col1, col2 = st.columns(2)
 
-                with col1:
-                    st.markdown("<h4 style='color: #00FF00; font-size: 14px;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
-                    if hall_of_fame.empty:
-                        st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
-                    else:
-                        for _, row in hall_of_fame.iterrows():
+                # ROW 1: THE HALL OF FAME
+                st.markdown("<h4 style='color: #00FF00; font-size: 14px; margin-top: 10px;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
+                if hall_of_fame.empty:
+                    st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+                else:
+                    cols = st.columns(3)
+                    for i, (_, row) in enumerate(hall_of_fame.iterrows()):
+                        with cols[i % 3]:
                             st.markdown(f"""
                             <div style="border-left: 3px solid #00FF00; padding-left: 12px; margin-bottom: 12px; background-color: rgba(0,255,0,0.05); border-radius: 4px;">
                                 <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
@@ -2240,12 +2240,14 @@ with t_roi:
                             </div>
                             """, unsafe_allow_html=True)
 
-                with col2:
-                    st.markdown("<h4 style='color: #FF004D; font-size: 14px;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
-                    if blacklist.empty:
-                        st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
-                    else:
-                        for _, row in blacklist.iterrows():
+                # ROW 2: THE BLACKLIST
+                st.markdown("<h4 style='color: #FF004D; font-size: 14px; margin-top: 15px;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
+                if blacklist.empty:
+                    st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+                else:
+                    cols = st.columns(3)
+                    for i, (_, row) in enumerate(blacklist.iterrows()):
+                        with cols[i % 3]:
                             st.markdown(f"""
                             <div style="border-left: 3px solid #FF004D; padding-left: 12px; margin-bottom: 12px; background-color: rgba(255,0,77,0.05); border-radius: 4px;">
                                 <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
