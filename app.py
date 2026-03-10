@@ -2263,21 +2263,6 @@ def render_syndicate_hall_of_fame(df):
                 """, unsafe_allow_html=True)
 
 render_syndicate_hall_of_fame(graded_df)
-                    
-     with pc2:
-                st.markdown("<div style='color:#ff0055; font-weight:bold; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;'>🗑️ The Blacklist (Biggest Losers)</div>", unsafe_allow_html=True)
-                if bottom_5.empty: st.caption("No losing athletes yet.")
-                for _, r in bottom_5.iterrows():
-                    profit = r['Net_Profit']
-                    wr = (r['Wins'] / r['Bets']) * 100
-                    st.markdown(f"""
-                    <div style="background-color:#0f172a; border: 1px solid #1e293b; border-left: 3px solid #ff0055; border-radius: 6px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="font-size: 14px; font-weight: bold; color: #fff;">{r['Player']} <br><span style="font-size: 11px; color: #94a3b8; font-weight: normal;">{int(r['Bets'])} bets | {wr:.0f}% Win</span></div>
-                        <div style="font-size: 16px; font-weight: 900; color: #ff0055;">-${abs(profit):.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        st.markdown("---")
         
         # ═══════════════════════════════════════════════
         # 🔬 LOSS PATTERN REPORT
