@@ -2195,20 +2195,21 @@ import pandas as pd
 # Assuming your graded bets are stored in a DataFrame called 'df'
 # Adjust the column strings below to match your actual DataFrame schema!
 
-def render_syndicate_hall_of_fame(graded_df):
-    # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/MARKET
-    grouped = df.groupby(['Player', 'Market']).agg(
+def render_syndicate_hall_of_fame(df):
+    # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/STAT
+    grouped = df.groupby(['Player', 'Stat']).agg(
         Total_Bets=('Result', 'count'),
         Wins=('Result', lambda x: (x == 'Win').sum()),
-        Net_Profit=('Profit', 'sum'),
-        Total_Risk=('Risk', 'sum') # Needed for accurate ROI
+        Net_Profit=('Profit_Per_Bet', 'sum')
     ).reset_index()
 
     # 2. CALCULATE ADVANCED METRICS (Win Rate & ROI)
+    # Since your system uses standard $100 units for profit calculation:
+    grouped['Total_Risk'] = grouped['Total_Bets'] * 100
     grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
     grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
 
-    # 3. APPLY MINIMUM THRESHOLD FILTER (The Syndicate "No One-Hit Wonders" Rule)
+    # 3. APPLY MINIMUM THRESHOLD FILTER (No One-Hit Wonders)
     MIN_BETS = 3
     qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
 
@@ -2217,22 +2218,22 @@ def render_syndicate_hall_of_fame(graded_df):
     blacklist = qualified_props.sort_values(by='ROI', ascending=True).head(5)
 
     # --- STREAMLIT UI RENDERING ---
-    st.header("👑 Syndicate Hall of Fame & Shame")
+    st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
     
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("<h4 style='color: #00FF00;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #00FF00; font-size: 14px;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
         if hall_of_fame.empty:
             st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
         else:
             for _, row in hall_of_fame.iterrows():
                 st.markdown(f"""
                 <div style="border-left: 3px solid #00FF00; padding-left: 12px; margin-bottom: 12px; background-color: rgba(0,255,0,0.05); border-radius: 4px;">
-                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px;">
-                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Market']})</span>
+                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
+                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Stat']})</span>
                     </div>
-                    <div style="font-size: 0.85em; color: #888; margin-bottom: 2px;">
+                    <div style="font-size: 0.85em; color: #94a3b8; margin-bottom: 2px;">
                         {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
                     </div>
                     <div style="color: #00FF00; font-weight: bold; font-size: 1.1em;">
@@ -2242,17 +2243,17 @@ def render_syndicate_hall_of_fame(graded_df):
                 """, unsafe_allow_html=True)
 
     with col2:
-        st.markdown("<h4 style='color: #FF004D;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #FF004D; font-size: 14px;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
         if blacklist.empty:
             st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
         else:
             for _, row in blacklist.iterrows():
                 st.markdown(f"""
                 <div style="border-left: 3px solid #FF004D; padding-left: 12px; margin-bottom: 12px; background-color: rgba(255,0,77,0.05); border-radius: 4px;">
-                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px;">
-                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Market']})</span>
+                    <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
+                        {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Stat']})</span>
                     </div>
-                    <div style="font-size: 0.85em; color: #888; margin-bottom: 2px;">
+                    <div style="font-size: 0.85em; color: #94a3b8; margin-bottom: 2px;">
                         {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
                     </div>
                     <div style="color: #FF004D; font-weight: bold; font-size: 1.1em;">
@@ -2260,6 +2261,8 @@ def render_syndicate_hall_of_fame(graded_df):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+render_syndicate_hall_of_fame(graded_df)
                     
             with pc2:
                 st.markdown("<div style='color:#ff0055; font-weight:bold; font-size:14px; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px;'>🗑️ The Blacklist (Biggest Losers)</div>", unsafe_allow_html=True)
