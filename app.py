@@ -1516,7 +1516,7 @@ def render_syndicate_board(league_key):
             with m_c1: st.metric("Target Line", line if stat_type != "Moneyline" else "Win")
             with m_c2: st.metric("Odds", odds)
             
-            user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True)
+            user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True, key=f"{lk}.user_side")
 
             if st.button(f"🔒 Lock {league_key} Pick"):
                 save_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50)
