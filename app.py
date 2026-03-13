@@ -2098,8 +2098,40 @@ with t_parlay:
                 st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{book_html}{row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${payout:.2f}</span></div></div>""", unsafe_allow_html=True)
             with pc2:
                 st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-                opts = ["Pending", "Win", "Loss"]
+                opts = ["Pending", "Win", "Loss", "Cash Out"]
                 if row['Result'] == "Push": opts.append("Push")
+                # 1. Capture the selection into a variable
+        selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
+        
+        # 2. The Dynamic Cash Out UI
+        if selected_grade == "Cash Out":
+            st.warning("⚠️ Enter exact return.")
+            cash_out_value = st.number_input(
+                "Return Amount ($):", 
+                min_value=0.0, 
+                value=float(r), # Defaults to your original risk amount (r)
+                step=0.50,
+                key=f"cashout_val_{orig_idx}"
+            )
+            
+            # 3. The Confirmation & Save Engine
+            if st.button("💸 Confirm", key=f"confirm_{orig_idx}", use_container_width=True):
+                # Update the result in the dataframe
+                parlay_df.at[orig_idx, 'Result'] = "Cash Out"
+                
+                # Adjust payout/return columns if you have them (optional based on your sheet setup)
+                # parlay_df.at[orig_idx, 'Net_Profit'] = cash_out_value - r
+                
+                # Save to Google Sheets / Database using your existing function
+                overwrite_sheet("Parlay_Ledger", parlay_df)
+                
+                # Update liquid bankroll if tracked in session_state
+                if 'liquid_bankroll' in st.session_state:
+                    st.session_state.liquid_bankroll += cash_out_value
+                
+                st.success(f"✅ Saved!")
+                time.sleep(1)
+                st.rerun()
                 st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
 
 with t_roi:
