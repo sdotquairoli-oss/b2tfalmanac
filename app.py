@@ -268,19 +268,25 @@ def get_suppressed_stats(league, min_bets=10, max_win_rate=0.2):
     except: return set()
 
 def load_parlay_ledger():
-    df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
+    df = load_sheet_df("Parlay_Ledger", ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted", "Return"])
     df = df[df['Description'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
-    if "Is_Free_Bet" not in df.columns: df["Is_Free_Bet"] = False
-    else: df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
-    if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
-    else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+    if "Is_Free_Bet" not in df.columns:
+        df["Is_Free_Bet"] = False
+    else:
+        df["Is_Free_Bet"] = df["Is_Free_Bet"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+    if "Is_Boosted" not in df.columns:
+        df["Is_Boosted"] = False
+    else:
+        df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     return df
 
 def save_to_parlay_ledger(desc, odds, risk, book, is_free, is_boosted=False):
-    row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), "Description": desc, "Odds": int(odds), "Risk": float(risk), "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted}
-    append_to_sheet("Parlay_Ledger", row, ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted"])
+    row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
+           "Description": desc, "Odds": int(odds), "Risk": float(risk), 
+           "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted, "Return": 0.0}
+    append_to_sheet("Parlay_Ledger", row, ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted", "Return"])
 
 def load_bankroll(): return load_sheet_df("Bankroll_Ledger", ["Date", "Sportsbook", "Type", "Amount"])
 
@@ -313,12 +319,22 @@ def get_wallet_breakdown():
         p_df['Is_Free'] = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
 
         def calc_profit(row):
-            o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
-            if pd.isna(o) or pd.isna(r): return 0.0, row.get('Sportsbook', '')
-            prof = 0.0
-            if res == 'Win': prof = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-            elif res in ['Loss', 'Pending']: prof = -(0 if is_f else r)
-            return prof, str(row.get('Sportsbook', '')).strip()
+        o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
+        if pd.isna(o) or pd.isna(r):
+            return 0.0, row.get('Sportsbook', '')
+        prof = 0.0
+        if res == 'Win':
+            prof = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+        elif res == 'Cash Out':
+            ret_val = row.get('Return', '')
+            try:
+                ret_val = float(ret_val) if str(ret_val).strip() != '' else r
+            except:
+                ret_val = r
+            prof = ret_val - r
+        elif res in ['Loss', 'Pending']:
+            prof = -(0 if is_f else r)
+        return prof, str(row.get('Sportsbook', '')).strip()
 
         for _, row in p_df.iterrows():
             prof, bk = calc_profit(row)
@@ -2040,96 +2056,119 @@ with t_parlay:
     parlay_df = load_parlay_ledger()
     if not parlay_df.empty:
         st.markdown("---")
-        graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss'])]
-        p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
-        for _, row in graded_p.iterrows():
-            o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
-            if not is_f: total_staked += r
-            if row['Result'] == 'Win': p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-            else: p_profit -= (0 if is_f else r)
-
-        pm1, pm2, pm3, pm4 = st.columns(4)
-        pm1.metric("Total Graded Live/Parlays", f"{p_total}")
-        pm2.metric("Win Rate", f"{(p_wins / p_total * 100) if p_total > 0 else 0.0:.1f}%")
-        pm3.metric("Net Profit", f"${p_profit:+.2f}")
-        pm4.metric("ROI (%)", f"{(p_profit / total_staked * 100) if p_total > 0 and total_staked > 0 else 0.0:+.1f}%")
-
-        st.markdown("---")
-        
-        header_c1, header_c2 = st.columns([3, 1])
-        with header_c1:
-            st.markdown("#### 🎫 Your Live / Parlay Slips")
-        with header_c2:
-            if st.button("💾 Save All Grades", type="primary", use_container_width=True):
-                updated_count = 0
-                for orig_idx in parlay_df.index:
-                    k = f"p_res_{orig_idx}"
-                    if k in st.session_state:
-                        new_val = st.session_state[k]
-                        if parlay_df.at[orig_idx, 'Result'] != new_val:
-                            parlay_df.at[orig_idx, 'Result'] = new_val
-                            updated_count += 1
-                if updated_count > 0:
-                    overwrite_sheet("Parlay_Ledger", parlay_df)
-                    st.success(f"Successfully locked {updated_count} new grades!")
-                    time.sleep(1)
-                    st.rerun()
+        graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
+            p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
+            for _, row in graded_p.iterrows():
+                o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
+                if not is_f:
+                    total_staked += r
+                if row['Result'] == 'Win':
+                    p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+                elif row['Result'] == 'Cash Out':
+                    ret_val = row.get('Return', '')
+                    try:
+                        ret_val = float(ret_val) if str(ret_val).strip() != '' else r
+                    except:
+                        ret_val = r
+                    p_profit += (ret_val - r)
                 else:
-                    st.info("No new grades to save.")
+                    p_profit -= (0 if is_f else r)
+            
+            pm1, pm2, pm3, pm4 = st.columns(4)
+            pm1.metric("Total Graded Live/Parlays", f"{p_total}")
+            pm2.metric("Win Rate", f"{(p_wins / p_total * 100) if p_total > 0 else 0.0:.1f}%")
+            pm3.metric("Net Profit", f"${p_profit:+.2f}")
+            pm4.metric("ROI (%)", f"{(p_profit / total_staked * 100) if p_total > 0 and total_staked > 0 else 0.0:+.1f}%")
 
-        for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
-            orig_idx = row['index']
-            odds_raw = pd.to_numeric(row['Odds'], errors='coerce')
-            risk_raw = pd.to_numeric(row['Risk'], errors='coerce')
-            o = int(odds_raw) if not pd.isna(odds_raw) else 0
-            r = float(risk_raw) if not pd.isna(risk_raw) else 0.0
-            is_f = row.get('Is_Free_Bet', False)
-            if o > 0: payout = (r * (o / 100)) if is_f else r + (r * (o / 100))
-            elif o < 0: payout = (r / (abs(o) / 100)) if is_f else r + (r / (abs(o) / 100))
-            else: payout = r
-            status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] == "Push" else "#94a3b8"))
-            legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
-            boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
-            pc1, pc2 = st.columns([4, 1])
-            with pc1:
-                book_name = row.get('Sportsbook', 'LIVE BET')
-                logo_img = BOOK_LOGOS.get(book_name, "")
-                book_html = f'<img src="{logo_img}" width="16" height="16" style="border-radius: 50%; vertical-align: middle; margin-right: 6px;"> {book_name.upper()} • ' if logo_img else f"{book_name.upper()} • "
-                st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{book_html}{row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">Payout: ${payout:.2f}</span></div></div>""", unsafe_allow_html=True)
-            with pc2:
-                st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-                opts = ["Pending", "Win", "Loss", "Cash Out"]
-                if row['Result'] == "Push": opts.append("Push")
-                # 1. Capture the selection into a variable
-        
-        # 1. Capture the selection into a variable
-                selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
-                
-                if selected_grade == "Cash Out":
-                    st.warning("⚠️ Enter exact return.")
-                    cash_out_value = st.number_input(
-                        "Return Amount ($):", 
-                        min_value=0.0, 
-                        value=float(r), # Defaults to your original risk amount (r)
-                        step=0.50,
-                        key=f"cashout_val_{orig_idx}"
-                    )
-                    
-                    # 3. The Confirmation & Save Engine
-                    if st.button("💸 Confirm", key=f"confirm_{orig_idx}", use_container_width=True):
-                        # Update the result in the dataframe
-                        parlay_df.at[orig_idx, 'Result'] = "Cash Out"
-                        
-                        # Save to Google Sheets / Database using your existing function
+            st.markdown("---")
+            header_c1, header_c2 = st.columns([3, 1])
+            with header_c1:
+                st.markdown("#### 🎫 Your Live / Parlay Slips")
+            with header_c2:
+                if st.button("💾 Save All Grades", type="primary", use_container_width=True):
+                    updated_count = 0
+                    for orig_idx in parlay_df.index:
+                        k = f"p_res_{orig_idx}"
+                        if k in st.session_state:
+                            new_val = st.session_state[k]
+                            if parlay_df.at[orig_idx, 'Result'] != new_val:
+                                parlay_df.at[orig_idx, 'Result'] = new_val
+                                updated_count += 1
+                    if updated_count > 0:
                         overwrite_sheet("Parlay_Ledger", parlay_df)
-                        
-                        # Update liquid bankroll if tracked in session_state
-                        if 'liquid_bankroll' in st.session_state:
-                            st.session_state.liquid_bankroll += cash_out_value
-                        
-                        st.success(f"✅ Saved!")
+                        st.success(f"Successfully locked {updated_count} new grades!")
                         time.sleep(1)
                         st.rerun()
+                    else:
+                        st.info("No new grades to save.")
+
+            for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
+                orig_idx = row['index']
+                odds_raw = pd.to_numeric(row['Odds'], errors='coerce')
+                risk_raw = pd.to_numeric(row['Risk'], errors='coerce')
+                
+                o = int(odds_raw) if not pd.isna(odds_raw) else 0
+                r = float(risk_raw) if not pd.isna(risk_raw) else 0.0
+                is_f = row.get('Is_Free_Bet', False)
+                
+                payout_label = "Payout"
+                if row['Result'] == "Cash Out":
+                    payout_label = "Cashed Out"
+                    ret_val = row.get('Return', '')
+                    try:
+                        payout = float(ret_val) if str(ret_val).strip() != '' else r
+                    except:
+                        payout = r
+                else:
+                    if o > 0:
+                        payout = (r * (o / 100)) if is_f else r + (r * (o / 100))
+                    elif o < 0:
+                        payout = (r / (abs(o) / 100)) if is_f else r + (r / (abs(o) / 100))
+                    else:
+                        payout = r
+
+                status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] in ["Push", "Cash Out"] else "#94a3b8"))
+                
+                legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
+                boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
+                
+                pc1, pc2 = st.columns([4, 1])
+                with pc1:
+                    book_name = row.get('Sportsbook', 'LIVE BET')
+                    logo_img = BOOK_LOGOS.get(book_name, "")
+                    book_html = f'<img src="{logo_img}" width="16" height="16" style="border-radius: 50%; vertical-align: middle; margin-right: 6px;"> {book_name.upper()} • ' if logo_img else f"{book_name.upper()} • "
+                    
+                    st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{book_html}{row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">{payout_label}: ${payout:.2f}</span></div></div>""", unsafe_allow_html=True)
+                
+                with pc2:
+                    st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+                    opts = ["Pending", "Win", "Loss", "Cash Out"]
+                    if row['Result'] == "Push":
+                        opts.append("Push")
+                    
+                    # 1. Capture the selection into a variable
+                    selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
+                    
+                    # ✨ THE FIX: Only show the input box if we are switching TO Cash Out
+                    if selected_grade == "Cash Out" and row['Result'] != "Cash Out":
+                        st.warning("⚠️ Enter exact return.")
+                        cash_out_value = st.number_input(
+                            "Return Amount ($):", 
+                            min_value=0.0, 
+                            value=float(r), 
+                            step=0.50,
+                            key=f"cashout_val_{orig_idx}"
+                        )
+                        
+                        if st.button("💸 Confirm", key=f"confirm_{orig_idx}", use_container_width=True):
+                            parlay_df.at[orig_idx, 'Result'] = "Cash Out"
+                            parlay_df.at[orig_idx, 'Return'] = float(cash_out_value)
+                            
+                            overwrite_sheet("Parlay_Ledger", parlay_df)
+                            
+                            st.success(f"✅ Saved!")
+                            time.sleep(1)
+                            st.rerun()
 with t_roi:
     roi_col1, roi_col2 = st.columns([4, 1])
     with roi_col1: st.markdown("### 🏦 Syndicate Analytics & ROI")
