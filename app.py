@@ -299,49 +299,55 @@ def get_wallet_breakdown():
     b_df, p_df = load_bankroll(), load_parlay_ledger()
     book_balances = {book: 0.0 for book in SPORTSBOOKS}
     tot_dep, tot_wit, tot_cas, tot_sports = 0.0, 0.0, 0.0, 0.0
-
+    
     if not b_df.empty:
         b_df['Amount'] = pd.to_numeric(b_df['Amount'], errors='coerce').fillna(0)
         b_df['Sportsbook'] = b_df['Sportsbook'].astype(str).str.strip()
         b_df['Type'] = b_df['Type'].astype(str)
         for bk, grp in b_df.groupby('Sportsbook'):
             total = grp['Amount'].sum()
-            if bk in book_balances: book_balances[bk] += total
-            elif bk: book_balances[bk] = total
-
+            if bk in book_balances:
+                book_balances[bk] += total
+            elif bk:
+                book_balances[bk] = total
         tot_dep = b_df[b_df['Type'].str.contains('Deposit', na=False)]['Amount'].sum()
         tot_wit = b_df[b_df['Type'].str.contains('Withdrawal', na=False)]['Amount'].abs().sum()
         tot_cas = b_df[b_df['Type'].str.contains('Casino', na=False)]['Amount'].sum()
-
+        
     if not p_df.empty:
         p_df['Odds_num'] = pd.to_numeric(p_df['Odds'], errors='coerce')
         p_df['Risk_num'] = pd.to_numeric(p_df['Risk'], errors='coerce')
         p_df['Is_Free'] = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+        
+        def calc_profit(row):
+            o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
+            if pd.isna(o) or pd.isna(r):
+                return 0.0, row.get('Sportsbook', '')
+            prof = 0.0
+            if res == 'Win':
+                prof = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+            elif res == 'Cash Out':
+                ret_val = row.get('Return', '')
+                try:
+                    ret_val = float(ret_val) if str(ret_val).strip() != '' else r
+                except:
+                    ret_val = r
+                prof = ret_val - r
+            elif res in ['Loss', 'Pending']:
+                prof = -(0 if is_f else r)
+            return prof, str(row.get('Sportsbook', '')).strip()
+            
+        for _, row in p_df.iterrows():
+            prof, bk = calc_profit(row)
+            tot_sports += prof
+            if bk in book_balances:
+                book_balances[bk] += prof
+            elif bk:
+                book_balances[bk] = prof
 
-def calc_profit(row):
-        o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
-        if pd.isna(o) or pd.isna(r):
-            return 0.0, row.get('Sportsbook', '')
-        prof = 0.0
-        if res == 'Win':
-            prof = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-        elif res == 'Cash Out':
-            ret_val = row.get('Return', '')
-            try:
-                ret_val = float(ret_val) if str(ret_val).strip() != '' else r
-            except:
-                ret_val = r
-            prof = ret_val - r
-        elif res in ['Loss', 'Pending']:
-            prof = -(0 if is_f else r)
-        return prof, str(row.get('Sportsbook', '')).strip()
-    
     book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
     total_liquid = sum(book_balances.values())
     return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
-
-def get_liquid_balance(): return get_wallet_breakdown()[0]
-
 # ==========================================
 # 2. AUTO-GRADER & AI AUTOPSY
 # ==========================================
