@@ -388,11 +388,13 @@ def auto_grade_ledger():
             if len(g_row) > 1: g_row = g_row[g_row['td'] == bet_date]
             if g_row.empty: g_row = stats[stats['td'] == next_date]
             if not g_row.empty:
-                val, line_val = g_row.iloc[0][s_col], float(r['Line'])
-                if r['Vote'] == "OVER": df.at[idx, 'Result'] = 'Win' if val > line_val else 'Loss' if val < line_val else 'Push'
-                elif r['Vote'] == "UNDER": df.at[idx, 'Result'] = 'Win' if val < line_val else 'Loss' if val > line_val else 'Push'
-                df.at[idx, 'Actual'] = round(float(val), 2)
-                updated += 1
+                            val, line_val = g_row.iloc[0][s_col], float(r['Line'])
+                            if r['Vote'] == "OVER":
+                                df.at[idx, 'Result'] = 'Win' if val >= line_val else 'Loss'
+                            elif r['Vote'] == "UNDER":
+                                df.at[idx, 'Result'] = 'Win' if val <= line_val else 'Loss'
+                            df.at[idx, 'Actual'] = round(float(val), 2)
+                            updated += 1
         except: continue
 
     overwrite_sheet("ROI_Ledger", df)
@@ -2145,7 +2147,7 @@ with t_parlay:
                 
                 with pc2:
                     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-                    opts = ["Pending", "Win", "Loss", "Cash Out"]
+                    opts = ["Pending", "Win", "Loss", "Cash Out", "Void"]
                     if row['Result'] == "Push":
                         opts.append("Push")
                     
@@ -2408,7 +2410,7 @@ with t_roi:
             status = str(row.get('Result', 'Pending')).strip()
             if status == 'Win': b_color = "#00c853"
             elif status == 'Loss': b_color = "#ff0055"
-            elif status == 'Push': b_color = "#f59e0b"
+            elif status == 'Void': b_color = "#FFD700"
             else: b_color = "#3b82f6"
 
             league = row.get('League', 'N/A')
@@ -2527,8 +2529,8 @@ with t_roi:
                 else:
                     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
                     
-                opts = ["Pending", "Win", "Loss"]
-                if status == "Push": opts.append("Push")
+                opts = ["Pending", "Win", "Loss", "Void"]
+                start_idx = opts.index(status) if status in opts else 0
                     
                 start_idx = opts.index(status) if status in opts else 0
                 new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
