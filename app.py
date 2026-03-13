@@ -164,23 +164,41 @@ def get_team_logo(league, abbr):
 @st.cache_data(ttl=600)
 def load_sheet_df(sheet_name, expected_cols=None):
     gc = get_gc()
-    if not gc: return pd.DataFrame(columns=expected_cols or [])
+    if not gc:
+        return pd.DataFrame(columns=expected_cols or [])
     try:
         ws = gc.open("B2TF_Database").worksheet(sheet_name)
         data = ws.get_all_records()
         df = pd.DataFrame(data)
-        if not df.empty and 'Date' in df.columns:
-            df = df[df['Date'].astype(str).str.strip() != '']
+        
+        if not df.empty:
+            # 1. Strip whitespace
+            df.columns = [c.strip() for c in df.columns]
+            
+            # 2. SAFE Numeric Conversion (Handles 'ML' and other text gracefully)
+            num_cols = ["Odds", "Risk", "Line", "Proj", "Actual", "Win_Prob", "Return", "Amount"]
+            for col in num_cols:
+                if col in df.columns:
+                    # Errors='coerce' turns 'ML' into NaN, then fillna(0.0) makes it a safe 0.0
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+            
+            # 3. Date Cleanup
+            if 'Date' in df.columns:
+                df = df[df['Date'].astype(str).str.strip() != '']
+            
+            df = df.fillna("")
+            
         if expected_cols:
             for c in expected_cols:
-                if c not in df.columns: df[c] = ""
+                if c not in df.columns:
+                    df[c] = ""
             df = df[expected_cols]
+            
         return df
     except Exception as e:
-        # 🟢 Intercept Google's ugly HTML 502 error and make it clean
         err_str = str(e)
         if "502" in err_str or "html" in err_str.lower():
-            st.warning(f"🟡 Google Sheets API is temporarily busy. Skipping {sheet_name} sync for now.")
+            st.warning(f"🟡 Google API Busy. Skipping {sheet_name}.")
         else:
             st.error(f"Error loading {sheet_name}: {err_str}")
         return pd.DataFrame(columns=expected_cols or [])
