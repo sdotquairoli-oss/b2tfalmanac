@@ -318,7 +318,7 @@ def get_wallet_breakdown():
         p_df['Risk_num'] = pd.to_numeric(p_df['Risk'], errors='coerce')
         p_df['Is_Free'] = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
 
-        def calc_profit(row):
+def calc_profit(row):
         o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
         if pd.isna(o) or pd.isna(r):
             return 0.0, row.get('Sportsbook', '')
