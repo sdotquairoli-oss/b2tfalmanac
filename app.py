@@ -2047,11 +2047,11 @@ with t_parlay:
             if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
             else: st.error("Please enter a description.")
 
-    parlay_df = load_parlay_ledger()
-    if not parlay_df.empty:
-        st.markdown("---")
-        graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
-        p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
+parlay_df = load_parlay_ledger()
+        if not parlay_df.empty:
+            st.markdown("---")
+            graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
+            p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
             for _, row in graded_p.iterrows():
                 o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
                 if not is_f:
