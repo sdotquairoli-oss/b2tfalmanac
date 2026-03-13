@@ -318,27 +318,27 @@ def get_wallet_breakdown():
         p_df['Risk_num'] = pd.to_numeric(p_df['Risk'], errors='coerce')
         p_df['Is_Free'] = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
 
-    def calc_profit(row):
-            o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
-            if pd.isna(o) or pd.isna(r):
-                return 0.0, row.get('Sportsbook', '')
-            prof = 0.0
-            if res == 'Win':
-                prof = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-            elif res == 'Cash Out':
-                ret_val = row.get('Return', '')
-                try:
+def calc_profit(row):
+        o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
+        if pd.isna(o) or pd.isna(r):
+            return 0.0, row.get('Sportsbook', '')
+        prof = 0.0
+        if res == 'Win':
+            prof = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+        elif res == 'Cash Out':
+            ret_val = row.get('Return', '')
+            try:
                 ret_val = float(ret_val) if str(ret_val).strip() != '' else r
-                except:
-                    ret_val = r
-                prof = ret_val - r
-            elif res in ['Loss', 'Pending']:
-                prof = -(0 if is_f else r)
-            return prof, str(row.get('Sportsbook', '')).strip()
+            except:
+                ret_val = r
+            prof = ret_val - r
+        elif res in ['Loss', 'Pending']:
+            prof = -(0 if is_f else r)
+        return prof, str(row.get('Sportsbook', '')).strip()
 
-    book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
-    total_liquid = sum(book_balances.values())
-    return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
+ book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
+ total_liquid = sum(book_balances.values())
+ return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
 
 def get_liquid_balance(): return get_wallet_breakdown()[0]
 
