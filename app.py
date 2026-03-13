@@ -2103,6 +2103,7 @@ with t_parlay:
                 # 1. Capture the selection into a variable
         
         # 2. The Dynamic Cash Out UI
+        selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
         if selected_grade == "Cash Out":
             st.warning("⚠️ Enter exact return.")
             cash_out_value = st.number_input(
@@ -2131,7 +2132,6 @@ with t_parlay:
                 st.success(f"✅ Saved!")
                 time.sleep(1)
                 st.rerun()
-                st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
 
 with t_roi:
     roi_col1, roi_col2 = st.columns([4, 1])
