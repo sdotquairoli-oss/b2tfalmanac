@@ -2102,37 +2102,34 @@ with t_parlay:
                 if row['Result'] == "Push": opts.append("Push")
                 # 1. Capture the selection into a variable
         
-        # 2. The Dynamic Cash Out UI
-        selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
-        if selected_grade == "Cash Out":
-            st.warning("⚠️ Enter exact return.")
-            cash_out_value = st.number_input(
-                "Return Amount ($):", 
-                min_value=0.0, 
-                value=float(r), # Defaults to your original risk amount (r)
-                step=0.50,
-                key=f"cashout_val_{orig_idx}"
-            )
-            
-            # 3. The Confirmation & Save Engine
-            if st.button("💸 Confirm", key=f"confirm_{orig_idx}", use_container_width=True):
-                # Update the result in the dataframe
-                parlay_df.at[orig_idx, 'Result'] = "Cash Out"
+        # 1. Capture the selection into a variable
+                selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
                 
-                # Adjust payout/return columns if you have them (optional based on your sheet setup)
-                # parlay_df.at[orig_idx, 'Net_Profit'] = cash_out_value - r
-                
-                # Save to Google Sheets / Database using your existing function
-                overwrite_sheet("Parlay_Ledger", parlay_df)
-                
-                # Update liquid bankroll if tracked in session_state
-                if 'liquid_bankroll' in st.session_state:
-                    st.session_state.liquid_bankroll += cash_out_value
-                
-                st.success(f"✅ Saved!")
-                time.sleep(1)
-                st.rerun()
-
+                if selected_grade == "Cash Out":
+                    st.warning("⚠️ Enter exact return.")
+                    cash_out_value = st.number_input(
+                        "Return Amount ($):", 
+                        min_value=0.0, 
+                        value=float(r), # Defaults to your original risk amount (r)
+                        step=0.50,
+                        key=f"cashout_val_{orig_idx}"
+                    )
+                    
+                    # 3. The Confirmation & Save Engine
+                    if st.button("💸 Confirm", key=f"confirm_{orig_idx}", use_container_width=True):
+                        # Update the result in the dataframe
+                        parlay_df.at[orig_idx, 'Result'] = "Cash Out"
+                        
+                        # Save to Google Sheets / Database using your existing function
+                        overwrite_sheet("Parlay_Ledger", parlay_df)
+                        
+                        # Update liquid bankroll if tracked in session_state
+                        if 'liquid_bankroll' in st.session_state:
+                            st.session_state.liquid_bankroll += cash_out_value
+                        
+                        st.success(f"✅ Saved!")
+                        time.sleep(1)
+                        st.rerun()
 with t_roi:
     roi_col1, roi_col2 = st.columns([4, 1])
     with roi_col1: st.markdown("### 🏦 Syndicate Analytics & ROI")
