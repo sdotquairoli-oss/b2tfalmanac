@@ -2047,7 +2047,7 @@ with t_parlay:
             if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
             else: st.error("Please enter a description.")
 
-parlay_df = load_parlay_ledger()
+        parlay_df = load_parlay_ledger()
         if not parlay_df.empty:
             st.markdown("---")
             graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
