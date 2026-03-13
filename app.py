@@ -2101,7 +2101,6 @@ with t_parlay:
                 opts = ["Pending", "Win", "Loss", "Cash Out"]
                 if row['Result'] == "Push": opts.append("Push")
                 # 1. Capture the selection into a variable
-        selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
         
         # 2. The Dynamic Cash Out UI
         if selected_grade == "Cash Out":
