@@ -336,9 +336,9 @@ def calc_profit(row):
             prof = -(0 if is_f else r)
         return prof, str(row.get('Sportsbook', '')).strip()
 
-    book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
-    total_liquid = sum(book_balances.values())
-    return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
+book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
+total_liquid = sum(book_balances.values())
+return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
 
 def get_liquid_balance(): return get_wallet_breakdown()[0]
 
