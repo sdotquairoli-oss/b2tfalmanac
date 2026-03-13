@@ -286,8 +286,14 @@ def save_to_parlay_ledger(desc, odds, risk, book, is_free, is_boosted=False):
     row = {"Date":datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
            "Description": desc, "Odds": int(odds), "Risk": float(risk), 
            "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted, "Return": 0.0}
+    
     append_to_sheet("Parlay_Ledger", row, ["Date", "Description", "Odds", "Risk", "Result", "Sportsbook", "Is_Free_Bet", "Is_Boosted", "Return"])
-
+    
+    st.session_state.parlay_builder_selections = {}
+    
+    st.success("✅ Parlay Slip Saved to Ledger!")
+    time.sleep(1)
+    st.rerun()
 def load_bankroll(): return load_sheet_df("Bankroll_Ledger", ["Date", "Sportsbook", "Type", "Amount"])
 
 def save_bankroll_transaction(book, trans_type, amount):
