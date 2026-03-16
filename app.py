@@ -107,7 +107,7 @@ def get_gc():
     except Exception as e: st.error(f"🚨 Google Sheets Auth Error: {e}")
     return None
 
-def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
+def log_prediction_receipt(player_name, stat_type, proj_value, game_date, is_override=False):
     """Saves a permanent receipt of the live AI projection to Google Sheets."""
     try:
         scope = [
@@ -130,11 +130,12 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date):
         
         if not is_duplicate:
             new_row = [
-                player_name, 
-                stat_type, 
-                game_date_str, 
-                round(float(proj_value), 2), 
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                player_name,
+                stat_type,
+                game_date_str,
+                round(float(proj_value), 2),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "OVERRIDE" if is_override else "AI"
             ]
             sheet.append_row(new_row)
             st.toast(f"✅ GOOGLE API CONFIRMED WRITE!", icon="🔥")
@@ -271,7 +272,7 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
     append_to_sheet("ROI_Ledger", row, new_cols)
 
 @st.cache_data(ttl=120)
-def get_suppressed_stats(league, min_bets=10, max_win_rate=0.2):
+def get_suppressed_stats(league, min_bets=25, max_win_rate=0.42):
     try:
         ledger = load_ledger()
         if ledger.empty: return set()
@@ -339,36 +340,36 @@ def get_wallet_breakdown():
         tot_cas = b_df[b_df['Type'].str.contains('Casino', na=False)]['Amount'].sum()
         
     if not p_df.empty:
-        p_df['Odds_num'] = pd.to_numeric(p_df['Odds'], errors='coerce')
-        p_df['Risk_num'] = pd.to_numeric(p_df['Risk'], errors='coerce')
-        p_df['Is_Free'] = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
-        
-        def calc_profit(row):
-            o, r, is_f, res = row['Odds_num'], row['Risk_num'], row['Is_Free'], row['Result']
-            if pd.isna(o) or pd.isna(r):
-                return 0.0, row.get('Sportsbook', '')
-            prof = 0.0
-            if res == 'Win':
-                prof = (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-            elif res == 'Cash Out':
-                ret_val = row.get('Return', '')
-                try:
-                    ret_val = float(ret_val) if str(ret_val).strip() != '' else r
-                except:
-                    ret_val = r
-                prof = ret_val - r
-            elif res in ['Loss', 'Pending']:
-                prof = -(0 if is_f else r)
-            return prof, str(row.get('Sportsbook', '')).strip()
-            
-        for _, row in p_df.iterrows():
-            prof, bk = calc_profit(row)
-            tot_sports += prof
+        # ✅ BUG-7 FIX: Fully vectorized — no iterrows() over parlay history
+        o   = pd.to_numeric(p_df['Odds'],   errors='coerce').fillna(0)
+        r   = pd.to_numeric(p_df['Risk'],   errors='coerce').fillna(0)
+        ret = pd.to_numeric(p_df.get('Return', pd.Series(0.0, index=p_df.index)), errors='coerce').fillna(0.0)
+        is_f = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
+        res  = p_df['Result'].astype(str)
+        bks  = p_df['Sportsbook'].astype(str).str.strip()
+
+        profit = pd.Series(0.0, index=p_df.index)
+
+        win_pos  = (res == 'Win') & (o > 0)
+        win_neg  = (res == 'Win') & (o <= 0)
+        loss     = res.isin(['Loss', 'Pending'])
+        cashout  = res == 'Cash Out'
+
+        profit[win_pos]  = r[win_pos]  * (o[win_pos] / 100)
+        profit[win_neg]  = r[win_neg]  / (o[win_neg].abs() / 100)
+        profit[loss]     = -(r * ~is_f)[loss]
+        profit[cashout]  = (ret - r)[cashout]
+
+        tot_sports = profit.sum()
+
+        for idx in p_df.index:
+            bk   = bks[idx]
+            prof = profit[idx]
             if bk in book_balances:
                 book_balances[bk] += prof
             elif bk:
                 book_balances[bk] = prof
-
+                
     book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
     total_liquid = sum(book_balances.values())
     return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
@@ -915,8 +916,10 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
     X_poi_train = df_ml[['MINS']].copy()
     X_poi_train['Trend'] = np.arange(len(df_ml))
 
-    df_ml['Roll3'] = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
-    X_rf_train = df_ml[['Roll3', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']].fillna(0).values
+    df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
+    df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
+    df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
+    X_rf_train = df_ml[['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']].fillna(0).values
 
     s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
     df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
@@ -944,7 +947,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
     tonight_rest = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
 
     trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-    stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest, tonight_def_mod]])[0]
+    stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, tonight_def_mod]])[0]
     con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
@@ -1050,7 +1053,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
         trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]])[0]
+        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]])[0]
         con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
         
@@ -1144,7 +1147,7 @@ def run_nba_heaters(stat_choice="Points"):
                     if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
                     dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
                     _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
-                        df, s_col, float(season_val), opp, "NBA", "Rested (1+ Days)", is_home, stat_choice, dh
+                        df, s_col, float(season_val), opp, "NBA", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
                     )
                     ai_proj = round(c_proj, 1)
                 time.sleep(0.5)
@@ -1186,7 +1189,7 @@ def run_nhl_heaters(stat_choice="Points"):
                     if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                     dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
                     _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
-                        df, s_col, float(season_val), opp, "NHL", "Rested (1+ Days)", is_home, stat_choice, dh
+                        df, s_col, float(season_val), opp, "NHL", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
                     )
                     ai_proj = round(c_proj, 1)
                 time.sleep(0.2)
@@ -1308,7 +1311,7 @@ def run_mlb_heaters(stat_choice="Hits"):
                 if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                 dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
                 _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
-                    df, s_col, 0.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice, dh
+                    df, s_col, 0.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
                 )
                 ai_proj = round(c_proj, 2)
             time.sleep(0.2)
@@ -1433,12 +1436,64 @@ def classify_miss(proj, line, actual, vote):
         likely_cause = "The projection was in the right ballpark but overconfident. Check whether the opponent defense modifier or fatigue flag was active — context modifiers may have been too aggressive on this setup."
         color = "#f59e0b"
     else:
-        miss_type    = "💥 BLOWOUT MISS"
-        likely_cause = "The actual result fell well outside the projected range. Likely causes: in-game blowout (minutes slashed), undisclosed injury, surprise lineup change, or an archetype mismatch vs this opponent. If Setup Score was ELITE (75+), this warrants a manual review."
-        color = "#ff0055"
+        miss_type = "💥 BLOWOUT MISS"
+        color     = "#ff0055"
+
+        # Use sign direction to give a more specific likely cause
+        if vote == "OVER" and line > 0 and actual < line * 0.65:
+            likely_cause = (
+                "Actual came in far below the line — not just a miss, a collapse. "
+                "Top causes: in-game blowout (minutes slashed in garbage time), "
+                "undisclosed injury or DNP that wasn't caught pre-game. "
+                "Check the injury report for that date."
+            )
+        elif vote == "UNDER" and line > 0 and actual > line * 1.35:
+            likely_cause = (
+                "Actual blew past the line significantly in the wrong direction. "
+                "Top causes: usage spike from a teammate injury, overtime added volume, "
+                "or a genuinely off-model outlier game. "
+                "Check if a key teammate was out that night."
+            )
+        else:
+            likely_cause = (
+                "The actual result fell well outside the projected range. "
+                "Likely causes: in-game blowout, undisclosed injury, surprise lineup "
+                "change, or an archetype mismatch vs this opponent. "
+                "If Setup Score was ELITE (75+), this warrants a manual review."
+            )
 
     return miss_type, round(abs_miss, 1), likely_cause, color
-    
+
+@st.cache_data(ttl=300)
+def load_vault_receipts(player_name, stat_type):
+    """Cached fetch of pre-game vault projections. Avoids a raw API call on every chart render."""
+    try:
+        scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scope
+        )
+        client = gspread.authorize(creds)
+        sheet = client.open("B2TF_Vault").sheet1
+        all_records = sheet.get_all_records()
+        receipts = pd.DataFrame(all_records)
+        if receipts.empty:
+            return {}
+        receipts = receipts[
+            (receipts['Player'] == player_name) &
+            (receipts['Stat'] == stat_type)
+        ]
+        if receipts.empty:
+            return {}
+        return dict(zip(
+            pd.to_datetime(receipts['Game_Date']).dt.strftime('%Y-%m-%d'),
+            receipts['Live_Proj']
+        ))
+    except:
+        return {}
+
 def render_syndicate_board(league_key):
     lk = league_key.lower()
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
@@ -1806,7 +1861,8 @@ def render_syndicate_board(league_key):
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p)
                         
                         today_date = datetime.now().strftime("%Y-%m-%d")
-                        log_prediction_receipt(target_player, stat_type, c_proj, today_date)
+                        is_override_bet = c_vote in ["PASS", "VETO"]
+                        log_prediction_receipt(target_player, stat_type, c_proj, today_date, is_override=is_override_bet)
                         
                         st.success(f"Hazmat Override Locked: {final_side}! (True Prob: {auto_user_p*100:.1f}%)")
                         st.toast(f"✅ Pre-Game Projection Locked in Google Vault!", icon="🔐")
@@ -1878,20 +1934,12 @@ def render_syndicate_board(league_key):
                         
                         df_l10['Saved_Proj'] = np.nan
                         try:
-                            scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-                            creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
-                            client = gspread.authorize(creds)
-                            sheet = client.open("B2TF_Vault").sheet1
-                            receipts = pd.DataFrame(sheet.get_all_records())
-                            if not receipts.empty:
-                                receipts = receipts[(receipts['Player'] == target_player) & (receipts['Stat'] == stat_type)]
-                                if not receipts.empty:
-                                    date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
-                                    df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
-                                    receipts_date_strs = pd.to_datetime(receipts['Game_Date']).dt.strftime('%Y-%m-%d')
-                                    receipt_dict = dict(zip(receipts_date_strs, receipts['Live_Proj']))
-                                    df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
-                        except Exception as e:
+                            receipt_dict = load_vault_receipts(target_player, stat_type)
+                            if receipt_dict:
+                                date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
+                                df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
+                                df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
+                        except:
                             pass
 
                         bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
@@ -2034,7 +2082,8 @@ with t_parlay:
     st.markdown("## 🎟️ Syndicate Parlay Builder")
     ledger_df = load_ledger()
     pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
-    if pending_picks.empty: st.warning("No pending singles found. Go to the sports boards to build your slips!")
+    if pending_picks.empty:
+        st.warning("No pending singles found. Go to the sports boards to build your slips!")
     else:
         pick_options, pick_odds_map, pick_prob_map = [], {}, {}
         for _, r in pending_picks.iterrows():
@@ -2082,26 +2131,26 @@ with t_parlay:
             if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
             else: st.error("Please enter a description.")
 
-        parlay_df = load_parlay_ledger()
-        if not parlay_df.empty:
-            st.markdown("---")
-            graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
-            p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
-            for _, row in graded_p.iterrows():
-                o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
-                if not is_f:
-                    total_staked += r
-                if row['Result'] == 'Win':
-                    p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-                elif row['Result'] == 'Cash Out':
-                    ret_val = row.get('Return', '')
-                    try:
-                        ret_val = float(ret_val) if str(ret_val).strip() != '' else r
-                    except:
-                        ret_val = r
-                    p_profit += (ret_val - r)
-                else:
-                    p_profit -= (0 if is_f else r)
+    parlay_df = load_parlay_ledger()
+    if not parlay_df.empty:
+        st.markdown("---")
+        graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
+        p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
+        for _, row in graded_p.iterrows():
+            o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
+            if not is_f:
+                total_staked += r
+            if row['Result'] == 'Win':
+                p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+            elif row['Result'] == 'Cash Out':
+                ret_val = row.get('Return', '')
+                try:
+                    ret_val = float(ret_val) if str(ret_val).strip() != '' else r
+                except:
+                    ret_val = r
+                p_profit += (ret_val - r)
+            else:
+                p_profit -= (0 if is_f else r)
             
             pm1, pm2, pm3, pm4 = st.columns(4)
             pm1.metric("Total Graded Live/Parlays", f"{p_total}")
@@ -2300,7 +2349,7 @@ with t_roi:
                 grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
 
                 # 3. APPLY MINIMUM THRESHOLD FILTER
-                MIN_BETS = 2
+                MIN_BETS = 5
                 qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
 
                 # 4. SPLIT BY PROFITABILITY SO NO ONE APPEARS ON BOTH LISTS
