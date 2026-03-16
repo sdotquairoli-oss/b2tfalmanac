@@ -2078,12 +2078,12 @@ with t_nfl:
     """, unsafe_allow_html=True)
 
 with t_parlay:
-# (Leave the rest of the t_parlay and t_roi blocks exactly as they are below this)
     st.markdown("## 🎟️ Syndicate Parlay Builder")
     ledger_df = load_ledger()
     pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
+
     if pending_picks.empty:
-        st.warning("No pending singles found. Go to the sports boards to build your slips!")
+        st.info("No pending singles. Add picks from the NBA/NHL/MLB boards first.")
     else:
         pick_options, pick_odds_map, pick_prob_map = [], {}, {}
         for _, r in pending_picks.iterrows():
