@@ -2163,7 +2163,7 @@ with t_parlay:
             with header_c1:
                 st.markdown("#### 🎫 Your Live / Parlay Slips")
             with header_c2:
-                if st.button("💾 Save All Grades", type="primary", use_container_width=True):
+                if st.button("💾 Save All Grades", type="primary", use_container_width=True, key="parlay_save_all_grades"):
                     updated_count = 0
                     for orig_idx in parlay_df.index:
                         k = f"p_res_{orig_idx}"
