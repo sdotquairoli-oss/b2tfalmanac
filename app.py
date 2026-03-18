@@ -240,7 +240,7 @@ def overwrite_sheet(sheet_name, df):
 
 @st.cache_data(ttl=120)
 def load_ledger():
-    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"]
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line"]
     df = load_sheet_df("ROI_Ledger", new_cols)
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
@@ -248,10 +248,14 @@ def load_ledger():
     if "Is_Boosted" not in df.columns: df["Is_Boosted"] = False
     else: df["Is_Boosted"] = df["Is_Boosted"].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
     if "Setup_Score" not in df.columns: df["Setup_Score"] = 0
-    if "User_Prob" not in df.columns: df["User_Prob"] = df["Win_Prob"] 
+    if "User_Prob" not in df.columns: df["User_Prob"] = df["Win_Prob"]
+    if "Opening_Line" not in df.columns: df["Opening_Line"] = 0.0
+    else: df["Opening_Line"] = pd.to_numeric(df["Opening_Line"], errors='coerce').fillna(0.0)
+    if "Closing_Line" not in df.columns: df["Closing_Line"] = 0.0
+    else: df["Closing_Line"] = pd.to_numeric(df["Closing_Line"], errors='coerce').fillna(0.0)
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55):
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0):
     row = {
         "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
         "League": league,
@@ -266,9 +270,11 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Win_Prob": float(win_prob),
         "Is_Boosted": is_boosted,
         "Setup_Score": int(setup_score),
-        "User_Prob": float(user_prob)
+        "User_Prob": float(user_prob),
+        "Opening_Line": float(opening_line),
+        "Closing_Line": ""
     }
-    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob"]
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line"]
     append_to_sheet("ROI_Ledger", row, new_cols)
 
 @st.cache_data(ttl=120)
@@ -1494,6 +1500,50 @@ def load_vault_receipts(player_name, stat_type):
     except:
         return {}
 
+def calculate_clv(bet_line, closing_line, opening_line, vote):
+    """
+    Returns (bet_clv, timing_clv, clv_rating, timing_rating).
+    
+    bet_clv     = how much better your number was vs closing line (post-game quality)
+    timing_clv  = how much better your number was vs opening line (timing quality)
+    
+    Positive = you got the better number. Negative = market got the better number.
+    """
+    try:
+        bet_line     = float(bet_line)
+        closing_line = float(closing_line)
+        opening_line = float(opening_line) if opening_line and float(opening_line) > 0 else bet_line
+    except (ValueError, TypeError):
+        return None, None, None, None
+
+    if closing_line <= 0:
+        return None, None, None, None
+
+    # For OVERs: lower line = better for bettor
+    # For UNDERs: higher line = better for bettor
+    if vote == "OVER":
+        bet_clv    = closing_line - bet_line     # positive = you got lower number than close
+        timing_clv = opening_line - bet_line     # positive = you got lower number than opener
+    elif vote == "UNDER":
+        bet_clv    = bet_line - closing_line     # positive = you got higher number than close
+        timing_clv = bet_line - opening_line     # positive = you got higher number than opener
+    else:
+        return None, None, None, None
+
+    # CLV Rating (vs closing line)
+    if bet_clv >= 1.5:   clv_rating = ("🟢 BEAT CLOSE", "#00E676")
+    elif bet_clv >= 0.5: clv_rating = ("🟡 SLIGHT EDGE", "#FFD700")
+    elif bet_clv >= -0.5: clv_rating = ("⚪ NEUTRAL", "#94a3b8")
+    else:                clv_rating = ("🔴 BOUGHT BAD", "#ff0055")
+
+    # Timing Rating (vs opening line)
+    if timing_clv >= 1.0:    timing_rating = ("⚡ EARLY EDGE", "#00E676")
+    elif timing_clv >= 0.0:  timing_rating = ("✅ GOOD TIMING", "#4ade80")
+    elif timing_clv >= -1.0: timing_rating = ("⚠️ LATE", "#f59e0b")
+    else:                    timing_rating = ("🛑 CHASED LINE", "#ff0055")
+
+    return round(bet_clv, 2), round(timing_clv, 2), clv_rating, timing_rating
+
 def render_syndicate_board(league_key):
     lk = league_key.lower()
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
@@ -1600,7 +1650,16 @@ def render_syndicate_board(league_key):
         with c4:
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
             rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
-
+            key_teammate_out = st.text_input(
+                "🚑 Key Teammate Out? (optional)",
+                placeholder="e.g. Luka Doncic",
+                key=f"{lk}.teammate_out",
+                help="Enter a teammate's name if they are confirmed out — boosts projection"
+            )
+            if key_teammate_out:
+                st.session_state[f"{lk}.injury_boost"] = True
+            else:
+                st.session_state[f"{lk}.injury_boost"] = False
     btn_c1, btn_c2, btn_c3, _ = st.columns([1.5, 1.5, 1.5, 1])
     with btn_c1: analyze_pressed = st.button(f"🚀 Analyze Matchup", type="primary", use_container_width=True, key=f"{lk}.btn_analyze")
 
@@ -1619,7 +1678,7 @@ def render_syndicate_board(league_key):
             user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True, key=f"{lk}.user_side")
 
             if st.button(f"🔒 Lock {league_key} Pick"):
-                save_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50)
+                ssave_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50, float(line))
                 st.success(f"Team Pick Locked: {user_side}")
         else:
             suppressed = get_suppressed_stats(league_key)
@@ -1670,6 +1729,10 @@ def render_syndicate_board(league_key):
 
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
                 final_consensus = raw_consensus * skynet_data["mod"]
+                # ✅ INJURY BOOST: Manual teammate-out redistributes ~8% of usage
+                if st.session_state.get(f"{lk}.injury_boost", False):
+                    final_consensus = final_consensus * 1.08
+                    df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * 1.08
                 df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
 
                 dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
@@ -1858,7 +1921,10 @@ def render_syndicate_board(league_key):
                                 user_edge_pct = edge_pct
 
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
-                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p)
+                        # ✅ CLV: Capture opening line from session state at lock time
+                        opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
+                        opening_line_val = float(st.session_state.get(opening_key, line))
+                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p, opening_line_val)
                         
                         today_date = datetime.now().strftime("%Y-%m-%d")
                         is_override_bet = c_vote in ["PASS", "VETO"]
@@ -1883,7 +1949,43 @@ def render_syndicate_board(league_key):
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
-
+                    # ✅ MARKET TIMING: Show real-time timing quality at decision point
+                    opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
+                    opener = st.session_state.get(opening_key)
+                    if opener and c_vote not in ["PASS", "VETO"]:
+                        line_drift = line - float(opener) if c_vote == "OVER" else float(opener) - line
+                        if abs(line_drift) >= 0.5:
+                            if line_drift > 0:
+                                timing_color = "#ff4500"
+                                timing_icon  = "🛑"
+                                timing_msg   = (
+                                    f"Line has moved **{abs(line_drift):.1f} units against** your {c_vote} "
+                                    f"since it opened at {opener}. "
+                                    f"Sharp money appears to be on the other side. "
+                                    f"You are buying a worse number than early bettors received."
+                                )
+                            else:
+                                timing_color = "#00E676"
+                                timing_icon  = "⚡"
+                                timing_msg   = (
+                                    f"Line has moved **{abs(line_drift):.1f} units in your favor** "
+                                    f"since it opened at {opener}. "
+                                    f"You are getting a better number than the opener — "
+                                    f"this is positive market timing."
+                                )
+                            st.markdown(f"""
+                            <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {timing_color};
+                                 border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                                <span style="font-size:14px; font-weight:900; color:{timing_color};">
+                                    {timing_icon} MARKET TIMING
+                                </span>
+                                <div style="font-size:12px; color:#f8fafc; margin-top:4px;">{timing_msg}</div>
+                                <div style="font-size:11px; color:#94a3b8; margin-top:3px;">
+                                    Opened: <b>{opener}</b> → Current: <b>{line}</b> → 
+                                    Drift: <span style="color:{timing_color}; font-weight:bold;">{line_drift:+.1f}</span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
                     move_msg = st.session_state.get(f"{lk}.line_move_msg")
                     move_dir = st.session_state.get(f"{lk}.line_move_dir")
                     if move_msg and c_vote != "PASS":
@@ -2330,7 +2432,82 @@ with t_roi:
                 st.altair_chart(bar_chart, use_container_width=True)
             
             st.markdown("---")
-            
+# ═══════════════════════════════════════════════
+            # 📊 CLV DASHBOARD
+            # ═══════════════════════════════════════════════
+            clv_eligible = graded_df[
+                (graded_df['Closing_Line'].apply(lambda x: float(x) if str(x).strip() not in ['', '0', '0.0', 'nan'] else 0) > 0) &
+                (graded_df['Vote'].isin(['OVER', 'UNDER']))
+            ].copy()
+
+            if len(clv_eligible) >= 3:
+                with st.expander(f"📊 Closing Line Value Report  ({len(clv_eligible)} tracked bets)", expanded=False):
+
+                    clv_results = []
+                    for _, cr in clv_eligible.iterrows():
+                        bet_clv, timing_clv, clv_rating, timing_rating = calculate_clv(
+                            cr.get('Line', 0), cr.get('Closing_Line', 0),
+                            cr.get('Opening_Line', 0), cr.get('Vote', '')
+                        )
+                        if bet_clv is not None:
+                            clv_results.append({
+                                'bet_clv': bet_clv,
+                                'timing_clv': timing_clv,
+                                'result': cr.get('Result', ''),
+                                'clv_label': clv_rating[0],
+                                'timing_label': timing_rating[0]
+                            })
+
+                    if clv_results:
+                        avg_clv    = sum(r['bet_clv'] for r in clv_results) / len(clv_results)
+                        avg_timing = sum(r['timing_clv'] for r in clv_results) / len(clv_results)
+                        beat_close = sum(1 for r in clv_results if r['bet_clv'] > 0)
+                        beat_open  = sum(1 for r in clv_results if r['timing_clv'] > 0)
+
+                        cv1, cv2, cv3, cv4 = st.columns(4)
+                        cv1.metric("Avg CLV vs Close", f"{avg_clv:+.2f}",
+                                   help="Positive = your number was better than where the line settled")
+                        cv2.metric("Avg Timing vs Open", f"{avg_timing:+.2f}",
+                                   help="Positive = you bet before sharp money moved the line against you")
+                        cv3.metric("Beat Closing Line", f"{beat_close}/{len(clv_results)}",
+                                   f"{beat_close/len(clv_results)*100:.0f}%", delta_color="off")
+                        cv4.metric("Beat Opening Line", f"{beat_open}/{len(clv_results)}",
+                                   f"{beat_open/len(clv_results)*100:.0f}%", delta_color="off")
+
+                        st.markdown("---")
+
+                        # Interpretation
+                        if avg_clv >= 0.5:
+                            st.success(
+                                f"✅ **Positive CLV detected (+{avg_clv:.2f} avg).** "
+                                f"Your number consistently beats the closing line — this is the most reliable "
+                                f"long-term signal that your edge is real and not variance."
+                            )
+                        elif avg_clv <= -0.5:
+                            st.warning(
+                                f"⚠️ **Negative CLV ({avg_clv:.2f} avg).** "
+                                f"You're consistently getting worse numbers than where the market settles. "
+                                f"This suggests you're betting too late after sharp money has already moved lines. "
+                                f"Try locking bets earlier in the day."
+                            )
+                        else:
+                            st.info(
+                                f"📊 **Neutral CLV ({avg_clv:+.2f} avg).** "
+                                f"You're roughly matching the market. Add more closing lines to get a clearer signal."
+                            )
+
+                        if avg_timing >= 0.5:
+                            st.success(
+                                f"⚡ **Strong timing (+{avg_timing:.2f} avg vs opener).** "
+                                f"You're getting in before the line moves against you — "
+                                f"this means you're identifying value before the broader market does."
+                            )
+                        elif avg_timing <= -0.5:
+                            st.warning(
+                                f"🛑 **Chasing lines ({avg_timing:.2f} avg vs opener).** "
+                                f"You're consistently betting after the line has already moved against your side. "
+                                f"Sync odds earlier and lock bets before sharp action hits."
+                            )            
 # --- NEW SYNDICATE HALL OF FAME ---
             def render_syndicate_hall_of_fame(df):
                 # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/STAT
@@ -2601,9 +2778,41 @@ with t_roi:
                     
                 opts = ["Pending", "Win", "Loss", "Void"]
                 start_idx = opts.index(status) if status in opts else 0
-                    
-                start_idx = opts.index(status) if status in opts else 0
                 new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
+
+                # ✅ CLV: Closing line entry — only show for graded prop bets
+                closing_raw = row.get('Closing_Line', 0)
+                try: current_closing = float(closing_raw) if str(closing_raw).strip() not in ['', '0', '0.0', 'nan'] else 0.0
+                except: current_closing = 0.0
+
+                if status in ['Win', 'Loss'] and stat not in ["Moneyline", "Spread", "Total (O/U)"]:
+                    bet_line_val = row.get('Line', 0)
+                    try: bet_line_val = float(bet_line_val)
+                    except: bet_line_val = 0.0
+
+                    closing_input = st.number_input(
+                        "Close 📉",
+                        value=current_closing if current_closing > 0 else bet_line_val,
+                        step=0.5,
+                        key=f"close_line_{i}",
+                        help="Enter the line where this prop closed at tip-off"
+                    )
+
+                    if closing_input != current_closing and closing_input > 0:
+                        if st.button("📊 Save CLV", key=f"save_clv_{i}", use_container_width=True):
+                            orig_idx = int(row['index'])
+                            # Column P = index 16 (0-based), row offset +2 for header
+                            target_row = orig_idx + 2
+                            gc = get_gc()
+                            if gc:
+                                ws = gc.open("B2TF_Database").worksheet("ROI_Ledger")
+                                ws.update_acell(f"P{target_row}", closing_input)
+                            load_sheet_df.clear()
+                            load_ledger.clear()
+                            st.success("CLV saved!")
+                            time.sleep(1)
+                            st.rerun()
+
                 if new_val != status:
                     if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
                         orig_idx = int(row['index'])
