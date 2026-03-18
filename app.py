@@ -1673,10 +1673,10 @@ def render_syndicate_board(league_key):
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
             rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
             key_teammate_out = st.text_input(
-                "🚑 Key Teammate Out? (optional)",
-                placeholder="e.g. Luka Doncic",
+                "🚑 Key Teammate Out?",
+                placeholder="Any name or 'yes' triggers +8%",
                 key=f"{lk}.teammate_out",
-                help="Enter a teammate's name if they are confirmed out — boosts projection"
+                help="Confirmed starter absence redistributes ~8% usage to remaining players. Enter any text to activate."
             )
             if key_teammate_out:
                 st.session_state[f"{lk}.injury_boost"] = True
@@ -1752,10 +1752,28 @@ def render_syndicate_board(league_key):
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
                 final_consensus = raw_consensus * skynet_data["mod"]
                 # ✅ INJURY BOOST: Manual teammate-out redistributes ~8% of usage
-                if st.session_state.get(f"{lk}.injury_boost", False):
+                injury_name = st.session_state.get(f"{lk}.teammate_out", "").strip()
+                if injury_name:
+                    pre_boost = final_consensus
                     final_consensus = final_consensus * 1.08
                     df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * 1.08
-                df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * skynet_data["mod"]
+                    st.markdown(f"""
+                    <div style="background-color: rgba(255, 165, 0, 0.1); border: 1px solid #f59e0b;
+                         border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                        <span style="font-size:14px; font-weight:900; color:#f59e0b;">
+                            🚑 INJURY REDISTRIBUTION ACTIVE
+                        </span>
+                        <div style="font-size:12px; color:#f8fafc; margin-top:4px;">
+                            <b>{injury_name}</b> confirmed out — usage redistributed to {target_player.split("(")[0].strip()}.
+                        </div>
+                        <div style="font-size:11px; color:#94a3b8; margin-top:3px;">
+                            Projection adjusted: 
+                            <span style="color:#94a3b8;">{pre_boost:.2f}</span> → 
+                            <span style="color:#f59e0b; font-weight:bold;">{final_consensus:.2f}</span>
+                            <span style="color:#f59e0b;"> (+8% usage bump)</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
                 def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
