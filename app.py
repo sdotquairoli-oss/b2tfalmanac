@@ -169,7 +169,29 @@ def load_sheet_df(sheet_name, expected_cols=None):
         return pd.DataFrame(columns=expected_cols or [])
     try:
         ws = gc.open("B2TF_Database").worksheet(sheet_name)
-        data = ws.get_all_records()
+        try:
+            data = ws.get_all_records()
+        except Exception as dup_err:
+            if "duplicates" in str(dup_err).lower():
+                # ✅ Duplicate header recovery: read raw and use first row as headers
+                all_values = ws.get_all_values()
+                if not all_values:
+                    return pd.DataFrame(columns=expected_cols or [])
+                raw_headers = all_values[0]
+                # Deduplicate headers by appending _2, _3 etc to any duplicates
+                seen = {}
+                clean_headers = []
+                for h in raw_headers:
+                    h = h.strip()
+                    if h in seen:
+                        seen[h] += 1
+                        clean_headers.append(f"{h}_{seen[h]}")
+                    else:
+                        seen[h] = 1
+                        clean_headers.append(h)
+                data = [dict(zip(clean_headers, row)) for row in all_values[1:]]
+            else:
+                raise
         df = pd.DataFrame(data)
         
         if not df.empty:
