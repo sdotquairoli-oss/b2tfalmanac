@@ -1051,9 +1051,39 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ✅ DEFENSIVE TIER SEGMENTATION
     # Splits game log by opponent quality so outlier games against
     # weak defenses don't contaminate projections against elite ones
-    ELITE_THRESHOLD = 0.93   # def_mod <= this = elite defense
-    WEAK_THRESHOLD  = 1.07   # def_mod >= this = weak defense
+    ELITE_THRESHOLD = 0.93
+    WEAK_THRESHOLD  = 1.07
 
+    # ✅ Use raw base defense modifier for tier classification
+    # mod_val includes pace + archetype stacking which can push
+    # elite defenses into the average bucket incorrectly.
+    # We isolate just the defense component for tier sorting.
+    raw_def_mod = 1.0
+    if league == "NBA":
+        live_stats = get_live_nba_team_stats()
+        if opp in live_stats:
+            def_rank = live_stats[opp]['DEF_RANK']
+            if def_rank <= 10:   raw_def_mod = 0.90
+            elif def_rank >= 21: raw_def_mod = 1.10
+            else:                raw_def_mod = 1.00
+        else:
+            # Fall back to static list
+            if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
+                raw_def_mod = 0.90
+            elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
+                raw_def_mod = 1.10
+            else:
+                raw_def_mod = 1.00
+    elif league == "NHL":
+        defs = bad_defs if bad_defs is not None else {}
+        raw_def_mod = 1.10 if opp in defs else (0.90 if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"] else 1.00)
+    elif league == "MLB":
+        if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
+            raw_def_mod = 0.90
+        elif opp in ["COL", "OAK", "CHW", "KC", "WSH"]:
+            raw_def_mod = 1.10
+        else:
+            raw_def_mod = 1.00
     elite_games = df_ml[df_ml['Opp_Def_Mod'] <= ELITE_THRESHOLD]
     weak_games  = df_ml[df_ml['Opp_Def_Mod'] >= WEAK_THRESHOLD]
     avg_games   = df_ml[
@@ -1063,7 +1093,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
 
     MIN_TIER_GAMES = 3   # minimum games in a tier to trust the average
 
-    if mod_val <= ELITE_THRESHOLD:
+    if raw_def_mod <= ELITE_THRESHOLD:
         # Tonight is an elite defense — use only games vs elite defenses
         if len(elite_games) >= MIN_TIER_GAMES and s_col in elite_games.columns:
             tier_baseline = elite_games[s_col].mean()
@@ -1073,7 +1103,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
             tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
             tier_label    = f"⚠️ Elite Def Filter: insufficient sample ({len(elite_games)}G), using full avg"
 
-    elif mod_val >= WEAK_THRESHOLD:
+    elif raw_def_mod >= WEAK_THRESHOLD:
         # Tonight is a weak defense — use only games vs weak defenses
         if len(weak_games) >= MIN_TIER_GAMES and s_col in weak_games.columns:
             tier_baseline = weak_games[s_col].mean()
