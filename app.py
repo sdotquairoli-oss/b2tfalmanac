@@ -1672,11 +1672,12 @@ def render_syndicate_board(league_key):
         with c4:
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
             rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
-            key_teammate_out = st.text_input(
+            key_teammate_out = st.checkbox(
                 "🚑 Key Teammate Out?",
-                placeholder="Any name or 'yes' triggers +8%",
                 key=f"{lk}.teammate_out",
-                help="Confirmed starter absence redistributes ~8% usage to remaining players. Enter any text to activate."
+                help="Confirmed starter absence redistributes ~8% usage to remaining players."
+            )
+            st.session_state[f"{lk}.injury_boost"] = key_teammate_out
             )
             if key_teammate_out:
                 st.session_state[f"{lk}.injury_boost"] = True
@@ -1752,8 +1753,7 @@ def render_syndicate_board(league_key):
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
                 final_consensus = raw_consensus * skynet_data["mod"]
                 # ✅ INJURY BOOST: Manual teammate-out redistributes ~8% of usage
-                injury_name = st.session_state.get(f"{lk}.teammate_out", "").strip()
-                if injury_name:
+                if st.session_state.get(f"{lk}.injury_boost", False):
                     pre_boost = final_consensus
                     final_consensus = final_consensus * 1.08
                     df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * 1.08
@@ -1764,7 +1764,7 @@ def render_syndicate_board(league_key):
                             🚑 INJURY REDISTRIBUTION ACTIVE
                         </span>
                         <div style="font-size:12px; color:#f8fafc; margin-top:4px;">
-                            <b>{injury_name}</b> confirmed out — usage redistributed to {target_player.split("(")[0].strip()}.
+                            Key teammate confirmed out — usage redistributed to {target_player.split("(")[0].strip()}.
                         </div>
                         <div style="font-size:11px; color:#94a3b8; margin-top:3px;">
                             Projection adjusted: 
