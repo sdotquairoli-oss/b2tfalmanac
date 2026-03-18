@@ -1678,7 +1678,7 @@ def render_syndicate_board(league_key):
                 help="Confirmed starter absence redistributes ~8% usage to remaining players."
             )
             st.session_state[f"{lk}.injury_boost"] = key_teammate_out
-            )
+        
             if key_teammate_out:
                 st.session_state[f"{lk}.injury_boost"] = True
             else:
