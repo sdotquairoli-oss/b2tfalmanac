@@ -1048,6 +1048,51 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs)
     unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
     df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
+    # ✅ DEFENSIVE TIER SEGMENTATION
+    # Splits game log by opponent quality so outlier games against
+    # weak defenses don't contaminate projections against elite ones
+    ELITE_THRESHOLD = 0.93   # def_mod <= this = elite defense
+    WEAK_THRESHOLD  = 1.07   # def_mod >= this = weak defense
+
+    elite_games = df_ml[df_ml['Opp_Def_Mod'] <= ELITE_THRESHOLD]
+    weak_games  = df_ml[df_ml['Opp_Def_Mod'] >= WEAK_THRESHOLD]
+    avg_games   = df_ml[
+        (df_ml['Opp_Def_Mod'] > ELITE_THRESHOLD) &
+        (df_ml['Opp_Def_Mod'] < WEAK_THRESHOLD)
+    ]
+
+    MIN_TIER_GAMES = 3   # minimum games in a tier to trust the average
+
+    if mod_val <= ELITE_THRESHOLD:
+        # Tonight is an elite defense — use only games vs elite defenses
+        if len(elite_games) >= MIN_TIER_GAMES and s_col in elite_games.columns:
+            tier_baseline = elite_games[s_col].mean()
+            tier_label    = f"🛡️ Elite Def Filter: {len(elite_games)}G avg = {tier_baseline:.1f}"
+        else:
+            # Not enough elite-defense games in log — fall back to full average
+            tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+            tier_label    = f"⚠️ Elite Def Filter: insufficient sample ({len(elite_games)}G), using full avg"
+
+    elif mod_val >= WEAK_THRESHOLD:
+        # Tonight is a weak defense — use only games vs weak defenses
+        if len(weak_games) >= MIN_TIER_GAMES and s_col in weak_games.columns:
+            tier_baseline = weak_games[s_col].mean()
+            tier_label    = f"🔓 Weak Def Filter: {len(weak_games)}G avg = {tier_baseline:.1f}"
+        else:
+            tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+            tier_label    = f"⚠️ Weak Def Filter: insufficient sample ({len(weak_games)}G), using full avg"
+
+    else:
+        # Tonight is an average defense — use only games vs average defenses
+        if len(avg_games) >= MIN_TIER_GAMES and s_col in avg_games.columns:
+            tier_baseline = avg_games[s_col].mean()
+            tier_label    = f"⚖️ Avg Def Filter: {len(avg_games)}G avg = {tier_baseline:.1f}"
+        else:
+            tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+            tier_label    = f"⚠️ Avg Def Filter: insufficient sample ({len(avg_games)}G), using full avg"
+
+    # Clip to a reasonable range — tier baseline should not be negative
+    tier_baseline = max(0.0, float(tier_baseline) if not pd.isna(tier_baseline) else 0.0)
     
     s_mean = df_ml[s_col].mean()
     if pd.isna(s_mean) or s_mean == 0:
@@ -1087,7 +1132,12 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         
     adjusted_trend = trend_proj * mod_val * fatigue_val * current_split_mod
     guru_proj = (adjusted_trend + stat_proj) / 2
-    raw_consensus = (trend_proj + stat_proj + con_proj + base_proj + guru_proj) / 5
+
+    # ✅ TIER BLEND: Weight tier baseline at 20% of consensus
+    # Pulls projection toward what this player actually does
+    # against tonight's specific defensive quality tier
+    raw_consensus_base = (trend_proj + stat_proj + con_proj + base_proj + guru_proj) / 5
+    raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
 
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
     ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
@@ -1105,7 +1155,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}.<br>"
     elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m).<br>"
     
-    mod_desc = vol_warning + low_sample_warning + mod_desc
+    mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
     threshold = PASS_THRESHOLDS.get(s_col, 0.5)
 
     def get_raw_vote(p): return "OVER" if p >= line + threshold else ("UNDER" if p <= line - threshold else "PASS")
