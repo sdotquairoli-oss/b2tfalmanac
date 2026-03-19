@@ -262,8 +262,7 @@ def overwrite_sheet(sheet_name, df):
 
 @st.cache_data(ttl=120)
 def load_ledger():
-    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line"]
-    df = load_sheet_df("ROI_Ledger", new_cols)
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins"]    df = load_sheet_df("ROI_Ledger", new_cols)
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
@@ -275,6 +274,8 @@ def load_ledger():
     else: df["Opening_Line"] = pd.to_numeric(df["Opening_Line"], errors='coerce').fillna(0.0)
     if "Closing_Line" not in df.columns: df["Closing_Line"] = 0.0
     else: df["Closing_Line"] = pd.to_numeric(df["Closing_Line"], errors='coerce').fillna(0.0)
+    if "Actual_Mins" not in df.columns: df["Actual_Mins"] = None
+    else: df["Actual_Mins"] = pd.to_numeric(df["Actual_Mins"], errors='coerce')
     return df
 
 def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0):
@@ -294,9 +295,10 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Setup_Score": int(setup_score),
         "User_Prob": float(user_prob),
         "Opening_Line": float(opening_line),
-        "Closing_Line": ""
+        "Closing_Line": "",
+        "Actual_Mins": ""
     }
-    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line"]
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins"]
     append_to_sheet("ROI_Ledger", row, new_cols)
 
 @st.cache_data(ttl=120)
@@ -447,6 +449,12 @@ def auto_grade_ledger():
                             elif r['Vote'] == "UNDER":
                                 df.at[idx, 'Result'] = 'Win' if val <= line_val else 'Loss'
                             df.at[idx, 'Actual'] = round(float(val), 2)
+                            if 'MINS' in stats.columns:
+                                try:
+                                    mins_val = g_row.iloc[0]['MINS']
+                                    if pd.notna(mins_val):
+                                        df.at[idx, 'Actual_Mins'] = round(float(mins_val), 1)
+                                except: pass
                             updated += 1
         except: continue
 
@@ -1520,7 +1528,7 @@ def render_league_scanners(league_name):
             st.dataframe(st.session_state[f'{lk}.radar.bb'], use_container_width=True, hide_index=True,
                 column_config={"Team": st.column_config.TextColumn("🛡️ Target Team", width="medium"), "Opp": st.column_config.TextColumn("🎯 Weak Opponent", width="medium"), "Opp Status": st.column_config.TextColumn("🚨 Defense Metric", width="large")})
 
-def classify_miss(proj, line, actual, vote):
+def classify_miss(proj, line, actual, vote, minutes_played=None):
     try:
         proj   = float(proj)
         line   = float(line)
@@ -1547,7 +1555,23 @@ def classify_miss(proj, line, actual, vote):
         miss_type = "💥 BLOWOUT MISS"
         color     = "#ff0055"
 
-        # Use sign direction to give a more specific likely cause
+        if minutes_played is not None:
+            try:
+                mins = float(minutes_played)
+                pts_per_min = actual / mins if mins > 0 else 0
+                proj_per_min = proj / mins if mins > 0 else 0
+                if mins <= 28 and pts_per_min < 0.15 and proj_per_min >= 0.25:
+                    miss_type    = "🟡 FOUL TROUBLE MISS"
+                    color        = "#a855f7"
+                    likely_cause = (
+                        "Low scoring in reduced minutes suggests foul trouble. "
+                        "This is not a model failure — foul distribution is random "
+                        "and unpredictable. The model's projection was likely accurate "
+                        "for a normal game. File this as variance, not a system error."
+                    )
+                    return miss_type, round(abs(actual - line), 1), likely_cause, color
+            except: pass
+
         if vote == "OVER" and line > 0 and actual < line * 0.65:
             likely_cause = (
                 "Actual came in far below the line — not just a miss, a collapse. "
@@ -2718,7 +2742,8 @@ with t_roi:
                 for _, lr in losses_with_actual.iterrows():
                     mt, dist, _, _ = classify_miss(
                         lr.get('Proj', 0), lr.get('Line', 0),
-                        lr.get('Actual', 0), lr.get('Vote', '')
+                        lr.get('Actual', 0), lr.get('Vote', ''),
+                        lr.get('Actual_Mins', None)
                     )
                     if mt: miss_types.append({
                         'type': mt, 'dist': dist,
@@ -2858,7 +2883,10 @@ with t_roi:
                 
             with sc2:
                 if has_autopsy:
-                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''))
+                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(
+                        row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''),
+                        row.get('Actual_Mins', None)
+                    )
                     if miss_type:
                         proj_val = row.get('Proj', 'N/A')
                         line_val = row.get('Line', 'N/A')
