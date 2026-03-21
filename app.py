@@ -2022,6 +2022,7 @@ def render_syndicate_board(league_key):
                 # +7.0 or better: Favorable note only, no penalty
                 spread_val = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
+                final_consensus = raw_consensus
 
                 if spread_val < -6.5:
                     dog_margin = abs(spread_val)
