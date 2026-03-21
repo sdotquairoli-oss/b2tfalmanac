@@ -1670,7 +1670,68 @@ def calculate_clv(bet_line, closing_line, opening_line, vote):
     else:                    timing_rating = ("🛑 CHASED LINE", "#ff0055")
 
     return round(bet_clv, 2), round(timing_clv, 2), clv_rating, timing_rating
-
+@st.cache_data(ttl=300)
+def get_team_spread(team_abbr, league_key, api_key):
+    """
+    Fetches tonight's point spread for a specific team.
+    Returns (spread, is_underdog, dog_margin) 
+    Negative spread = underdog, Positive = favorite
+    """
+    if not api_key:
+        return None, False, 0
+    
+    sport_path = {
+        "NBA": "basketball_nba",
+        "NHL": "icehockey_nhl", 
+        "MLB": "baseball_mlb"
+    }.get(league_key)
+    
+    if not sport_path:
+        return None, False, 0
+    
+    try:
+        events_resp = requests.get(
+            f"https://api.the-odds-api.com/v4/sports/{sport_path}/odds"
+            f"?apiKey={api_key}&regions=us&markets=spreads&oddsFormat=american",
+            timeout=10
+        )
+        events_data = events_resp.json()
+        
+        if not isinstance(events_data, list):
+            return None, False, 0
+        
+        # Match team abbreviation to full name
+        target_name = ODDS_MEGA_MAP.get(team_abbr, "").lower()
+        
+        for event in events_data:
+            home = event.get('home_team', '').lower()
+            away = event.get('away_team', '').lower()
+            
+            # Check if this event involves our team
+            team_in_game = (target_name and 
+                          (target_name in home or target_name in away))
+            
+            if not team_in_game:
+                continue
+                
+            # Find spread from first available bookmaker
+            for bookmaker in event.get('bookmakers', []):
+                for market in bookmaker.get('markets', []):
+                    if market.get('key') != 'spreads':
+                        continue
+                    for outcome in market.get('outcomes', []):
+                        outcome_team = outcome.get('name', '').lower()
+                        if target_name in outcome_team:
+                            spread = float(outcome.get('point', 0))
+                            is_underdog = spread < 0
+                            dog_margin = abs(spread) if is_underdog else 0
+                            return spread, is_underdog, dog_margin
+                            
+        return None, False, 0
+        
+    except:
+        return None, False, 0
+        
 def render_syndicate_board(league_key):
     lk = league_key.lower()
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
@@ -1854,10 +1915,138 @@ def render_syndicate_board(league_key):
                 df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, _ = run_ml_board(
                     df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
                 )
-
+                # ✅ GAME SCRIPT RISK FLAG
+                # Checks live point spread to detect blowout exposure
+                # before locking any bet — catches what the model cannot see
+                spread_val, is_dog, dog_margin = get_team_spread(
+                    target_player.split('(')[1].replace(')', '').strip() 
+                    if '(' in target_player else "",
+                    league_key, 
+                    ODDS_API_KEY
+                )
+                
+                BLOWOUT_THRESHOLD = 7.0   # 7+ point underdog = blowout risk
+                HEAVY_DOG_THRESHOLD = 10.0  # 10+ = severe blowout risk
+                
+                if spread_val is not None and is_dog:
+                    if dog_margin >= HEAVY_DOG_THRESHOLD:
+                        script_color = "#ff0055"
+                        script_icon = "🚨"
+                        script_severity = "SEVERE"
+                        script_msg = (
+                            f"Team is a {dog_margin:.1f} point underdog tonight. "
+                            f"Heavy blowout risk — starters typically sit in the "
+                            f"fourth quarter. Points, Assists, and Minutes props "
+                            f"are highly unreliable in this game environment. "
+                            f"Strong recommendation to pass regardless of model signal."
+                        )
+                        # Apply projection penalty for severe underdog situations
+                        blowout_penalty = 0.80
+                        final_consensus = raw_consensus * blowout_penalty
+                        
+                    elif dog_margin >= BLOWOUT_THRESHOLD:
+                        script_color = "#f59e0b"
+                        script_icon = "⚠️"
+                        script_severity = "ELEVATED"
+                        script_msg = (
+                            f"Team is a {dog_margin:.1f} point underdog tonight. "
+                            f"Elevated game script risk — if the game gets away "
+                            f"early, starters may see reduced fourth quarter minutes. "
+                            f"Consider reducing stake size or avoiding Points "
+                            f"and Assists props for this player."
+                        )
+                        # Apply mild projection penalty
+                        blowout_penalty = 0.90
+                        final_consensus = raw_consensus * blowout_penalty
+                        
+                    else:
+                        script_color = "#94a3b8"
+                        script_icon = "📊"
+                        script_severity = "LOW"
+                        script_msg = (
+                            f"Team is a {dog_margin:.1f} point underdog. "
+                            f"Minor game script consideration — monitor line "
+                            f"movement closer to tip-off."
+                        )
+                        blowout_penalty = 1.0
+                        
+                    st.markdown(f"""
+                    <div style="background-color: rgba(255,255,255,0.02); 
+                         border: 1px solid {script_color};
+                         border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; 
+                             align-items: center; margin-bottom: 6px;">
+                            <span style="font-size:15px; font-weight:900; 
+                                 color:{script_color};">
+                                {script_icon} GAME SCRIPT RISK — {script_severity}
+                            </span>
+                            <span style="font-size:11px; color:#94a3b8;">
+                                Spread: {spread_val:+.1f}
+                            </span>
+                        </div>
+                        <div style="font-size:12px; color:#f8fafc; 
+                             line-height:1.5;">{script_msg}</div>
+                        <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                            Projection adjusted for game script: 
+                            <span style="color:{script_color}; font-weight:bold;">
+                                ×{blowout_penalty:.2f} multiplier applied
+                            </span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                elif spread_val is not None and not is_dog:
+                    # Team is a favorite — note for context but no warning needed
+                    favorite_margin = abs(spread_val)
+                    if favorite_margin >= 7.0:
+                        st.caption(
+                            f"✅ Game Script Favorable: Team favored by "
+                            f"{favorite_margin:.1f} — potential garbage time "
+                            f"minutes boost for bench players."
+                        )
+                        
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
-                final_consensus = raw_consensus * skynet_data["mod"]
-                # ✅ INJURY BOOST: Manual teammate-out redistributes ~8% of usage
+                # final_consensus already adjusted for game script above
+                # Apply Skynet on top of game script adjusted number
+                if 'blowout_penalty' in locals() and blowout_penalty < 1.0:
+                    final_consensus = final_consensus * skynet_data["mod"]
+                else:
+                    final_consensus = raw_consensus * skynet_data["mod"]
+```
+
+---
+
+## What This Does Differently From the Existing Flag
+
+| Feature | Existing Blowout Flag | New Game Script Flag |
+|---------|----------------------|---------------------|
+| Data source | Model's defense modifier | Live point spread API |
+| Direction | Protects against winning big | Protects against losing big |
+| Trigger | Weak opponent defense | Team is underdog |
+| Severity levels | One level only | Low, Elevated, Severe |
+| Projection impact | Slashes expected minutes | Applies percentage penalty |
+| Stat types affected | Minutes and points | Points, Assists, all stats |
+| Real world example | Player scores too much, garbage time | Draymond 0 pts last night |
+
+---
+
+
+If this was live when you ran Draymond:
+```
+Golden State spread check returns:
+  Spread: -7.5 (GSW are 7.5 point underdogs)
+  Severity: ELEVATED → SEVERE depending on exact number
+
+Banner appears:
+⚠️ GAME SCRIPT RISK — ELEVATED
+Team is a 7.5 point underdog tonight.
+Elevated blowout risk...
+
+Projection penalty: ×0.90 applied
+Draymond proj drops from 11.97 to 10.77
+
+Banner recommendation:
+Consider reducing stake or avoiding Points props
                 if st.session_state.get(f"{lk}.injury_boost", False):
                     pre_boost = final_consensus
                     final_consensus = final_consensus * 1.08
