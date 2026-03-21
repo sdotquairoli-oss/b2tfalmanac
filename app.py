@@ -2016,17 +2016,19 @@ def render_syndicate_board(league_key):
                             f"minutes boost for bench players."
                         )
                 # ✅ GAME SCRIPT RISK — Manual spread input
+                # Negative spread = underdog, Positive = favorite
+                # -6.5 to -9.5: ELEVATED warning, 10% projection penalty
+                # -10.0 or worse: SEVERE warning, 20% projection penalty
+                # +7.0 or better: Favorable note only, no penalty
                 spread_val = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
 
                 if spread_val < -6.5:
-                    # Underdog by 7+ points
                     dog_margin = abs(spread_val)
 
                     if dog_margin >= 10.0:
                         script_color    = "#ff0055"
-                        script_icon     = "🚨"
-                        script_severity = "SEVERE"
+                        script_icon     = "SEVERE"
                         blowout_penalty = 0.80
                         script_msg = (
                             f"Team is a {dog_margin:.1f} point underdog. "
@@ -2038,8 +2040,7 @@ def render_syndicate_board(league_key):
                         )
                     else:
                         script_color    = "#f59e0b"
-                        script_icon     = "⚠️"
-                        script_severity = "ELEVATED"
+                        script_icon     = "ELEVATED"
                         blowout_penalty = 0.90
                         script_msg = (
                             f"Team is a {dog_margin:.1f} point underdog. "
@@ -2049,21 +2050,20 @@ def render_syndicate_board(league_key):
                             f"on Points and Assists props."
                         )
 
-                    # Apply penalty to projection
                     raw_consensus = raw_consensus * blowout_penalty
                     df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
 
                     st.markdown(f"""
                     <div style="background-color: rgba(255,255,255,0.02);
                          border: 1px solid {script_color};
-                         border-radius: 8px; padding: 12px; 
+                         border-radius: 8px; padding: 12px;
                          margin-bottom: 15px;">
-                        <div style="display: flex; justify-content: 
-                             space-between; align-items: center; 
+                        <div style="display: flex; justify-content:
+                             space-between; align-items: center;
                              margin-bottom: 6px;">
                             <span style="font-size:15px; font-weight:900;
                                  color:{script_color};">
-                                {script_icon} GAME SCRIPT RISK — {script_severity}
+                                GAME SCRIPT RISK — {script_icon}
                             </span>
                             <span style="font-size:11px; color:#94a3b8;">
                                 Spread: {spread_val:+.1f}
@@ -2071,29 +2071,23 @@ def render_syndicate_board(league_key):
                         </div>
                         <div style="font-size:12px; color:#f8fafc;
                              line-height:1.5;">{script_msg}</div>
-                        <div style="font-size:11px; color:#94a3b8; 
+                        <div style="font-size:11px; color:#94a3b8;
                              margin-top:6px;">
-                            Projection adjusted: 
-                            <span style="color:{script_color}; 
+                            Projection adjusted:
+                            <span style="color:{script_color};
                                  font-weight:bold;">
-                                ×{blowout_penalty:.2f} applied to consensus
+                                x{blowout_penalty:.2f} applied to consensus
                             </span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
                 elif spread_val >= 7.0:
-                    # Team is a big favorite — minor positive note
                     st.caption(
-                        f"✅ Game Script Favorable: Team favored by "
+                        f"Game Script Favorable: Team favored by "
                         f"{spread_val:.1f} — normal rotation expected, "
                         f"possible garbage time minutes boost late."
                     )
-```
-
----
-
-## How It Works in Practice
 
 You open your sportsbook, check tonight's spread for the player's team, type it into the Spread field before running analysis.
 ```
