@@ -1838,6 +1838,17 @@ def render_syndicate_board(league_key):
         with c4:
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
             rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
+            
+            # ✅ GAME SCRIPT RISK: Manual spread input from sportsbook
+            spread_input = st.number_input(
+                "📊 Team Spread",
+                min_value=-30.0,
+                max_value=30.0,
+                value=0.0,
+                step=0.5,
+                key=f"{lk}.spread",
+                help="Enter from your sportsbook. Negative = underdog. Positive = favorite."
+            )
             key_teammate_out = st.checkbox(
                 "🚑 Key Teammate Out?",
                 key=f"{lk}.teammate_out",
@@ -2004,7 +2015,138 @@ def render_syndicate_board(league_key):
                             f"{favorite_margin:.1f} — potential garbage time "
                             f"minutes boost for bench players."
                         )
-                        
+                # ✅ GAME SCRIPT RISK — Manual spread input
+                spread_val = st.session_state.get(f"{lk}.spread", 0.0)
+                blowout_penalty = 1.0
+
+                if spread_val < -6.5:
+                    # Underdog by 7+ points
+                    dog_margin = abs(spread_val)
+
+                    if dog_margin >= 10.0:
+                        script_color    = "#ff0055"
+                        script_icon     = "🚨"
+                        script_severity = "SEVERE"
+                        blowout_penalty = 0.80
+                        script_msg = (
+                            f"Team is a {dog_margin:.1f} point underdog. "
+                            f"Severe blowout risk — starters historically "
+                            f"sit in the fourth quarter in games like this. "
+                            f"Points, Assists, and Minutes props are highly "
+                            f"unreliable. Strong recommendation to pass "
+                            f"regardless of model signal."
+                        )
+                    else:
+                        script_color    = "#f59e0b"
+                        script_icon     = "⚠️"
+                        script_severity = "ELEVATED"
+                        blowout_penalty = 0.90
+                        script_msg = (
+                            f"Team is a {dog_margin:.1f} point underdog. "
+                            f"Elevated game script risk — if the game gets "
+                            f"out of hand early, expect reduced minutes and "
+                            f"fewer offensive opportunities. Consider passing "
+                            f"on Points and Assists props."
+                        )
+
+                    # Apply penalty to projection
+                    raw_consensus = raw_consensus * blowout_penalty
+                    df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
+
+                    st.markdown(f"""
+                    <div style="background-color: rgba(255,255,255,0.02);
+                         border: 1px solid {script_color};
+                         border-radius: 8px; padding: 12px; 
+                         margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: 
+                             space-between; align-items: center; 
+                             margin-bottom: 6px;">
+                            <span style="font-size:15px; font-weight:900;
+                                 color:{script_color};">
+                                {script_icon} GAME SCRIPT RISK — {script_severity}
+                            </span>
+                            <span style="font-size:11px; color:#94a3b8;">
+                                Spread: {spread_val:+.1f}
+                            </span>
+                        </div>
+                        <div style="font-size:12px; color:#f8fafc;
+                             line-height:1.5;">{script_msg}</div>
+                        <div style="font-size:11px; color:#94a3b8; 
+                             margin-top:6px;">
+                            Projection adjusted: 
+                            <span style="color:{script_color}; 
+                                 font-weight:bold;">
+                                ×{blowout_penalty:.2f} applied to consensus
+                            </span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                elif spread_val >= 7.0:
+                    # Team is a big favorite — minor positive note
+                    st.caption(
+                        f"✅ Game Script Favorable: Team favored by "
+                        f"{spread_val:.1f} — normal rotation expected, "
+                        f"possible garbage time minutes boost late."
+                    )
+```
+
+---
+
+## How It Works in Practice
+
+You open your sportsbook, check tonight's spread for the player's team, type it into the Spread field before running analysis.
+```
+Team is 7.5 point underdog:   type -7.5
+Team is 3 point favorite:     type +3
+Pick em game:                 leave at 0
+```
+
+**What triggers at each level:**
+
+| Spread Input | Result |
+|-------------|--------|
+| 0 to -6.0 | No warning, no penalty |
+| -6.5 to -9.5 | ⚠️ ELEVATED — 10% projection penalty |
+| -10.0 or worse | 🚨 SEVERE — 20% projection penalty |
+| +7.0 or better | ✅ Favorable note only |
+
+---
+
+## What This Would Have Done Last Night
+
+**Draymond — Golden State spread:**
+
+If Golden State was -7.5 or worse:
+```
+⚠️ ELEVATED warning appears
+Projection drops from 11.97 × 0.90 = 10.77
+Still OVER 7.5 but with visible warning
+Recommendation: reduce stake or pass on Points prop
+```
+
+If Golden State was -10 or worse:
+```
+🚨 SEVERE warning appears
+Projection drops from 11.97 × 0.80 = 9.58
+Still OVER but model now less emphatic
+Strong recommendation to pass
+```
+
+Either way you'd have seen the warning before locking. The decision to pass or reduce stake would have been yours but the information would have been on screen.
+
+---
+
+## The 15 Second Pre-Bet Routine
+
+This adds one step to your workflow that takes 15 seconds:
+```
+1. Open sportsbook
+2. Note tonight's spread for player's team
+3. Type it into the Spread field
+4. Run analysis
+5. Check if game script warning appears
+6. Proceed or pass accordingly        
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
                 # final_consensus already adjusted for game script above
                 # Apply Skynet on top of game script adjusted number
