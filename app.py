@@ -2089,84 +2089,12 @@ def render_syndicate_board(league_key):
                         f"possible garbage time minutes boost late."
                     )
 
-You open your sportsbook, check tonight's spread for the player's team, type it into the Spread field before running analysis.
-```
-Team is 7.5 point underdog:   type -7.5
-Team is 3 point favorite:     type +3
-Pick em game:                 leave at 0
-```
-
-**What triggers at each level:**
-
----
-
-## What This Would Have Done Last Night
-
-**Draymond — Golden State spread:**
-
-If Golden State was -7.5 or worse:
-```
-⚠️ ELEVATED warning appears
-Projection drops from 11.97 × 0.90 = 10.77
-Still OVER 7.5 but with visible warning
-Recommendation: reduce stake or pass on Points prop
-```
-
-If Golden State was -10 or worse:
-```
-🚨 SEVERE warning appears
-Projection drops from 11.97 × 0.80 = 9.58
-Still OVER but model now less emphatic
-Strong recommendation to pass
-```
-
-Either way you'd have seen the warning before locking. The decision to pass or reduce stake would have been yours but the information would have been on screen.
-
----
-
-## The 15 Second Pre-Bet Routine
-
-This adds one step to your workflow that takes 15 seconds:
-```
-1. Open sportsbook
-2. Note tonight's spread for player's team
-3. Type it into the Spread field
-4. Run analysis
-5. Check if game script warning appears
-6. Proceed or pass accordingly        
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
-                # final_consensus already adjusted for game script above
-                # Apply Skynet on top of game script adjusted number
                 if 'blowout_penalty' in locals() and blowout_penalty < 1.0:
                     final_consensus = final_consensus * skynet_data["mod"]
                 else:
                     final_consensus = raw_consensus * skynet_data["mod"]
 
-| Feature | Existing Blowout Flag | New Game Script Flag |
-|---------|----------------------|---------------------|
-| Data source | Model's defense modifier | Live point spread API |
-| Direction | Protects against winning big | Protects against losing big |
-| Trigger | Weak opponent defense | Team is underdog |
-| Severity levels | One level only | Low, Elevated, Severe |
-| Projection impact | Slashes expected minutes | Applies percentage penalty |
-| Stat types affected | Minutes and points | Points, Assists, all stats |
-| Real world example | Player scores too much, garbage time | Draymond 0 pts last night |
-
-
-Golden State spread check returns:
-  Spread: -7.5 (GSW are 7.5 point underdogs)
-  Severity: ELEVATED → SEVERE depending on exact number
-
-Banner appears:
-⚠️ GAME SCRIPT RISK — ELEVATED
-Team is a 7.5 point underdog tonight.
-Elevated blowout risk...
-
-Projection penalty: ×0.90 applied
-Draymond proj drops from 11.97 to 10.77
-
-Banner recommendation:
-Consider reducing stake or avoiding Points props
                 if st.session_state.get(f"{lk}.injury_boost", False):
                     pre_boost = final_consensus
                     final_consensus = final_consensus * 1.08
@@ -2318,7 +2246,6 @@ Consider reducing stake or avoiding Points props
                     final_side = c_vote
                     
                     if c_vote not in ["PASS", "VETO"]:
-                        # Standard Green Lock Button
                         with btn_c2:
                             lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
                         with btn_c3:
@@ -2328,7 +2255,6 @@ Consider reducing stake or avoiding Points props
                             else:
                                 final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
                     else:
-                        # 🚨 THE HAZMAT OVERRIDE PROTOCOL
                         with btn_c2:
                             lock_pressed = st.button("🚨 OVERRIDE 🚨", use_container_width=True, key=f"{lk}.override_lock")
                         with btn_c3:
@@ -2338,7 +2264,6 @@ Consider reducing stake or avoiding Points props
                             else:
                                 final_side = st.radio("Side", ["OVER", "UNDER"], index=0, horizontal=True, key=f"{lk}.override_side", label_visibility="collapsed")
 
-                        # 🟢 JS INJECTION: Forcefully paints the Hazmat Stripes (Bypasses Streamlit's CSS blockers)
                         import streamlit.components.v1 as components
                         components.html(
                             """
@@ -2355,16 +2280,15 @@ Consider reducing stake or avoiding Points props
                             """,
                             height=0, width=0
                         )
+
                     if lock_pressed:
-                        # If user overrides a PASS, calculate the true win prob for their forced choice
                         if c_vote in ["PASS", "VETO"]:
                             if final_side == "OVER":
                                 true_prob = np.sum(sims > line) / 5000.0
                             else:
                                 true_prob = np.sum(sims < line) / 5000.0
-                            
                             auto_user_p = true_prob
-                            win_prob = true_prob 
+                            win_prob = true_prob
                             user_edge_pct = (auto_user_p - implied_prob) * 100
                         else:
                             if final_side != c_vote:
@@ -2375,18 +2299,17 @@ Consider reducing stake or avoiding Points props
                                 user_edge_pct = edge_pct
 
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
-                        # ✅ CLV: Capture opening line from session state at lock time
                         opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
                         opening_line_val = float(st.session_state.get(opening_key, line))
                         save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p, opening_line_val)
-                        
+
                         today_date = datetime.now().strftime("%Y-%m-%d")
                         is_override_bet = c_vote in ["PASS", "VETO"]
                         log_prediction_receipt(target_player, stat_type, c_proj, today_date, is_override=is_override_bet)
-                        
+
                         st.success(f"Hazmat Override Locked: {final_side}! (True Prob: {auto_user_p*100:.1f}%)")
                         st.toast(f"✅ Pre-Game Projection Locked in Google Vault!", icon="🔐")
-                        
+
                     if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
                         s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
                         if s_score >= 75: banner_label = f"🌟 ELITE AI TOP PICK: {c_vote} 🌟"
@@ -2403,7 +2326,7 @@ Consider reducing stake or avoiding Points props
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
-                    # ✅ MARKET TIMING: Show real-time timing quality at decision point
+
                     opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
                     opener = st.session_state.get(opening_key)
                     if opener and c_vote not in ["PASS", "VETO"]:
@@ -2440,6 +2363,7 @@ Consider reducing stake or avoiding Points props
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
+
                     move_msg = st.session_state.get(f"{lk}.line_move_msg")
                     move_dir = st.session_state.get(f"{lk}.line_move_dir")
                     if move_msg and c_vote != "PASS":
@@ -2454,7 +2378,7 @@ Consider reducing stake or avoiding Points props
                             <div style="font-size:12px; color:#94a3b8; margin-top:4px;">{severity}</div>
                         </div>
                         """, unsafe_allow_html=True)
-                        
+
                     sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
                     with sum_c1:
                         display_vote = c_vote
@@ -2482,12 +2406,12 @@ Consider reducing stake or avoiding Points props
 
                     st.markdown("#### 📊 L10 Performance vs Line")
                     chart_col, side_col = st.columns([3.2, 1.4])
-                    
+
                     with chart_col:
                         df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
                         df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
                         df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
-                        
+
                         df_l10['Saved_Proj'] = np.nan
                         try:
                             receipt_dict = load_vault_receipts(target_player, stat_type)
@@ -2505,18 +2429,18 @@ Consider reducing stake or avoiding Points props
                             stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
                             strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
                             tooltip=[
-                                alt.Tooltip('ShortDate', title='Date'), 
-                                alt.Tooltip('Matchup_Formatted', title='Opponent'), 
-                                alt.Tooltip('MINS', title='Minutes', format='.1f'), 
-                                alt.Tooltip(s_col, title='Actual Stats'), 
+                                alt.Tooltip('ShortDate', title='Date'),
+                                alt.Tooltip('Matchup_Formatted', title='Opponent'),
+                                alt.Tooltip('MINS', title='Minutes', format='.1f'),
+                                alt.Tooltip(s_col, title='Actual Stats'),
                                 alt.Tooltip('AI_Proj', title='Retro AI Projection', format='.2f'),
                                 alt.Tooltip('Saved_Proj', title='PRE-GAME Vault Proj', format='.2f')
                             ]
                         ).properties(height=350)
-                        
+
                         vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
                         ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
-                        
+
                         red_dots = alt.Chart(df_l10).mark_circle(color='#ff0055', size=150, opacity=1).encode(
                             x=alt.X('Matchup_Label', sort=None),
                             y=alt.Y('Saved_Proj')
@@ -2524,17 +2448,17 @@ Consider reducing stake or avoiding Points props
 
                         text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
                         final_chart = (bars + vegas_rule + ai_line + red_dots + text)
-                        
+
                         st.altair_chart(final_chart.configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
                         st.caption("🟡 Dashed Yellow: Vegas Line &nbsp; | &nbsp; 🔵 Cyan Line: Retro AI &nbsp; | &nbsp; 🔴 <span style='color:#ff0055; font-weight:bold;'>Red Dot: Pre-Game Vault</span> &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Target Opp</span>", unsafe_allow_html=True)
-                        
+
                     with side_col:
                         with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
                             player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
                             team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
                             opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
                             st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
-                            
+
                             if league_key == "NBA":
                                 st.caption("**🧬 AI Player Archetype & Rotation**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
@@ -2542,10 +2466,10 @@ Consider reducing stake or avoiding Points props
                             else:
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
                                 st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
-                            
+
                             st.markdown("<br>", unsafe_allow_html=True)
                             st.caption(f"**⚔️ History vs {opp} (All Time)**")
-                            
+
                             df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
                             opp_total = len(df_opp)
 
@@ -2562,7 +2486,7 @@ Consider reducing stake or avoiding Points props
                                 st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
                             else:
                                 st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
-                            
+
                             st.markdown("<br>", unsafe_allow_html=True)
                             st.caption(f"**🏟️ Venue Advantage ({split_text})**")
                             st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
