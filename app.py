@@ -2104,13 +2104,6 @@ Pick em game:                 leave at 0
 
 **What triggers at each level:**
 
-| Spread Input | Result |
-|-------------|--------|
-| 0 to -6.0 | No warning, no penalty |
-| -6.5 to -9.5 | ⚠️ ELEVATED — 10% projection penalty |
-| -10.0 or worse | 🚨 SEVERE — 20% projection penalty |
-| +7.0 or better | ✅ Favorable note only |
-
 ---
 
 ## What This Would Have Done Last Night
