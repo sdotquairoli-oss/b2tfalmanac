@@ -2141,11 +2141,6 @@ This adds one step to your workflow that takes 15 seconds:
                     final_consensus = final_consensus * skynet_data["mod"]
                 else:
                     final_consensus = raw_consensus * skynet_data["mod"]
-```
-
----
-
-## What This Does Differently From the Existing Flag
 
 | Feature | Existing Blowout Flag | New Game Script Flag |
 |---------|----------------------|---------------------|
@@ -2157,11 +2152,7 @@ This adds one step to your workflow that takes 15 seconds:
 | Stat types affected | Minutes and points | Points, Assists, all stats |
 | Real world example | Player scores too much, garbage time | Draymond 0 pts last night |
 
----
 
-
-If this was live when you ran Draymond:
-```
 Golden State spread check returns:
   Spread: -7.5 (GSW are 7.5 point underdogs)
   Severity: ELEVATED → SEVERE depending on exact number
