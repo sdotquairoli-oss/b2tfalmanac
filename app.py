@@ -2638,22 +2638,12 @@ def render_syndicate_board(league_key):
                         st.caption("🟡 Dashed Yellow: Vegas Line &nbsp; | &nbsp; 🔵 Cyan Line: Retro AI &nbsp; | &nbsp; 🔴 <span style='color:#ff0055; font-weight:bold;'>Red Dot: Pre-Game Vault</span> &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Target Opp</span>", unsafe_allow_html=True)
 
                     with side_col:
-                        # 1. Clean Matchup Header (Pinned outside the tabs)
-                        player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
-                        team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
-                        opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
-                        
-                        st.markdown(f"""
-                        <div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF; background-color:#1e293b; padding:12px; border-radius:8px; border:1px solid #334155; margin-bottom:12px;'>
-                            {team_logo_html} {player_team} <span style='color:#94a3b8; margin:0 8px; font-size:14px;'>vs</span> {opp} {opp_logo_html}
-                        </div>
-                        """, unsafe_allow_html=True)
+                        with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
+                            player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
+                            team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
+                            opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
+                            st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
 
-                        # 2. Render the new nested tabs
-                        tab_intel, tab_h2h, tab_context = st.tabs(["🧠 Intel", "⚔️ H2H", "🔋 Context"])
-
-                        with tab_intel:
-                            st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
                             if league_key == "NBA":
                                 st.caption("**🧬 AI Player Archetype & Rotation**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
@@ -2662,9 +2652,9 @@ def render_syndicate_board(league_key):
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
                                 st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
 
-                        with tab_h2h:
-                            st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
+                            st.markdown("<br>", unsafe_allow_html=True)
                             st.caption(f"**⚔️ History vs {opp} (All Time)**")
+
                             df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
                             opp_total = len(df_opp)
 
@@ -2682,11 +2672,9 @@ def render_syndicate_board(league_key):
                             else:
                                 st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
 
-                        with tab_context:
-                            st.markdown("<div style='padding-top: 10px;'></div>", unsafe_allow_html=True)
+                            st.markdown("<br>", unsafe_allow_html=True)
                             st.caption(f"**🏟️ Venue Advantage ({split_text})**")
                             st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
-
                             st.markdown("<br>", unsafe_allow_html=True)
                             st.caption(f"**🔋 Energy Levels**")
                             st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
