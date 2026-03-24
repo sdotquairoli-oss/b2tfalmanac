@@ -794,14 +794,43 @@ def get_mlb_stats(player_label):
 def get_live_nba_team_stats():
     try:
         from nba_api.stats.endpoints import leaguedashteamstats
-        stats = leaguedashteamstats.LeagueDashTeamStats(measure_type_detailed_defense='Advanced')
-        df = stats.get_data_frames()[0]
-        df['TEAM_ABBREV'] = df['TEAM_NAME'].map(NBA_FULL_TO_ABBREV)
-        df_clean = df[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
-        df_clean['DEF_RANK'] = df_clean['DEF_RATING'].rank(ascending=True)
-        df_clean['PACE_RANK'] = df_clean['PACE'].rank(ascending=False)
-        return df_clean.to_dict('index')
-    except: return {}
+        
+        season_stats = leaguedashteamstats.LeagueDashTeamStats(
+            measure_type_detailed_defense='Advanced'
+        )
+        df_season = season_stats.get_data_frames()[0]
+        df_season['TEAM_ABBREV'] = df_season['TEAM_NAME'].map(NBA_FULL_TO_ABBREV)
+        df_season = df_season[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
+        df_season['DEF_RANK'] = df_season['DEF_RATING'].rank(ascending=True)
+        df_season['PACE_RANK'] = df_season['PACE'].rank(ascending=False)
+
+        recent_stats = leaguedashteamstats.LeagueDashTeamStats(
+            measure_type_detailed_defense='Advanced',
+            last_n_games=20
+        )
+        df_recent = recent_stats.get_data_frames()[0]
+        df_recent['TEAM_ABBREV'] = df_recent['TEAM_NAME'].map(NBA_FULL_TO_ABBREV)
+        df_recent = df_recent[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
+        df_recent['DEF_RANK_RECENT'] = df_recent['DEF_RATING'].rank(ascending=True)
+        df_recent['PACE_RANK_RECENT'] = df_recent['PACE'].rank(ascending=False)
+
+        combined = df_season.join(df_recent, rsuffix='_recent', how='left')
+        combined['DEF_RANK_BLENDED'] = (
+            combined['DEF_RANK'] * 0.40 +
+            combined['DEF_RANK_RECENT'] * 0.60
+        ).fillna(combined['DEF_RANK'])
+        combined['PACE_RANK_BLENDED'] = (
+            combined['PACE_RANK'] * 0.40 +
+            combined['PACE_RANK_RECENT'] * 0.60
+        ).fillna(combined['PACE_RANK'])
+
+        combined['DEF_RANK']  = combined['DEF_RANK_BLENDED']
+        combined['PACE_RANK'] = combined['PACE_RANK_BLENDED']
+
+        result = combined[['DEF_RATING', 'PACE', 'DEF_RANK', 'PACE_RANK']].to_dict('index')
+        return result
+    except:
+        return {}
 
 def get_player_archetype(df, league):
     if df.empty: return "Unknown Profile"
@@ -949,6 +978,40 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         if league == "MLB": expected_mins = np.clip(expected_mins, 2.0, 6.0)
         elif league == "NHL": expected_mins = np.clip(expected_mins, 10.0, 28.0)
         else: expected_mins = np.clip(expected_mins, 5.0, 42.0)
+    # ✅ MINUTE FLOOR PROBABILITY
+    # High minute volatility players have a realistic chance of
+    # playing significantly fewer minutes than their average.
+    # This blends the expected projection with a reduced-minute
+    # floor scenario to produce more honest win probabilities
+    # on volatile rotation players.
+    if mins_std > 0 and expected_mins > 0:
+        # Probability of 20%+ minute reduction on any given night
+        mins_floor_prob = min(0.25, (mins_std / expected_mins) * 0.5)
+
+        # What they project in a reduced-minute scenario
+        floor_mins = expected_mins * 0.75
+
+        # Only apply if volatility is meaningful (std > 3.0 minutes)
+        if mins_std >= 3.0:
+            expected_mins = (
+                expected_mins * (1.0 - mins_floor_prob) +
+                floor_mins    * mins_floor_prob
+            )
+
+            # Log the adjustment for transparency
+            if mins_floor_prob >= 0.15:
+                mins_floor_note = (
+                    f"⚠️ Minute floor applied: "
+                    f"{mins_floor_prob*100:.0f}% chance of reduced game "
+                    f"(±{mins_std:.1f}m volatility). "
+                    f"Adjusted expected mins: {expected_mins:.1f}."
+                )
+            else:
+                mins_floor_note = ""
+        else:
+            mins_floor_note = ""
+    else:
+        mins_floor_note = ""        
 
     X_poi_train = df_ml[['MINS']].copy()
     X_poi_train['Trend'] = np.arange(len(df_ml))
@@ -1172,6 +1235,38 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     adjusted_trend = trend_proj * mod_val * fatigue_val * current_split_mod
     guru_proj = (adjusted_trend + stat_proj) / 2
 
+    # ✅ TIER MISMATCH DECAY
+    # When tonight's defense tier differs significantly from a historical
+    # game's opponent tier, halve that game's weight contribution.
+    # Prevents weak-defense outlier games from contaminating elite-defense projections.
+    ELITE_MOD_THRESHOLD = 0.95
+    WEAK_MOD_THRESHOLD  = 1.05
+
+    def tier_mismatch_multiplier(hist_mod, tonight_mod):
+        tonight_elite = tonight_mod <= ELITE_MOD_THRESHOLD
+        tonight_weak  = tonight_mod >= WEAK_MOD_THRESHOLD
+        hist_elite    = hist_mod <= ELITE_MOD_THRESHOLD
+        hist_weak     = hist_mod >= WEAK_MOD_THRESHOLD
+
+        # Mismatched tiers — opposite ends of the spectrum
+        if tonight_elite and hist_weak:   return 0.5
+        if tonight_weak  and hist_elite:  return 0.5
+        # Moderate mismatch — one average, one extreme
+        if tonight_elite and not hist_elite: return 0.75
+        if tonight_weak  and not hist_weak:  return 0.75
+        # Matched tiers — no adjustment
+        return 1.0
+
+    tier_multipliers = df_ml['Opp_Def_Mod'].apply(
+        lambda h: tier_mismatch_multiplier(h, mod_val)
+    ).values
+
+    # Apply tier mismatch on top of existing time-decay weights
+    if 'Weight' in df_ml.columns:
+        df_ml['Weight'] = df_ml['Weight'] * tier_multipliers
+    else:
+        df_ml['Weight'] = tier_multipliers
+
     # ✅ TIER BLEND: Weight tier baseline at 20% of consensus
     # Pulls projection toward what this player actually does
     # against tonight's specific defensive quality tier
@@ -1193,6 +1288,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     if is_blowout_risk: vol_warning += f"🚨 BLOWOUT RISK: Matchup is highly lopsided. Slashed expected minutes.<br>"
     if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}.<br>"
     elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m).<br>"
+    if mins_floor_note: vol_warning += f"{mins_floor_note}<br>"
     
     mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
     threshold = PASS_THRESHOLDS.get(s_col, 0.5)
@@ -1880,6 +1976,63 @@ def render_syndicate_board(league_key):
             if st.button(f"🔒 Lock {league_key} Pick"):
                 ssave_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50, float(line))
                 st.success(f"Team Pick Locked: {user_side}")
+        # ✅ SAME-GAME CORRELATION WARNING
+            # Flags when you already have a pending pick in tonight's game
+            try:
+                today_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
+                existing_ledger = load_ledger()
+                today_pending = existing_ledger[
+                    (existing_ledger['Result'] == 'Pending') &
+                    (existing_ledger['Date'] == today_str)
+                ]
+
+                if not today_pending.empty and '(' in target_player:
+                    player_team = target_player.split('(')[1].replace(')', '').strip().upper()
+
+                    # Build list of teams already bet on today
+                    locked_teams = set()
+                    locked_opps = set()
+                    for _, lp in today_pending.iterrows():
+                        lp_player = str(lp.get('Player', ''))
+                        # Try to match team from ledger player name
+                        # We store opponent in the ledger — use that
+                        locked_opps.add(str(lp.get('Stat', '')))
+
+                    # Simpler approach — check if opp or player_team
+                    # appeared in any of today's pending picks
+                    all_today_text = ' '.join(
+                        today_pending['Player'].astype(str).tolist()
+                    ).upper()
+
+                    same_game_flag = (
+                        opp.upper() in all_today_text or
+                        player_team in all_today_text
+                    )
+
+                    if same_game_flag:
+                        st.markdown(f"""
+                        <div style="background-color: rgba(255, 165, 0, 0.1);
+                             border: 1px solid #f59e0b; border-radius: 8px;
+                             padding: 12px; margin-bottom: 15px;">
+                            <span style="font-size:15px; font-weight:900;
+                                 color:#f59e0b;">
+                                🔗 SAME GAME CORRELATION RISK
+                            </span>
+                            <div style="font-size:12px; color:#f8fafc;
+                                 margin-top:6px; line-height:1.5;">
+                                You already have a pending pick involving
+                                <b>{opp}</b> or <b>{player_team}</b> tonight.
+                                Both bets may require similar game script
+                                conditions. A blowout in either direction
+                                could kill both positions simultaneously.
+                                Consider whether the combined exposure is
+                                justified.
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            except:
+                pass
+                
         else:
             suppressed = get_suppressed_stats(league_key)
             if stat_type in suppressed:
