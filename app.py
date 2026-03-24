@@ -393,9 +393,9 @@ def get_wallet_breakdown():
 
         tot_sports = profit.sum()
 
-        for idx in p_df.index:
-            bk   = bks[idx]
-            prof = profit[idx]
+        p_df['Profit'] = profit
+        p_df['Sportsbook'] = bks
+        for bk, prof in p_df.groupby('Sportsbook')['Profit'].sum().items():
             if bk in book_balances:
                 book_balances[bk] += prof
             elif bk:
@@ -1051,8 +1051,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
     con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
-    return trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std
-
+return trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std, mins_floor_note
 def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
     fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
@@ -1217,7 +1216,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     elif "3+" in rest_str: fatigue_val, fatigue_desc = 1.05, "🔋 3+ Days Rest: Fully rested (+5%)."
     else: fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
 
-    trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std = build_models(
+    trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std, mins_floor_note = build_models(
         df_ml, s_col, weights, league, is_home_current, rest, mod_val
     )
 
@@ -1317,8 +1316,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         {"name": "🎯 Context Guru", "model": "Radar, Rest, Arena", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Factors Context and Volatility."}
     ]
 
-    return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, f_color
-
+    return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote
 @st.cache_data(ttl=3600)
 def run_nba_heaters(stat_choice="Points"):
     try:
@@ -1359,7 +1357,7 @@ def run_nba_heaters(stat_choice="Points"):
                     if s_col == "PA": df['PA'] = df['PTS'] + df['AST']
                     if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
                     dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
-                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
                         df, s_col, float(season_val), opp, "NBA", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
                     )
                     ai_proj = round(c_proj, 1)
@@ -1401,7 +1399,7 @@ def run_nhl_heaters(stat_choice="Points"):
                     days_out = (today_est - last_played).days
                     if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                     dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
-                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
                         df, s_col, float(season_val), opp, "NHL", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
                     )
                     ai_proj = round(c_proj, 1)
@@ -1523,7 +1521,7 @@ def run_mlb_heaters(stat_choice="Hits"):
                 days_out = (today_est - last_played).days
                 if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                 dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
-                _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
                     df, s_col, 0.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
                 )
                 ai_proj = round(c_proj, 2)
@@ -2076,7 +2074,7 @@ def render_syndicate_board(league_key):
                 graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
                 ledger_hash = str(hash(str(sorted(graded_counts.items()))))
 
-                df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote, _ = run_ml_board(
+                df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote = run_ml_board(
                     df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
                 )
                 # ✅ GAME SCRIPT RISK FLAG
@@ -3409,10 +3407,11 @@ with t_wallet:
         m_line = c5.text_input("Line / Target (Optional)", value="ML")
         if st.form_submit_button("Log Team Bet to ROI Ledger", type="primary"):
             if m_team:
-                save_to_ledger(m_league, m_team, m_market, m_line, m_odds, 0.0, "TEAM", 0.50, False)
+                try: m_line_val = float(m_line)
+                except: m_line_val = 0.0
+                save_to_ledger(m_league, m_team, m_market, m_line, m_odds, 0.0, "TEAM", win_prob=0.50, is_boosted=False, setup_score=0, user_prob=0.50, opening_line=m_line_val)
                 st.success(f"{m_market} Logged to ROI Ledger!")
                 time.sleep(1); st.rerun()
-            else: st.error("Please enter a team name.")
 
     if book_balances:
         st.markdown("#### 📱 Portfolio Breakdown")
