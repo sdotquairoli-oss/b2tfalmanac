@@ -1254,7 +1254,10 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
         trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-        stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]])[0]
+        rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]
+        if 'USG_PCT' in df_ml.columns:
+            rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
+        stat_proj = rf.predict([rf_pred_vec])[0]
         con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
         
