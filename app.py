@@ -680,7 +680,6 @@ def get_nba_stats(player_label):
         nba_players = players.get_players()
         player_dict = [p for p in nba_players if clean_name(p['full_name']) == clean_name(cn)]
         
-        # 🟢 FALLBACK: If exact match fails, try a "Fuzzy Match" (Last name + First 3 letters)
         if not player_dict:
             raw_parts = cn.replace(" Jr.", "").replace(" Sr.", "").replace(" III", "").replace(".", "").split()
             if len(raw_parts) >= 2:
@@ -726,10 +725,27 @@ def get_nba_stats(player_label):
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
         
-        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'Weight'] if c in df.columns]
+        usage_rate = 0.25  # default if fetch fails
+        try:
+            from nba_api.stats.endpoints import playerdashboardbygeneralsplits
+            dash = playerdashboardbygeneralsplits.PlayerDashboardByGeneralSplits(
+                player_id=pid,
+                season='2025-26',
+                per_mode_simple='PerGame'
+            )
+            dash_df = dash.get_data_frames()[0]
+            if not dash_df.empty and 'USG_PCT' in dash_df.columns:
+                usage_rate = float(dash_df['USG_PCT'].iloc[0])
+            time.sleep(0.3)
+        except:
+            pass
+ 
+        df['USG_PCT'] = usage_rate
+ 
+        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP',
+                      'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL',
+                      'BLK', 'FG3M', 'USG_PCT', 'Weight'] if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
-    except: 
-        return pd.DataFrame(), 500, []
 
 @st.cache_data(ttl=300)
 def get_nhl_stats(player_label):
@@ -1019,7 +1035,11 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
     df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
     df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
     df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
-    X_rf_train = df_ml[['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']].fillna(0).values
+    rf_feature_cols = ['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']
+    if 'USG_PCT' in df_ml.columns:
+        rf_feature_cols.append('USG_PCT')
+ 
+    X_rf_train = df_ml[rf_feature_cols].fillna(0).values
 
     s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
     df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
@@ -1047,7 +1067,11 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
     tonight_rest = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
 
     trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-    stat_proj = rf.predict([[df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, tonight_def_mod]])[0]
+    rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, tonight_def_mod]
+    if 'USG_PCT' in df_ml.columns:
+        rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
+ 
+    stat_proj = rf.predict([rf_pred_vec])[0]
     con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
     base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
@@ -1323,7 +1347,32 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     if mins_floor_note: vol_warning += f"{mins_floor_note}<br>"
     
     mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
-    threshold = PASS_THRESHOLDS.get(s_col, 0.5)
+    COMBO_STATS = {"PRA", "PR", "PA", "RA"}
+ 
+threshold = PASS_THRESHOLDS.get(s_col, 0.5)
+ 
+if s_col in COMBO_STATS:
+    # Raise the gap required to fire a directional vote by 30%.
+    # Combination props have multiplicative variance that the
+    # single-stat calibration of PASS_THRESHOLDS does not account for.
+    # A 2.0 unit gap on PRA produces ~60% win probability — much lower
+    # than a 2.0 unit gap on a single stat like Points or Rebounds.
+    threshold = threshold * 1.30
+ 
+    # Visual warning so you know the filter is active
+    st.markdown("""
+    <div style="background-color: rgba(245, 158, 11, 0.08);
+         border: 1px solid #f59e0b; border-radius: 6px;
+         padding: 8px 12px; margin-bottom: 10px;">
+        <span style="font-size:12px; font-weight:900; color:#f59e0b;">
+            ⚠️ COMBO PROP MODE
+        </span>
+        <span style="font-size:11px; color:#f8fafc; margin-left:8px;">
+            Threshold raised 30% — stacked stats require wider gap
+            to offset multiplicative variance.
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
 
     def get_raw_vote(p): return "OVER" if p >= line + threshold else ("UNDER" if p <= line - threshold else "PASS")
     raw_vote = get_raw_vote(raw_consensus)
@@ -2317,9 +2366,12 @@ def render_syndicate_board(league_key):
                         residual_std = df_with_ml[s_col].std()
                         if np.isnan(residual_std) or residual_std == 0: residual_std = 1.0
 
-                    if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB', 'Double Double', 'Triple Double']:
-                        lam_val = max(0.001, c_proj)
-                        sims = np.random.poisson(lam=lam_val, size=5000)
+                    if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB','Double Double', 'Triple Double']:
+                       lam_val = max(0.001, c_proj)
+                       sims = np.random.poisson(lam=lam_val, size=5000)
+                    elif s_col in COMBO_STATS:
+                        combo_std = residual_std * 1.40
+                        sims = np.random.normal(loc=c_proj, scale=combo_std, size=5000)
                     else:
                         sims = np.random.normal(loc=c_proj, scale=residual_std, size=5000)
 
@@ -2648,6 +2700,26 @@ def render_syndicate_board(league_key):
                                 st.caption("**🧬 AI Player Archetype & Rotation**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
                                 st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:6px; line-height:1.4; font-weight:500;'>{mod_desc}</div>", unsafe_allow_html=True)
+                            if league_key == "NBA" and 'USG_PCT' in df_with_ml.columns:
+                            usg = float(df_with_ml['USG_PCT'].iloc[-1]) * 100
+                            if usg >= 30:
+                                usg_color = "#ff0055"
+                                usg_label = "ELITE USAGE"
+                            elif usg >= 25:
+                                usg_color = "#f59e0b"
+                                usg_label = "HIGH USAGE"
+                            elif usg >= 20:
+                                usg_color = "#00E676"
+                                usg_label = "NORMAL USAGE"
+                            else:
+                                usg_color = "#94a3b8"
+                                usg_label = "LOW USAGE"
+                                st.markdown(
+                                    f"<div style='font-size:12px; color:{usg_color}; "
+                                    f"font-weight:bold; margin-top:6px;'>"
+                                    f"📊 USG%: {usg:.1f}% — {usg_label}</div>",
+                                    unsafe_allow_html=True
+                                )
                             else:
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
                                 st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
