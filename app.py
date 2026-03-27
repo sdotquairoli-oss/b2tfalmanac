@@ -2719,7 +2719,15 @@ def render_syndicate_board(league_key):
                                     )
                             else:
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
-                                st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
+                                # Strip HTML tags for the progress bar text
+                                import re
+                                clean_desc = re.sub(r'<[^>]+>', '', mod_desc).replace('\n', ' ').strip()
+                                # Only show the last segment (actual defense label, not vol warnings)
+                                desc_parts = [p.strip() for p in clean_desc.split('🎯') if p.strip()]
+                                progress_text = desc_parts[-1].strip() if desc_parts else clean_desc
+                                st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=progress_text)
+                                if vol_warning or low_sample_warning:
+                                    st.markdown(vol_warning + low_sample_warning, unsafe_allow_html=True)
 
                             st.markdown("<br>", unsafe_allow_html=True)
                             st.caption(f"**⚔️ History vs {opp} (All Time)**")
