@@ -801,6 +801,10 @@ def get_mlb_stats(player_label):
         if not splits: return pd.DataFrame(), 404, []
         data = [{'ValidDate': pd.to_datetime(s.get('date', '2025-01-01')), 'MATCHUP': s.get('opponent', {}).get('name', 'OPP').split(' ')[-1][:3].upper(), 'Is_Home': 1 if s.get('isHome', True) else 0, 'H': s.get('stat', {}).get('hits', 0), 'HR': s.get('stat', {}).get('homeRuns', 0), 'TB': s.get('stat', {}).get('totalBases', 0), 'K': s.get('stat', {}).get('strikeOuts', 0), 'ER': s.get('stat', {}).get('earnedRuns', 0), 'MINS': float(s.get('stat', {}).get('plateAppearances', s.get('stat', {}).get('battersFaced', 1)))} for s in splits]
         df = pd.DataFrame(data)
+        
+        # Merges hitting and pitching logs for two-way players like Ohtani
+        df = df.groupby(['ValidDate', 'MATCHUP', 'Is_Home'], as_index=False).sum()
+        
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         today = pd.to_datetime(datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
