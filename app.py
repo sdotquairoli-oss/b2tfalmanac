@@ -2663,7 +2663,6 @@ def render_syndicate_board(league_key):
                         <div style="font-size:13px; color:#f8fafc; margin-top:6px; line-height: 1.4;">{div_msg}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                    
                     st.session_state[f"{lk}.stake_modifier"] = stake_modifier
                     
                 sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
