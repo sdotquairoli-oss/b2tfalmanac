@@ -2136,6 +2136,8 @@ def render_syndicate_board(league_key):
                         df['DD'] = (tens >= 2).astype(int)
                         df['TD'] = (tens >= 3).astype(int)
 
+                st.session_state.pop(f"{lk}.stake_modifier", None)
+                
                 df_hash = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.2f}" if s_col in df.columns else str(len(df))
                 current_ledger = load_ledger()
                 graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
@@ -2390,6 +2392,8 @@ def render_syndicate_board(league_key):
                     liq_bal = get_liquid_balance()
                     kelly_pct = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
                     rec_stake = liq_bal * (kelly_pct * 0.5)
+                    stake_modifier = st.session_state.get(f"{lk}.stake_modifier", 1.0)
+                    rec_stake = rec_stake * stake_modifier
 
                     memory_mult = 1.0
                     mem_notes = []
