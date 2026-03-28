@@ -2664,148 +2664,146 @@ def render_syndicate_board(league_key):
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Optional: Save modifier to session state so your Kelly calculator can access it
                     st.session_state[f"{lk}.stake_modifier"] = stake_modifier
                     
-                    sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
-                    with sum_c1:
-                        display_vote = c_vote
-                        if stat_type in ["Double Double", "Triple Double"] and c_vote in ["OVER", "UNDER"]:
-                            display_vote = "YES" if c_vote == "OVER" else "NO"
-                        st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{display_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
-                    with sum_c2:
-                        if c_vote == "PASS" or edge_pct <= 0:
-                            st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">RECOMMENDED RISK</div><div style="font-size:22px; font-weight:900; color:#94a3b8;">$0.00 (PASS)</div><div style="font-size:12px; color:#94a3b8;">Negative EV or too tight.</div></div>', unsafe_allow_html=True)
+                sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
+                with sum_c1:
+                    display_vote = c_vote
+                    if stat_type in ["Double Double", "Triple Double"] and c_vote in ["OVER", "UNDER"]:
+                        display_vote = "YES" if c_vote == "OVER" else "NO"
+                    st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{display_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
+                with sum_c2:
+                    if c_vote == "PASS" or edge_pct <= 0:
+                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">RECOMMENDED RISK</div><div style="font-size:22px; font-weight:900; color:#94a3b8;">$0.00 (PASS)</div><div style="font-size:12px; color:#94a3b8;">Negative EV or too tight.</div></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #00E5FF; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#00E5FF; letter-spacing: 1px;">HALF-KELLY STAKE</div><div style="font-size:26px; font-weight:900; color:#00E5FF; margin: 4px 0px;">${rec_stake:.2f}</div><div style="font-size:12px; color:#94a3b8;">EV: ${ev_dollars:+.2f}/$100 | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
+                with sum_c3:
+                    df_l10, df_l5 = df_with_ml.tail(10).reset_index(drop=True), df_with_ml.tail(5)
+                    l10_hits, l5_hits = int((df_l10[s_col] >= line).sum()), int((df_l5[s_col] >= line).sum())
+                    hit_color = "#00c853" if l10_hits >= 6 else ("#d50000" if l10_hits <= 4 else "#FFD700")
+                    st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">HIT RATE (OVER {line})</div><div style="font-size:22px; font-weight:900; color:{hit_color};">{l10_hits}/10</div><div style="font-size:13px;">L5: {l5_hits}/5</div></div>', unsafe_allow_html=True)
+                with sum_c4:
+                    s_avg, l10_avg, l5_avg = round(df[s_col].mean(), 1), round(df_l10[s_col].mean(), 1), round(df_with_ml.tail(5)[s_col].mean(), 1)
+                    trend_color = "#00c853" if l5_avg >= s_avg * 1.1 else ("#d50000" if l5_avg <= s_avg * 0.9 else "#fff")
+                    st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px; margin-bottom: 2px;">RECENT AVERAGES</div><div style="display: flex; justify-content: space-around; align-items: center; margin-top: 2px;"><div><div style="font-size:10px; color:#94a3b8;">Season</div><div style="font-size:18px; font-weight:900;">{s_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L10</div><div style="font-size:18px; font-weight:900;">{l10_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L5</div><div style="font-size:18px; font-weight:900; color:{trend_color};">{l5_avg}</div></div></div></div>', unsafe_allow_html=True)
+
+                b_cols = st.columns(len(board))
+                for i, m in enumerate(board):
+                    b_cols[i].markdown(f'<div class="board-member"><div class="board-name">{m["name"]}</div><div class="board-model">{m["model"]}</div><div style="font-size:11px; color:#94a3b8; font-style:italic; line-height:1.3; margin-bottom:12px; min-height:45px;">"{m["quote"]}"</div><div style="color:#94a3b8; font-size:12px; border-top:1px dashed #334155; padding-top:8px;">Proj: <span style="color:#fff; font-weight:bold;">{m["proj"]:.2f}</span></div><div class="board-vote" style="color:{m["color"]}; margin-top:2px;">{m["vote"]}</div></div>', unsafe_allow_html=True)
+
+                st.markdown("#### 📊 L10 Performance vs Line")
+                chart_col, side_col = st.columns([3.2, 1.4])
+
+                with chart_col:
+                    df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
+                    df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
+                    df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
+
+                    df_l10['Saved_Proj'] = np.nan
+                    try:
+                        receipt_dict = load_vault_receipts(target_player, stat_type)
+                        if receipt_dict:
+                            date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
+                            df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
+                            df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
+                    except:
+                        pass
+
+                    bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
+                        x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
+                        y=alt.Y(s_col, title=stat_type),
+                        color=alt.condition(alt.datum[s_col] >= line, alt.value('#00c853'), alt.value('#d50000')),
+                        stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
+                        strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
+                        tooltip=[
+                            alt.Tooltip('ShortDate', title='Date'),
+                            alt.Tooltip('Matchup_Formatted', title='Opponent'),
+                            alt.Tooltip('MINS', title='Minutes', format='.1f'),
+                            alt.Tooltip(s_col, title='Actual Stats'),
+                            alt.Tooltip('AI_Proj', title='Retro AI Projection', format='.2f'),
+                            alt.Tooltip('Saved_Proj', title='PRE-GAME Vault Proj', format='.2f')
+                        ]
+                    ).properties(height=350)
+
+                    vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
+                    ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
+
+                    red_dots = alt.Chart(df_l10).mark_circle(color='#ff0055', size=150, opacity=1).encode(
+                        x=alt.X('Matchup_Label', sort=None),
+                        y=alt.Y('Saved_Proj')
+                    ).transform_filter("isValid(datum.Saved_Proj)")
+
+                    text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
+                    final_chart = (bars + vegas_rule + ai_line + red_dots + text)
+
+                    st.altair_chart(final_chart.configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
+                    st.caption("🟡 Dashed Yellow: Vegas Line &nbsp; | &nbsp; 🔵 Cyan Line: Retro AI &nbsp; | &nbsp; 🔴 <span style='color:#ff0055; font-weight:bold;'>Red Dot: Pre-Game Vault</span> &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Target Opp</span>", unsafe_allow_html=True)
+
+                with side_col:
+                    with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
+                        player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
+                        team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
+                        opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
+                        st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
+
+                        if league_key == "NBA":
+                            st.caption("**🧬 AI Player Archetype & Rotation**")
+                            st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:6px; line-height:1.4; font-weight:500;'>{mod_desc}</div>", unsafe_allow_html=True)
+                            if 'USG_PCT' in df_with_ml.columns:
+                                usg = float(df_with_ml['USG_PCT'].iloc[-1]) * 100
+                                if usg >= 30:
+                                    usg_color = "#ff0055"
+                                    usg_label = "ELITE USAGE"
+                                elif usg >= 25:
+                                    usg_color = "#f59e0b"
+                                    usg_label = "HIGH USAGE"
+                                elif usg >= 20:
+                                    usg_color = "#00E676"
+                                    usg_label = "NORMAL USAGE"
+                                else:
+                                    usg_color = "#94a3b8"
+                                    usg_label = "LOW USAGE"
+                                st.markdown(
+                                    f"<div style='font-size:12px; color:{usg_color}; "
+                                    f"font-weight:bold; margin-top:6px;'>"
+                                    f"📊 USG%: {usg:.1f}% — {usg_label}</div>",
+                                    unsafe_allow_html=True
+                                )
                         else:
-                            st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #00E5FF; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#00E5FF; letter-spacing: 1px;">HALF-KELLY STAKE</div><div style="font-size:26px; font-weight:900; color:#00E5FF; margin: 4px 0px;">${rec_stake:.2f}</div><div style="font-size:12px; color:#94a3b8;">EV: ${ev_dollars:+.2f}/$100 | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
-                    with sum_c3:
-                        df_l10, df_l5 = df_with_ml.tail(10).reset_index(drop=True), df_with_ml.tail(5)
-                        l10_hits, l5_hits = int((df_l10[s_col] >= line).sum()), int((df_l5[s_col] >= line).sum())
-                        hit_color = "#00c853" if l10_hits >= 6 else ("#d50000" if l10_hits <= 4 else "#FFD700")
-                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">HIT RATE (OVER {line})</div><div style="font-size:22px; font-weight:900; color:{hit_color};">{l10_hits}/10</div><div style="font-size:13px;">L5: {l5_hits}/5</div></div>', unsafe_allow_html=True)
-                    with sum_c4:
-                        s_avg, l10_avg, l5_avg = round(df[s_col].mean(), 1), round(df_l10[s_col].mean(), 1), round(df_with_ml.tail(5)[s_col].mean(), 1)
-                        trend_color = "#00c853" if l5_avg >= s_avg * 1.1 else ("#d50000" if l5_avg <= s_avg * 0.9 else "#fff")
-                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px; margin-bottom: 2px;">RECENT AVERAGES</div><div style="display: flex; justify-content: space-around; align-items: center; margin-top: 2px;"><div><div style="font-size:10px; color:#94a3b8;">Season</div><div style="font-size:18px; font-weight:900;">{s_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L10</div><div style="font-size:18px; font-weight:900;">{l10_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L5</div><div style="font-size:18px; font-weight:900; color:{trend_color};">{l5_avg}</div></div></div></div>', unsafe_allow_html=True)
+                            st.caption(f"**🛡️ {opp} Defense Difficulty**")
+                            import re
+                            clean_desc = re.sub(r'<[^>]+>', '', mod_desc).replace('\n', ' ').strip()
+                            # Only show the last segment (actual defense label, not vol warnings)
+                            desc_parts = [p.strip() for p in clean_desc.split('🎯') if p.strip()]
+                            progress_text = desc_parts[-1].strip() if desc_parts else clean_desc
+                            st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=progress_text)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.caption(f"**⚔️ History vs {opp} (All Time)**")
 
-                    b_cols = st.columns(len(board))
-                    for i, m in enumerate(board):
-                        b_cols[i].markdown(f'<div class="board-member"><div class="board-name">{m["name"]}</div><div class="board-model">{m["model"]}</div><div style="font-size:11px; color:#94a3b8; font-style:italic; line-height:1.3; margin-bottom:12px; min-height:45px;">"{m["quote"]}"</div><div style="color:#94a3b8; font-size:12px; border-top:1px dashed #334155; padding-top:8px;">Proj: <span style="color:#fff; font-weight:bold;">{m["proj"]:.2f}</span></div><div class="board-vote" style="color:{m["color"]}; margin-top:2px;">{m["vote"]}</div></div>', unsafe_allow_html=True)
+                        df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
+                        opp_total = len(df_opp)
 
-                    st.markdown("#### 📊 L10 Performance vs Line")
-                    chart_col, side_col = st.columns([3.2, 1.4])
+                        if opp_total >= 5:
+                            opp_hits = int((df_opp[s_col] >= line).sum())
+                            opp_win_pct = (opp_hits / opp_total) * 100
+                            h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
+                            st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
+                        elif opp_total >= 2:
+                            opp_hits = int((df_opp[s_col] >= line).sum())
+                            opp_win_pct = (opp_hits / opp_total) * 100
+                            h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
+                            st.markdown(f"<div style='font-size:18px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:12px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
 
-                    with chart_col:
-                        df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
-                        df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
-                        df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
-
-                        df_l10['Saved_Proj'] = np.nan
-                        try:
-                            receipt_dict = load_vault_receipts(target_player, stat_type)
-                            if receipt_dict:
-                                date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
-                                df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
-                                df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
-                        except:
-                            pass
-
-                        bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
-                            x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
-                            y=alt.Y(s_col, title=stat_type),
-                            color=alt.condition(alt.datum[s_col] >= line, alt.value('#00c853'), alt.value('#d50000')),
-                            stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
-                            strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
-                            tooltip=[
-                                alt.Tooltip('ShortDate', title='Date'),
-                                alt.Tooltip('Matchup_Formatted', title='Opponent'),
-                                alt.Tooltip('MINS', title='Minutes', format='.1f'),
-                                alt.Tooltip(s_col, title='Actual Stats'),
-                                alt.Tooltip('AI_Proj', title='Retro AI Projection', format='.2f'),
-                                alt.Tooltip('Saved_Proj', title='PRE-GAME Vault Proj', format='.2f')
-                            ]
-                        ).properties(height=350)
-
-                        vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
-                        ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
-
-                        red_dots = alt.Chart(df_l10).mark_circle(color='#ff0055', size=150, opacity=1).encode(
-                            x=alt.X('Matchup_Label', sort=None),
-                            y=alt.Y('Saved_Proj')
-                        ).transform_filter("isValid(datum.Saved_Proj)")
-
-                        text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
-                        final_chart = (bars + vegas_rule + ai_line + red_dots + text)
-
-                        st.altair_chart(final_chart.configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
-                        st.caption("🟡 Dashed Yellow: Vegas Line &nbsp; | &nbsp; 🔵 Cyan Line: Retro AI &nbsp; | &nbsp; 🔴 <span style='color:#ff0055; font-weight:bold;'>Red Dot: Pre-Game Vault</span> &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Target Opp</span>", unsafe_allow_html=True)
-
-                    with side_col:
-                        with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
-                            player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
-                            team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
-                            opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
-                            st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
-
-                            if league_key == "NBA":
-                                st.caption("**🧬 AI Player Archetype & Rotation**")
-                                st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
-                                st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:6px; line-height:1.4; font-weight:500;'>{mod_desc}</div>", unsafe_allow_html=True)
-                                if 'USG_PCT' in df_with_ml.columns:
-                                    usg = float(df_with_ml['USG_PCT'].iloc[-1]) * 100
-                                    if usg >= 30:
-                                        usg_color = "#ff0055"
-                                        usg_label = "ELITE USAGE"
-                                    elif usg >= 25:
-                                        usg_color = "#f59e0b"
-                                        usg_label = "HIGH USAGE"
-                                    elif usg >= 20:
-                                        usg_color = "#00E676"
-                                        usg_label = "NORMAL USAGE"
-                                    else:
-                                        usg_color = "#94a3b8"
-                                        usg_label = "LOW USAGE"
-                                    st.markdown(
-                                        f"<div style='font-size:12px; color:{usg_color}; "
-                                        f"font-weight:bold; margin-top:6px;'>"
-                                        f"📊 USG%: {usg:.1f}% — {usg_label}</div>",
-                                        unsafe_allow_html=True
-                                    )
-                            else:
-                                st.caption(f"**🛡️ {opp} Defense Difficulty**")
-                                st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
-                                import re
-                                clean_desc = re.sub(r'<[^>]+>', '', mod_desc).replace('\n', ' ').strip()
-                                # Only show the last segment (actual defense label, not vol warnings)
-                                desc_parts = [p.strip() for p in clean_desc.split('🎯') if p.strip()]
-                                progress_text = desc_parts[-1].strip() if desc_parts else clean_desc
-                                st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=progress_text)
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            st.caption(f"**⚔️ History vs {opp} (All Time)**")
-
-                            df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
-                            opp_total = len(df_opp)
-
-                            if opp_total >= 5:
-                                opp_hits = int((df_opp[s_col] >= line).sum())
-                                opp_win_pct = (opp_hits / opp_total) * 100
-                                h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
-                                st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
-                            elif opp_total >= 2:
-                                opp_hits = int((df_opp[s_col] >= line).sum())
-                                opp_win_pct = (opp_hits / opp_total) * 100
-                                h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
-                                st.markdown(f"<div style='font-size:18px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:12px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
-                                st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
-                            else:
-                                st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
-
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            st.caption(f"**🏟️ Venue Advantage ({split_text})**")
-                            st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            st.caption(f"**🔋 Energy Levels**")
-                            st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.caption(f"**🏟️ Venue Advantage ({split_text})**")
+                        st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.caption(f"**🔋 Energy Levels**")
+                        st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
 
 def render_league_tab(league_name, get_sched_func):
     lk = league_name.lower()
