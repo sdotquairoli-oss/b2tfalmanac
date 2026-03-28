@@ -2618,6 +2618,51 @@ def render_syndicate_board(league_key):
                         </div>
                         """, unsafe_allow_html=True)
 
+                # 🎯 HYBRID VEGAS DIVERGENCE DETECTOR
+        stake_modifier = 1.0
+        if len(df_with_ml) > 0 and s_col in df_with_ml.columns:
+            baseline_avg = df_with_ml[s_col].mean()
+            
+            if not pd.isna(baseline_avg) and baseline_avg > 0:
+                line_vs_avg_gap = line - baseline_avg
+                
+                # Dynamically scale thresholds based on stat type
+                base_thresh = PASS_THRESHOLDS.get(s_col, 0.75)
+                elevated_thresh = base_thresh * 2.5
+                severe_thresh = base_thresh * 4.0
+                
+                div_msg = ""
+                div_color = ""
+                
+                # 🔴 UNDER TRAPS (Vegas sets line suspiciously high)
+                if line_vs_avg_gap >= severe_thresh and c_vote == "UNDER":
+                    div_color = "#ff0055"
+                    stake_modifier = 0.40
+                    div_msg = f"<b>SEVERE UNDER TRAP:</b> Line is {line_vs_avg_gap:.1f} units higher than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Vegas expects a spike. Public will bet Under. Sharp lean: <b>OVER</b>. Stake reduced to 40%.</span>"
+                elif line_vs_avg_gap >= elevated_thresh and c_vote == "UNDER":
+                    div_color = "#f59e0b"
+                    stake_modifier = 0.60
+                    div_msg = f"<b>ELEVATED UNDER TRAP:</b> Line is {line_vs_avg_gap:.1f} units higher than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Proceed with caution. Stake reduced to 60%.</span>"
+                    
+                # 🟢 OVER TRAPS (Vegas sets line suspiciously low - usually injury/rest risk)
+                elif line_vs_avg_gap <= -severe_thresh and c_vote == "OVER":
+                    div_color = "#ff4500"
+                    div_msg = f"<b>SEVERE OVER TRAP:</b> Line is {abs(line_vs_avg_gap):.1f} units lower than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Vegas expects a floor game. Verify starter status/minutes!</span>"
+                elif line_vs_avg_gap <= -elevated_thresh and c_vote == "OVER":
+                    div_color = "#FFD700"
+                    div_msg = f"<b>ELEVATED OVER TRAP:</b> Line is {abs(line_vs_avg_gap):.1f} units lower than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Proceed with caution.</span>"
+
+                if div_msg:
+                    st.markdown(f"""
+                    <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {div_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                        <span style="font-size:15px; font-weight:900; color:{div_color};">👀 VEGAS LINE DIVERGENCE</span>
+                        <div style="font-size:13px; color:#f8fafc; margin-top:6px; line-height: 1.4;">{div_msg}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Optional: Save modifier to session state so your Kelly calculator can access it
+                    st.session_state[f"{lk}.stake_modifier"] = stake_modifier
+                    
                     sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
                     with sum_c1:
                         display_vote = c_vote
