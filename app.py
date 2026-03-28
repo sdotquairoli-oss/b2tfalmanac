@@ -2144,6 +2144,7 @@ def render_syndicate_board(league_key):
                 df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote = run_ml_board(
                     df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
                 )
+                
                 # ✅ COMBO PROP MODE BANNER — shown in UI (not in cached fn)
                 COMBO_STATS = {"PRA", "PR", "PA", "RA"}
                 if s_col in COMBO_STATS:
@@ -2723,7 +2724,7 @@ def render_syndicate_board(league_key):
                                     )
                             else:
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
-                                # Strip HTML tags for the progress bar text
+                                st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=f"{mod_desc}")
                                 import re
                                 clean_desc = re.sub(r'<[^>]+>', '', mod_desc).replace('\n', ' ').strip()
                                 # Only show the last segment (actual defense label, not vol warnings)
