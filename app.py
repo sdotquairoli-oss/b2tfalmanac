@@ -3541,17 +3541,33 @@ with t_wallet:
         oop = max((tot_dep - tot_wit), 0.0)
         lb = get_liquid_balance()
 
-        st.markdown(f"""
-        <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; margin-top: 28px;">
-            <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">TOTAL LIQUID BALANCE</div>
-            <div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${lb:,.2f}</div>
-            <div style="display: flex; justify-content: space-between; font-size: 12px; border-top: 1px dashed #334155; padding-top: 12px; margin-top: 15px;">
-                <span style="color: #94a3b8;">Out of Pocket: <span style="color: #fff;">${oop:,.2f}</span></span>
-                <span style="color: #94a3b8;">Net Casino: <span style="color: {c_col};">{tot_cas:+,.2f}</span></span>
-                <span style="color: #94a3b8;">Sports Profit: <span style="color: {s_col_color};">${tot_sports:+,.2f}</span></span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    # 🏦 1. Calculate True Liquid Cash (Sum of all active wallets)
+        true_liquid = sum(book_balances.values()) if book_balances else 0.0
+        
+        # 📈 2. Calculate All-Time PnL
+        all_time_pnl = tot_cas + tot_sports
+        
+        # 🖥️ 3. Render the New Dual-Metric UI
+        st.markdown("<br>", unsafe_allow_html=True)
+        m_col1, m_col2 = st.columns(2)
+        
+        with m_col1:
+            st.metric(
+                label="💵 True Liquid Balance", 
+                value=f"${true_liquid:,.2f}",
+                help="The actual total cash sitting in your active sportsbooks right now."
+            )
+        
+        with m_col2:
+            st.metric(
+                label="📈 All-Time P/L", 
+                value=f"${all_time_pnl:+,.2f}", 
+                delta=f"${all_time_pnl:+,.2f}",
+                delta_color="normal",
+                help="Your lifetime net profit/loss across all sports and casino bets."
+            )
+        
+        st.caption(f"*Total Out of Pocket (Lifetime Deposits): ${oop:,.2f}*")
 
     st.markdown("---")
     with st.form("manual_ml_form"):
