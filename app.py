@@ -3541,31 +3541,28 @@ with t_wallet:
         oop = max((tot_dep - tot_wit), 0.0)
         lb = get_liquid_balance()
 
-    # 🏦 1. Calculate True Liquid Cash (Sum of all active wallets)
-        true_liquid = sum(book_balances.values()) if book_balances else 0.0
+# 🏦 1. Calculate True Liquid Cash (Matches the UI by forcing negatives to 0)
+        true_liquid = sum(max(bal, 0.0) for bal in book_balances.values()) if book_balances else 0.0
         
         # 📈 2. Calculate All-Time PnL
         all_time_pnl = tot_cas + tot_sports
+        pnl_color = "#00E676" if all_time_pnl >= 0 else "#ff0055"
         
-        # 🖥️ 3. Render the New Dual-Metric UI
-        st.markdown("<br>", unsafe_allow_html=True)
-        m_col1, m_col2 = st.columns(2)
-        
-        with m_col1:
-            st.metric(
-                label="💵 True Liquid Balance", 
-                value=f"${true_liquid:,.2f}",
-                help="The actual total cash sitting in your active sportsbooks right now."
-            )
-        
-        with m_col2:
-            st.metric(
-                label="📈 All-Time P/L", 
-                value=f"${all_time_pnl:+,.2f}", 
-                delta=f"${all_time_pnl:+,.2f}",
-                delta_color="normal",
-                help="Your lifetime net profit/loss across all sports and casino bets."
-            )
+        # 🖥️ 3. Render the Dual-Box Skynet UI
+        st.markdown(f"""
+        <div style="display: flex; gap: 15px; margin-top: 28px; margin-bottom: 10px;">
+            <div style="flex: 1; background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center;">
+                <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">💵 TRUE LIQUID BALANCE</div>
+                <div style="color: #00E676; font-size: 36px; font-weight: 900; margin: 10px 0px;">${true_liquid:,.2f}</div>
+                <div style="font-size: 11px; color: #94a3b8;">Sum of all active sportsbook wallets</div>
+            </div>
+            <div style="flex: 1; background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center;">
+                <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 1px;">📈 ALL-TIME P/L</div>
+                <div style="color: {pnl_color}; font-size: 36px; font-weight: 900; margin: 10px 0px;">${all_time_pnl:+,.2f}</div>
+                <div style="font-size: 11px; color: #94a3b8;">Lifetime Sports & Casino Net</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.caption(f"*Total Out of Pocket (Lifetime Deposits): ${oop:,.2f}*")
 
