@@ -465,14 +465,20 @@ def auto_grade_ledger():
 # ==========================================
 # 3. DATA PULLS & ML ENGINE
 # ==========================================
-def check_api_quota():
+def check_api_quota(force_refresh=False):
     if not ODDS_API_KEY: return
+    
+    if 'api_used' in st.session_state and not force_refresh:
+        return 
+
     try:
         r = requests.get(f"https://api.the-odds-api.com/v4/sports?apiKey={ODDS_API_KEY}", timeout=5)
         u, rem = r.headers.get('x-requests-used'), r.headers.get('x-requests-remaining')
-        if u and rem: st.session_state['api_used'] = int(u); st.session_state['api_remaining'] = int(rem)
-    except: pass
-
+        if u and rem:
+            st.session_state['api_used'] = int(u)
+            st.session_state['api_remaining'] = int(rem)
+    except: 
+        pass
 @st.cache_data(ttl=3600)
 def search_nba_players(query):
     if not query: return []
@@ -2875,7 +2881,8 @@ with st.expander("⛽ System Diagnostics & API Fuel Gauge", expanded=False):
         if ODDS_API_KEY:
             f_col1, f_col2 = st.columns([4, 1])
             with f_col2:
-                if st.button("🔄 Check", key="chk_quota"): check_api_quota()
+                if st.button("🔄 Check"):
+                    check_api_quota(force_refresh=True)
             with f_col1:
                 if 'api_used' in st.session_state and 'api_remaining' in st.session_state:
                     used, rem = int(st.session_state['api_used']), int(st.session_state['api_remaining'])
