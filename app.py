@@ -511,33 +511,58 @@ def search_mlb_players(query):
 @st.cache_data(ttl=60)
 def get_nba_schedule():
     try:
-        from nba_api.stats.endpoints import scoreboardv2
-        from nba_api.stats.static import teams
-        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
-        board = scoreboardv2.ScoreboardV2(game_date=today_str)
-        games = board.get_data_frames()[0]
-        if games.empty: return None, "No games scheduled today."
-        team_dict = {t['id']: t['abbreviation'] for t in teams.get_teams()}
+        # 🚀 Bypassing nba_api to use ESPN's unblocked public API
+        import requests
+        today_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y%m%d")
+        url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={today_str}"
+        
+        r = requests.get(url, timeout=10).json()
+        events = r.get('events', [])
+        
+        if not events:
+            return None, "No games scheduled today."
+            
         matchups = []
-        for _, g in games.iterrows():
-            home_id, away_id = g['HOME_TEAM_ID'], g['VISITOR_TEAM_ID']
-            home_abbrev, away_abbrev = team_dict.get(home_id, 'HOME'), team_dict.get(away_id, 'AWAY')
-            status_id, status_text = g['GAME_STATUS_ID'], g['GAME_STATUS_TEXT']
-            is_live_or_final = status_id in [2, 3]
-            line_score = board.get_data_frames()[1]
-            home_score, away_score = 0, 0
-            if not line_score.empty:
-                try:
-                    home_row = line_score[line_score['TEAM_ID'] == home_id]
-                    away_row = line_score[line_score['TEAM_ID'] == away_id]
-                    if not home_row.empty and pd.notna(home_row['PTS'].iloc[0]): home_score = int(home_row['PTS'].iloc[0])
-                    if not away_row.empty and pd.notna(away_row['PTS'].iloc[0]): away_score = int(away_row['PTS'].iloc[0])
-                except: pass
-            ds = f"Today - {status_text.replace(' ET', '').replace(' EST', '').upper()}" if status_id == 1 else status_text
-            matchups.append({"home": home_abbrev, "away": away_abbrev, "status": ds, "home_score": home_score, "away_score": away_score, "is_live_or_final": is_live_or_final})
+        for e in events:
+            c = e['competitions'][0]
+            status_dict = e['status']
+            status_name = status_dict['type']['name'] # STATUS_SCHEDULED, STATUS_IN_PROGRESS, STATUS_FINAL
+            
+            is_live_or_final = status_name in ['STATUS_IN_PROGRESS', 'STATUS_FINAL', 'STATUS_HALFTIME']
+            
+            # Find home and away teams safely
+            home_team = next(t for t in c['competitors'] if t['homeAway'] == 'home')
+            away_team = next(t for t in c['competitors'] if t['homeAway'] == 'away')
+            
+            home_abbrev = home_team['team']['abbreviation']
+            away_abbrev = away_team['team']['abbreviation']
+            
+            # Safe score parsing
+            home_score = int(home_team.get('score', 0)) if home_team.get('score') else 0
+            away_score = int(away_team.get('score', 0)) if away_team.get('score') else 0
+            
+            # Format the display string to match your Skynet UI
+            if status_name == 'STATUS_SCHEDULED':
+                dt = pd.to_datetime(e['date']).tz_convert('US/Eastern')
+                ds = f"Today - {dt.strftime('%I:%M %p').lstrip('0')}"
+            elif status_name == 'STATUS_FINAL':
+                ds = "Final"
+            else:
+                ds = f"LIVE ({status_dict.get('displayClock', 'Qrt')})"
+                
+            matchups.append({
+                "home": home_abbrev,
+                "away": away_abbrev,
+                "status": ds,
+                "home_score": home_score,
+                "away_score": away_score,
+                "is_live_or_final": is_live_or_final
+            })
+            
         return matchups, "Success"
-    except: return None, "Failed to connect to NBA API."
-
+    except Exception as e:
+        return None, f"Failed to connect to API: {str(e)}"
+        
 @st.cache_data(ttl=60)
 def get_nhl_schedule():
     try:
