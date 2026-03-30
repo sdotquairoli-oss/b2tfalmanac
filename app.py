@@ -2833,10 +2833,25 @@ def render_league_tab(league_name, get_sched_func):
     lk = league_name.lower()
     render_league_scanners(league_name)
     st.divider()
+
+    today_est = datetime.now(pytz.timezone('US/Eastern'))
+    month_str = today_est.strftime("%b").upper() # e.g., MAR
+    day_str = today_est.strftime("%d")           # e.g., 29
+
     c1, c2 = st.columns([8, 1])
-    with c1: st.markdown(f"### 📅 Today's {league_name} Slate")
+    with c1:
+        st.markdown(f"""
+        <div style="display: flex; align-items: center; margin-bottom: 0px;">
+            <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 6px; overflow: hidden; text-align: center; margin-right: 12px; width: 42px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                <div style="background-color: #ff0055; color: white; font-size: 10px; font-weight: 900; letter-spacing: 1px; padding: 2px 0;">{month_str}</div>
+                <div style="background-color: #0f172a; color: #fff; font-size: 16px; font-weight: 900; padding: 4px 0;">{day_str}</div>
+            </div>
+            <h3 style="margin: 0; padding: 0;">Today's {league_name} Slate</h3>
+        </div>
+        """, unsafe_allow_html=True)
     with c2:
         if st.button("🔄 Refresh", key=f"{lk}.ref_btn"): st.rerun()
+        
     with st.spinner("Loading matchups..."): sched, msg = get_sched_func()
     if sched: render_scoreboard(sched, league_name)
     else: st.info(msg)
