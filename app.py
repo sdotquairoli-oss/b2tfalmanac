@@ -3501,8 +3501,7 @@ with t_roi:
                         except: 
                             prob_str = "N/A"
 
-                        autopsy_html = (
-                            f'<div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.4);">'
+                        autopsy_html = (f'<div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.4);">'
                             f'<div style="font-size: 13px; font-weight: 900; color: {miss_color}; margin-bottom: 10px; letter-spacing: 0.5px; display: flex; justify-content: space-between;">'
                             f'<span>{miss_type}</span> <span style="color:#94a3b8; font-size:10px; font-weight:400; letter-spacing: 0px;">Miss: {abs_miss} units</span></div>'
                             f'<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px; text-align: center;">'
@@ -3515,13 +3514,31 @@ with t_roi:
                             f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
                             f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Actual</div>'
                             f'<div style="color: {miss_color}; font-weight: bold; font-size: 15px;">{actual_raw}</div></div></div>'
-                            f'<div style="font-size: 11px; color: #f8fafc; line-height: 1.5; background: #1e293b; padding: 8px; border-radius: 4px; border-left: 3px solid {miss_color}; margin-bottom: 10px;">'
-                            f'{likely_cause}</div>'
-                            f'<div style="display:flex; justify-content: space-between; font-size: 10px; color: #94a3b8;">'
+                            f'<div style="display:flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-bottom: 10px;">'
                             f'<div>Score: <span style="color:#fff; font-weight:bold;">{autopsy_score_val}/100 ({autopsy_score_label})</span></div>'
                             f'<div>Prob: <span style="color:#fff; font-weight:bold;">{prob_str}</span></div></div></div>'
                         )
                         st.markdown(autopsy_html, unsafe_allow_html=True)
+
+                        if st.button("🧠 Run Deep AI Autopsy", key=f"deep_auto_{orig_idx}", use_container_width=True):
+                            with st.spinner("CFO & COO reviewing the tape..."):
+                                # Pack the evidence
+                                context = f"Player: {player}\nMarket: {stat} (Line: {line_val})\nBet: {vote}\n"
+                                context += f"AI Proj: {proj_val} | Actual Result: {actual_raw}\n"
+                                if row.get('Actual_Mins'): context += f"Minutes Played: {row.get('Actual_Mins')}\n"
+                                context += f"Miss Classification: {miss_type} ({abs_miss} units)\n"
+                                context += f"Closing Line: {current_closing}\n"
+
+                                cfo_res, coo_res = run_dual_autopsy(context)
+
+                                st.markdown(f"""
+                                <div style="background-color: #1e293b; border-left: 3px solid #ff0055; padding: 12px; border-radius: 6px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                                    <div style="font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">👔 Claude (CFO - Math & CLV)</div>
+                                    <div style="font-size: 12px; color: #f8fafc; margin-bottom: 12px; line-height: 1.4;">{cfo_res}</div>
+                                    <div style="font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">📋 Gemini (COO - Game Flow)</div>
+                                    <div style="font-size: 12px; color: #f8fafc; line-height: 1.4;">{coo_res}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
                 else:
                     st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
                     
