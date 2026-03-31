@@ -2184,7 +2184,8 @@ def render_syndicate_board(league_key):
                 is_dog = spread_val < 0
                 dog_margin = abs(spread_val) if is_dog else 0
 
-                
+                BLOWOUT_THRESHOLD = 7.0
+                HEAVY_DOG_THRESHOLD = 10.0
                 if spread_val is not None and is_dog:
                     if dog_margin >= HEAVY_DOG_THRESHOLD:
                         script_color = "#ff0055"
