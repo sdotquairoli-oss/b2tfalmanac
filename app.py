@@ -1876,6 +1876,13 @@ def ask_claude_cfo(context):
     
     try:
         r = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=data, timeout=12)
+        
+        # 🟢 FIX: If Anthropic rejects the request, show the exact reason
+        if r.status_code != 200:
+            error_data = r.json().get('error', {})
+            error_msg = error_data.get('message', 'Unknown API Error')
+            return f"⚠️ Anthropic API Error ({r.status_code}): {error_msg}"
+            
         return r.json().get('content', [{'text': 'API Error'}])[0]['text']
     except Exception as e:
         return f"CFO Offline: {e}"
