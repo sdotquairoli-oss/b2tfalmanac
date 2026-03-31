@@ -1907,7 +1907,37 @@ def consult_the_board(bet_context_json):
         cfo_future = executor.submit(ask_claude_cfo, bet_context_json)
         coo_future = executor.submit(ask_gemini_coo, bet_context_json)
         return cfo_future.result(), coo_future.result()
+@st.cache_data(show_spinner=False, ttl=86400)
+def run_dual_autopsy(context):
+    """Fires a cached post-game autopsy to Claude and Gemini."""
+    def ask_claude_autopsy(ctx):
+        api_key = st.secrets.get("ANTHROPIC_API_KEY")
+        if not api_key: return "⚠️ ANTHROPIC_API_KEY missing."
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+        prompt = f"You are the CFO of a sports betting syndicate doing a POST-GAME AUTOPSY on a losing bet. Analyze why it lost strictly from a math, CLV, and variance perspective. Was it a bad beat (good process, bad luck) or a fundamentally bad bet? Be ruthless and concise (under 100 words). Game Data:\n{ctx}"
+        data = {"model": "claude-3-5-sonnet-20241022", "max_tokens": 250, "messages": [{"role": "user", "content": prompt}]}
+        try:
+            r = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=data, timeout=12)
+            if r.status_code != 200: return f"⚠️ API Error ({r.status_code})"
+            return r.json().get('content', [{'text': 'API Error'}])[0]['text']
+        except Exception as e: return f"CFO Offline: {e}"
 
+    def ask_gemini_autopsy(ctx):
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if not api_key: return "⚠️ GEMINI_API_KEY missing."
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        prompt = f"You are the COO of a sports betting syndicate doing a POST-GAME AUTOPSY on a losing bet. Analyze the game flow context. Look at the minutes played vs the stat line. Was this foul trouble, a blowout, a usage shift, or just a bad shooting night? Be sharp and concise (under 100 words). Game Data:\n{ctx}"
+        data = {"contents": [{"parts": [{"text": prompt}]}]}
+        try:
+            r = requests.post(url, json=data, timeout=12)
+            return r.json().get('candidates', [{'content': {'parts': [{'text': 'API Error'}]}}])[0]['content']['parts'][0]['text']
+        except Exception as e: return f"COO Offline: {e}"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cfo_future = executor.submit(ask_claude_autopsy, context)
+        coo_future = executor.submit(ask_gemini_autopsy, context)
+        return cfo_future.result(), coo_future.result()
+        
 def render_syndicate_board(league_key):
     lk = league_key.lower()
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
