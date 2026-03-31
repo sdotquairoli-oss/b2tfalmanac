@@ -2497,7 +2497,10 @@ def render_syndicate_board(league_key):
                             context += f"ML Consensus Proj: {c_proj:.2f} (Vote: {c_vote})\n"
                             context += f"Win Prob: {win_prob*100:.1f}%\n"
                             context += f"Defense Intel: {mod_desc}\n"
-                            if move_msg: context += f"Line Movement: {move_msg}\n"
+                            
+                            # Safely fetch the move_msg directly from memory
+                            board_move_msg = st.session_state.get(f"{lk}.line_move_msg")
+                            if board_move_msg: context += f"Line Movement: {board_move_msg}\n"
                             
                             # Fire APIs
                             cfo_res, coo_res = consult_the_board(context)
