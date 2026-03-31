@@ -1862,68 +1862,45 @@ def calculate_clv(bet_line, closing_line, opening_line, vote):
     else:                    timing_rating = ("🛑 CHASED LINE", "#ff0055")
 
     return round(bet_clv, 2), round(timing_clv, 2), clv_rating, timing_rating
-@st.cache_data(ttl=300)
-def get_team_spread(team_abbr, league_key, api_key):
-    """
-    Fetches tonight's point spread for a specific team.
-    Returns (spread, is_underdog, dog_margin) 
-    Negative spread = underdog, Positive = favorite
-    """
-    if not api_key:
-        return None, False, 0
+
+# ==========================================
+# 🧠 MIXTURE OF EXPERTS (SYNDICATE BOARDROOM)
+# ==========================================
+def ask_claude_cfo(context):
+    api_key = st.secrets.get("ANTHROPIC_API_KEY")
+    if not api_key: return "⚠️ ANTHROPIC_API_KEY missing in st.secrets."
     
-    sport_path = {
-        "NBA": "basketball_nba",
-        "NHL": "icehockey_nhl", 
-        "MLB": "baseball_mlb"
-    }.get(league_key)
-    
-    if not sport_path:
-        return None, False, 0
+    headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+    prompt = f"You are the CFO of a sharp sports betting syndicate. Analyze this setup strictly from a risk management, CLV, variance, and line movement perspective. Be ruthless, cynical, and concise (under 150 words). Focus purely on the math and market efficiency. Setup:\n{context}"
+    data = {"model": "claude-3-5-sonnet-20241022", "max_tokens": 300, "messages": [{"role": "user", "content": prompt}]}
     
     try:
-        events_resp = requests.get(
-            f"https://api.the-odds-api.com/v4/sports/{sport_path}/odds"
-            f"?apiKey={api_key}&regions=us&markets=spreads&oddsFormat=american",
-            timeout=10
-        )
-        events_data = events_resp.json()
-        
-        if not isinstance(events_data, list):
-            return None, False, 0
-        
-        # Match team abbreviation to full name
-        target_name = ODDS_MEGA_MAP.get(team_abbr, "").lower()
-        
-        for event in events_data:
-            home = event.get('home_team', '').lower()
-            away = event.get('away_team', '').lower()
-            
-            # Check if this event involves our team
-            team_in_game = (target_name and 
-                          (target_name in home or target_name in away))
-            
-            if not team_in_game:
-                continue
-                
-            # Find spread from first available bookmaker
-            for bookmaker in event.get('bookmakers', []):
-                for market in bookmaker.get('markets', []):
-                    if market.get('key') != 'spreads':
-                        continue
-                    for outcome in market.get('outcomes', []):
-                        outcome_team = outcome.get('name', '').lower()
-                        if target_name in outcome_team:
-                            spread = float(outcome.get('point', 0))
-                            is_underdog = spread < 0
-                            dog_margin = abs(spread) if is_underdog else 0
-                            return spread, is_underdog, dog_margin
-                            
-        return None, False, 0
-        
-    except:
-        return None, False, 0
-        
+        r = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=data, timeout=12)
+        return r.json().get('content', [{'text': 'API Error'}])[0]['text']
+    except Exception as e:
+        return f"CFO Offline: {e}"
+
+def ask_gemini_coo(context):
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key: return "⚠️ GEMINI_API_KEY missing in st.secrets."
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    prompt = f"You are the COO of a sharp sports betting syndicate. Analyze this setup strictly from a basketball/sports logic perspective. Focus on game script, pace, defensive tier mismatch, minutes volatility, and physical archetype advantages. Do not just read the stats—give me the actual sports context. Be sharp and concise (under 150 words). Setup:\n{context}"
+    data = {"contents": [{"parts": [{"text": prompt}]}]}
+    
+    try:
+        r = requests.post(url, json=data, timeout=12)
+        return r.json().get('candidates', [{'content': {'parts': [{'text': 'API Error'}]}}])[0]['content']['parts'][0]['text']
+    except Exception as e:
+        return f"COO Offline: {e}"
+
+def consult_the_board(bet_context_json):
+    """Fires both APIs perfectly in parallel to prevent UI lag."""
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cfo_future = executor.submit(ask_claude_cfo, bet_context_json)
+        coo_future = executor.submit(ask_gemini_coo, bet_context_json)
+        return cfo_future.result(), coo_future.result()
+
 def render_syndicate_board(league_key):
     lk = league_key.lower()
     sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
@@ -2194,18 +2171,12 @@ def render_syndicate_board(league_key):
                         </span>
                     </div>
                     """, unsafe_allow_html=True)
-                # ✅ GAME SCRIPT RISK FLAG
-                # Checks live point spread to detect blowout exposure
-                # before locking any bet — catches what the model cannot see
-                spread_val, is_dog, dog_margin = get_team_spread(
-                    target_player.split('(')[1].replace(')', '').strip() 
-                    if '(' in target_player else "",
-                    league_key, 
-                    ODDS_API_KEY
-                )
-                
-                BLOWOUT_THRESHOLD = 7.0   # 7+ point underdog = blowout risk
-                HEAVY_DOG_THRESHOLD = 10.0  # 10+ = severe blowout risk
+
+                # ✅ GAME SCRIPT RISK FLAG (Manual Input Only)
+                spread_val = st.session_state.get(f"{lk}.spread", 0.0)
+                is_dog = spread_val < 0
+                dog_margin = abs(spread_val) if is_dog else 0
+
                 
                 if spread_val is not None and is_dog:
                     if dog_margin >= HEAVY_DOG_THRESHOLD:
@@ -2515,6 +2486,35 @@ def render_syndicate_board(league_key):
                     }
                     </style>
                     """, unsafe_allow_html=True)
+                   
+                    # 🛎️ CONSULT THE SYNDICATE BOARD (AI DEBATE)
+                    st.markdown("---")
+                    if st.button("🛎️ Consult Syndicate Board (AI Debate)", use_container_width=True):
+                        with st.spinner("The CFO (Claude) and COO (Gemini) are reviewing the setup..."):
+                            # Bundle up the exact state of the app
+                            context = f"Player: {target_player}\nMarket: {stat_type} (Line: {line})\nOdds: {odds}\n"
+                            context += f"Opponent: {opp}\nFatigue: {rest}\n"
+                            context += f"ML Consensus Proj: {c_proj:.2f} (Vote: {c_vote})\n"
+                            context += f"Win Prob: {win_prob*100:.1f}%\n"
+                            context += f"Defense Intel: {mod_desc}\n"
+                            if move_msg: context += f"Line Movement: {move_msg}\n"
+                            
+                            # Fire APIs
+                            cfo_res, coo_res = consult_the_board(context)
+                            
+                            # Render the Boardroom
+                            st.markdown("""
+                            <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                                <h4 style="color: #00E5FF; margin-top: 0px; text-align: center;">🏛️ THE SYNDICATE BOARDROOM</h4>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            moe_c1, moe_c2 = st.columns(2)
+                            with moe_c1:
+                                st.markdown(f"**👔 Claude (CFO)**<br><span style='color:#94a3b8; font-size:12px;'>*Focus: Math, ROI & Risk*</span>\n\n> {cfo_res}", unsafe_allow_html=True)
+                            with moe_c2:
+                                st.markdown(f"**📋 Gemini (COO)**<br><span style='color:#94a3b8; font-size:12px;'>*Focus: Game Script & Matchups*</span>\n\n> {coo_res}", unsafe_allow_html=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
 
                     lock_pressed = False
                     final_side = c_vote
