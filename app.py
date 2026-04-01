@@ -303,7 +303,7 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "User_Prob": float(user_prob),
         "Opening_Line": float(opening_line),
         "Closing_Line": "",
-        "Actual_Mins": ""
+        "Actual_Mins": "",
         "Actual_Fouls": ""
     }
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls"]
