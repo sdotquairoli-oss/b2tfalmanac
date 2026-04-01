@@ -2171,9 +2171,15 @@ def render_syndicate_board(league_key):
                 elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
                 else: df, status_code, _ = get_nhl_stats(target_player)
 
-            if status_code == 429: st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
-            elif status_code == 500: st.warning("🟡 **Server Error.** Try again in a moment.")
-            elif df.empty: st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}.")
+            if status_code == 429:
+                st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
+                st.stop()
+            elif status_code == 500:
+                st.warning("🟡 **Server Error.** Try again in a moment.")
+                st.stop()
+            elif df.empty:
+                st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}.")
+                st.stop()
             elif not df.empty:
                 s_col = S_MAP.get(stat_type, "PTS")
                 if league_key == "NBA":
