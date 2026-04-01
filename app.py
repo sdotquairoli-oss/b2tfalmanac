@@ -289,7 +289,7 @@ def load_ledger():
 
 def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0):
     row = {
-        "Date": datetime.now(pytz.timezone('"America/New_York"')).strftime("%Y-%m-%d"),
+        "Date": datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"),
         "League": league,
         "Player": player.split('(')[0].strip(),
         "Stat": stat,
@@ -342,7 +342,7 @@ def load_parlay_ledger():
     return df
 
 def save_to_parlay_ledger(desc, odds, risk, book, is_free, is_boosted=False):
-    row = {"Date":datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"),
+    row = {"Date":datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"),
            "Description": desc, "Odds": int(odds), "Risk": float(risk), 
            "Result": "Pending", "Sportsbook": book, "Is_Free_Bet": is_free, "Is_Boosted": is_boosted, "Return": 0.0}
     
@@ -356,7 +356,7 @@ def save_to_parlay_ledger(desc, odds, risk, book, is_free, is_boosted=False):
 def load_bankroll(): return load_sheet_df("Bankroll_Ledger", ["Date", "Sportsbook", "Type", "Amount"])
 
 def save_bankroll_transaction(book, trans_type, amount):
-    row = {"Date":datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
+    row = {"Date":datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"), "Sportsbook": book, "Type": trans_type, "Amount": float(amount)}
     append_to_sheet("Bankroll_Ledger", row, ["Date", "Sportsbook", "Type", "Amount"])
 
 @st.cache_data(ttl=120)
@@ -537,7 +537,7 @@ def get_nba_schedule():
     try:
         # 🚀 Bypassing nba_api to use ESPN's unblocked public API
         import requests
-        today_str = datetime.now(pytz.timezone("America/New_York")).strftime("%Y%m%d")
+        today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y%m%d")
         url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={today_str}"
         
         r = requests.get(url, timeout=10).json()
@@ -567,7 +567,7 @@ def get_nba_schedule():
             
             # Format the display string to match your Skynet UI
             if status_name == 'STATUS_SCHEDULED':
-                dt = pd.to_datetime(e['date']).tz_convert("America/New_York")
+                dt = pd.to_datetime(e['date']).tz_convert('America/New_York')
                 ds = f"Today - {dt.strftime('%I:%M %p').lstrip('0')}"
             elif status_name == 'STATUS_FINAL':
                 ds = "Final"
@@ -590,7 +590,7 @@ def get_nba_schedule():
 @st.cache_data(ttl=60)
 def get_nhl_schedule():
     try:
-        today_str = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
+        today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
         r = requests.get(f"https://api-web.nhle.com/v1/schedule/{today_str}", timeout=5).json()
         if not r.get('gameWeek'): return None, "No games scheduled today."
         matchups = []
@@ -599,7 +599,7 @@ def get_nhl_schedule():
                 for g in day_data.get('games', []):
                     state = g.get('gameState', 'FUT')
                     il = state in ['LIVE', 'CRIT', 'FINAL', 'OFF']
-                    ds = "Final" if state in ['FINAL', 'OFF'] else "LIVE" if state in ['LIVE', 'CRIT'] else pd.to_datetime(g['startTimeUTC']).tz_convert("America/New_York").strftime("%I:%M %p").lstrip("0")
+                    ds = "Final" if state in ['FINAL', 'OFF'] else "LIVE" if state in ['LIVE', 'CRIT'] else pd.to_datetime(g['startTimeUTC']).tz_convert('America/New_York').strftime("%I:%M %p").lstrip("0")
                     matchups.append({"home": g['homeTeam']['abbrev'], "away": g['awayTeam']['abbrev'], "status": ds, "home_score": g.get('homeTeam', {}).get('score', 0), "away_score": g.get('awayTeam', {}).get('score', 0), "is_live_or_final": il})
         if not matchups: return None, "No games scheduled today."
         return matchups, "Success"
@@ -608,7 +608,7 @@ def get_nhl_schedule():
 @st.cache_data(ttl=60)
 def get_mlb_schedule():
     try:
-        today_str = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
+        today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
         r = requests.get(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}", timeout=5).json()
         if not r.get('dates') or not r['dates'][0].get('games'): return None, "No games scheduled today."
         m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
@@ -620,7 +620,7 @@ def get_mlb_schedule():
             away = m_t.get(away_full, away_full.split()[-1][:3].upper() if away_full else "AWAY")
             sr = g['status']['detailedState']
             il = sr in ['In Progress', 'Final', 'Game Over', 'Completed Early']
-            ds = pd.to_datetime(g['gameDate']).tz_convert("America/New_York").strftime("%I:%M %p").lstrip("0") if not il and sr in ['Scheduled', 'Pre-Game', 'Warmup'] else sr
+            ds = pd.to_datetime(g['gameDate']).tz_convert('America/New_York').strftime("%I:%M %p").lstrip("0") if not il and sr in ['Scheduled', 'Pre-Game', 'Warmup'] else sr
             matchups.append({"home": home, "away": away, "status": ds, "home_score": g['teams']['home'].get('score', 0), "away_score": g['teams']['away'].get('score', 0), "is_live_or_final": il})
         return matchups, "Success"
     except: return None, "Failed to connect to MLB API."
@@ -769,7 +769,7 @@ def get_nba_stats(player_label):
             
         df['MINS'] = df['MIN'].apply(parse_mins)
         df = df.rename(columns={'REB': 'TRB'})
-        today = pd.to_datetime(datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"))
+        today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
@@ -822,7 +822,7 @@ def get_nhl_stats(player_label):
         df['MATCHUP'] = df['opponentAbbrev']
         df['ValidDate'] = pd.to_datetime(df['gameDate'])
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        today = pd.to_datetime(datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"))
+        today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
@@ -853,7 +853,7 @@ def get_mlb_stats(player_label):
         df = df.groupby(['ValidDate', 'MATCHUP', 'Is_Home'], as_index=False).sum()
         
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        today = pd.to_datetime(datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"))
+        today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
         df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
@@ -1463,7 +1463,7 @@ def run_nba_heaters(stat_choice="Points"):
                 df, status, _ = get_nba_stats(player_name)
                 if status != 429 and not df.empty and len(df) >= 5:
                     last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
-                    today_est = pd.to_datetime(datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"))
+                    today_est = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
                     days_out = (today_est - last_played).days
                     if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                     if s_col == "PRA": df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
@@ -1509,7 +1509,7 @@ def run_nhl_heaters(stat_choice="Points"):
                 df, status, _ = get_nhl_stats(player_name)
                 if status != 429 and not df.empty and len(df) >= 5:
                     last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
-                    today_est = pd.to_datetime(datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"))
+                    today_est = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
                     days_out = (today_est - last_played).days
                     if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                     dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
@@ -1631,7 +1631,7 @@ def run_mlb_heaters(stat_choice="Hits"):
             df, status, _ = get_mlb_stats(player_name)
             if status != 429 and not df.empty and len(df) >= 5:
                 last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
-                today_est = pd.to_datetime(datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d"))
+                today_est = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
                 days_out = (today_est - last_played).days
                 if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                 dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
@@ -2095,7 +2095,7 @@ def render_syndicate_board(league_key):
         # ✅ SAME-GAME CORRELATION WARNING
             # Flags when you already have a pending pick in tonight's game
             try:
-                today_str = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d")
+                today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
                 existing_ledger = load_ledger()
                 today_pending = existing_ledger[
                     (existing_ledger['Result'] == 'Pending') &
@@ -2893,7 +2893,7 @@ def render_league_tab(league_name, get_sched_func):
     render_league_scanners(league_name)
     st.divider()
 
-    today_est = datetime.now(pytz.timezone("America/New_York"))
+    today_est = datetime.now(pytz.timezone('America/New_York'))
     month_str = today_est.strftime("%b").upper() # e.g., MAR
     day_str = today_est.strftime("%d")           # e.g., 29
 
