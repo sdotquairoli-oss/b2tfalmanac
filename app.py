@@ -3551,7 +3551,7 @@ with t_roi:
                         )
                         st.markdown(autopsy_html, unsafe_allow_html=True)
 
-                        if st.button("🧠 Run Deep AI Autopsy", key=f"deep_auto_{orig_idx}", use_container_width=True):
+                        if st.button("🧠 Run Deep AI Autopsy", key=f"deep_auto_roi_{orig_idx}_{player}", use_container_width=True):
                             with st.spinner("CFO & COO reviewing the tape..."):
                                 # Pack the evidence
                                 context = f"Player: {player}\nMarket: {stat} (Line: {line_val})\nBet: {vote}\n"
