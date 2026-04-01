@@ -281,9 +281,11 @@ def load_ledger():
         df["Actual_Mins"] = pd.to_numeric(df["Actual_Mins"], errors='coerce')
             
     if "Actual_Fouls" not in df.columns:
-        df["Actual_Fouls"] = ""
+        df["Actual_Fouls"] = None
+    else:
+        df["Actual_Fouls"] = pd.to_numeric(df["Actual_Fouls"], errors='coerce')
 
-        return df
+    return df
 
 def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0):
     row = {
