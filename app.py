@@ -463,7 +463,7 @@ def auto_grade_ledger():
                                     if pd.notna(mins_val):
                                         df.at[idx, 'Actual_Mins'] = round(float(mins_val), 1)
                                 except: pass
-                                    if 'PF' in stats.columns:
+                                        if 'PF' in stats.columns:
                                 try:
                                     pf_val = g_row.iloc[0]['PF']
                                     if pd.notna(pf_val):
