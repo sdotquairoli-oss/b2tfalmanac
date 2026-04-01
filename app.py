@@ -3517,10 +3517,7 @@ with t_roi:
                 
             with sc2:
                 if has_autopsy:
-                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(
-                        row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''),
-                        row.get('Actual_Mins', None)
-                    )
+                                miss_type, abs_miss, likely_cause, miss_color = classify_miss(row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''), row.get('Actual_Mins', None), row.get('Actual_Fouls', None))
                     if miss_type:
                         proj_val = row.get('Proj', 'N/A')
                         line_val = row.get('Line', 'N/A')
