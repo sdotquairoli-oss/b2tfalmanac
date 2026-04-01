@@ -262,7 +262,7 @@ def overwrite_sheet(sheet_name, df):
 
 @st.cache_data(ttl=120)
 def load_ledger():
-    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins"]    
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls"]    
     df = load_sheet_df("ROI_Ledger", new_cols)
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
@@ -275,9 +275,15 @@ def load_ledger():
     else: df["Opening_Line"] = pd.to_numeric(df["Opening_Line"], errors='coerce').fillna(0.0)
     if "Closing_Line" not in df.columns: df["Closing_Line"] = 0.0
     else: df["Closing_Line"] = pd.to_numeric(df["Closing_Line"], errors='coerce').fillna(0.0)
-    if "Actual_Mins" not in df.columns: df["Actual_Mins"] = None
-    else: df["Actual_Mins"] = pd.to_numeric(df["Actual_Mins"], errors='coerce')
-    return df
+    if "Actual_Mins" not in df.columns:
+        df["Actual_Mins"] = None
+    else:
+        df["Actual_Mins"] = pd.to_numeric(df["Actual_Mins"], errors='coerce')
+            
+    if "Actual_Fouls" not in df.columns:
+        df["Actual_Fouls"] = ""
+
+        return df
 
 def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0):
     row = {
@@ -298,8 +304,9 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Opening_Line": float(opening_line),
         "Closing_Line": "",
         "Actual_Mins": ""
+        "Actual_Fouls": ""
     }
-    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins"]
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls"]
     append_to_sheet("ROI_Ledger", row, new_cols)
 
 @st.cache_data(ttl=120)
@@ -456,6 +463,13 @@ def auto_grade_ledger():
                                     if pd.notna(mins_val):
                                         df.at[idx, 'Actual_Mins'] = round(float(mins_val), 1)
                                 except: pass
+                                    if 'PF' in stats.columns:
+                try:
+                    pf_val = g_row.iloc[0]['PF']
+                    if pd.notna(pf_val):
+                        df.at[idx, 'Actual_Fouls'] = int(pf_val)
+                except:
+                    pass
                             updated += 1
         except: continue
 
@@ -774,9 +788,7 @@ def get_nba_stats(player_label):
 
         df['USG_PCT'] = usage_rate
 
-        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP',
-                      'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL',
-                      'BLK', 'FG3M', 'USG_PCT', 'Weight'] if c in df.columns]
+        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'USG_PCT', 'Weight', 'PF'] if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
     except:
         return pd.DataFrame(), 500, []
@@ -3557,6 +3569,7 @@ with t_roi:
                                 context = f"Player: {player}\nMarket: {stat} (Line: {line_val})\nBet: {vote}\n"
                                 context += f"AI Proj: {proj_val} | Actual Result: {actual_raw}\n"
                                 if row.get('Actual_Mins'): context += f"Minutes Played: {row.get('Actual_Mins')}\n"
+                                if row.get('Actual_Fouls') != "": context += f"Personal Fouls: {row.get('Actual_Fouls')}\n"
                                 context += f"Miss Classification: {miss_type} ({abs_miss} units)\n"
                                 context += f"Closing Line: {current_closing}\n"
 
