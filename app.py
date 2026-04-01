@@ -464,12 +464,12 @@ def auto_grade_ledger():
                                         df.at[idx, 'Actual_Mins'] = round(float(mins_val), 1)
                                 except: pass
                                     if 'PF' in stats.columns:
-                try:
-                    pf_val = g_row.iloc[0]['PF']
-                    if pd.notna(pf_val):
-                        df.at[idx, 'Actual_Fouls'] = int(pf_val)
-                except:
-                    pass
+                                try:
+                                    pf_val = g_row.iloc[0]['PF']
+                                    if pd.notna(pf_val):
+                                        df.at[idx, 'Actual_Fouls'] = int(pf_val)
+                                except:
+                                    pass
                             updated += 1
         except: continue
 
