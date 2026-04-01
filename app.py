@@ -289,7 +289,7 @@ def load_ledger():
 
 def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0):
     row = {
-        "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
+        "Date": datetime.now(pytz.timezone('"America/New_York"')).strftime("%Y-%m-%d"),
         "League": league,
         "Player": player.split('(')[0].strip(),
         "Stat": stat,
