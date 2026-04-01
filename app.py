@@ -3378,7 +3378,7 @@ with t_roi:
 
                 miss_types = []
                 for _, lr in losses_with_actual.iterrows():
-                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''), row.get('Actual_Mins', None), row.get('Actual_Fouls', None))
+                    mt, dist, _, _ = classify_miss(lr.get('Proj', 0), lr.get('Line', 0), lr.get('Actual', 0), lr.get('Vote', ''), lr.get('Actual_Mins', None), lr.get('Actual_Fouls', None))
                     if mt: miss_types.append({
                         'type': mt, 'dist': dist,
                         'stat': lr.get('Stat', ''),
