@@ -1737,7 +1737,7 @@ def render_league_scanners(league_name):
             st.dataframe(st.session_state[f'{lk}.radar.bb'], use_container_width=True, hide_index=True,
                 column_config={"Team": st.column_config.TextColumn("🛡️ Target Team", width="medium"), "Opp": st.column_config.TextColumn("🎯 Weak Opponent", width="medium"), "Opp Status": st.column_config.TextColumn("🚨 Defense Metric", width="large")})
 
-def classify_miss(proj, line, actual, vote, minutes_played=None):
+def classify_miss(proj, line, actual, vote, minutes_played=None, actual_fouls=None):
     try:
         proj   = float(proj)
         line   = float(line)
@@ -1745,66 +1745,56 @@ def classify_miss(proj, line, actual, vote, minutes_played=None):
     except (ValueError, TypeError):
         return None, None, None, None
 
-    if vote == "OVER": line_miss = line - actual
-    elif vote == "UNDER": line_miss = actual - line
-    else: return None, None, None, None
-        
+    if vote == "OVER":
+        line_miss = line - actual
+    elif vote == "UNDER":
+        line_miss = actual - line
+    else:
+        return None, None, None, None
+
     abs_miss = abs(line_miss)
     pct_miss = abs_miss / line if line > 0 else 0
 
+    # 🟢 NEW: EXPLICIT FOUL CHECK (Overrides all other logic)
+    if actual_fouls is not None and str(actual_fouls).strip() not in ['', 'nan', 'None']:
+        try:
+            fouls = int(float(actual_fouls))
+            if fouls >= 5:
+                return "🟡 FOUL TROUBLE MISS", round(abs_miss, 1), "Confirmed 5+ fouls. Player was in severe foul trouble or fouled out. This is pure variance, not a model failure.", "#a855f7"
+        except:
+            pass
+
     if pct_miss <= 0.10 or abs_miss <= 1.5:
         miss_type    = "😔 BAD BEAT"
-        likely_cause = "The model's direction was correct and the projection was close — this was pure variance. No model adjustment needed. At your recorded win probability, some losses are always expected."
-        color = "#FFD700"
+        likely_cause = "The model's direction was correct and the projection was close — this was pure variance. No model adjustment needed."
+        color        = "#FFD700"
     elif pct_miss <= 0.25 or abs_miss <= 3.5:
         miss_type    = "⚠️ MODEL MISS"
-        likely_cause = "The projection was in the right ballpark but overconfident. Check whether the opponent defense modifier or fatigue flag was active — context modifiers may have been too aggressive on this setup."
-        color = "#f59e0b"
+        likely_cause = "The projection was in the right ballpark but overconfident. Check whether the opponent defense modifier or fatigue flag was active."
+        color        = "#f59e0b"
     else:
-        miss_type = "💥 BLOWOUT MISS"
-        color     = "#ff0055"
-
+        miss_type    = "💥 BLOWOUT MISS"
+        color        = "#ff0055"
+        
         if minutes_played is not None:
             try:
                 mins = float(minutes_played)
                 pts_per_min = actual / mins if mins > 0 else 0
                 proj_per_min = proj / mins if mins > 0 else 0
+                # Fallback guess if foul data is missing
                 if mins <= 28 and pts_per_min < 0.15 and proj_per_min >= 0.25:
-                    miss_type    = "🟡 FOUL TROUBLE MISS"
-                    color        = "#a855f7"
-                    likely_cause = (
-                        "Low scoring in reduced minutes suggests foul trouble. "
-                        "This is not a model failure — foul distribution is random "
-                        "and unpredictable. The model's projection was likely accurate "
-                        "for a normal game. File this as variance, not a system error."
-                    )
-                    return miss_type, round(abs(actual - line), 1), likely_cause, color
-            except: pass
+                    return "🟡 FOUL TROUBLE MISS", round(abs_miss, 1), "Low scoring in reduced minutes suggests foul trouble. File this as variance.", "#a855f7"
+            except:
+                pass
 
         if vote == "OVER" and line > 0 and actual < line * 0.65:
-            likely_cause = (
-                "Actual came in far below the line — not just a miss, a collapse. "
-                "Top causes: in-game blowout (minutes slashed in garbage time), "
-                "undisclosed injury or DNP that wasn't caught pre-game. "
-                "Check the injury report for that date."
-            )
+            likely_cause = "Actual came in far below the line. Top causes: in-game blowout (minutes slashed in garbage time) or undisclosed injury."
         elif vote == "UNDER" and line > 0 and actual > line * 1.35:
-            likely_cause = (
-                "Actual blew past the line significantly in the wrong direction. "
-                "Top causes: usage spike from a teammate injury, overtime added volume, "
-                "or a genuinely off-model outlier game. "
-                "Check if a key teammate was out that night."
-            )
+            likely_cause = "Actual blew past the line. Top causes: usage spike from a teammate injury or OT added volume."
         else:
-            likely_cause = (
-                "The actual result fell well outside the projected range. "
-                "Likely causes: in-game blowout, undisclosed injury, surprise lineup "
-                "change, or an archetype mismatch vs this opponent. "
-                "If Setup Score was ELITE (75+), this warrants a manual review."
-            )
+            likely_cause = "The actual result fell well outside the projected range. Check game flow."
 
     return miss_type, round(abs_miss, 1), likely_cause, color
-
 @st.cache_data(ttl=300)
 def load_vault_receipts(player_name, stat_type):
     """Cached fetch of pre-game vault projections. Avoids a raw API call on every chart render."""
@@ -3388,11 +3378,7 @@ with t_roi:
 
                 miss_types = []
                 for _, lr in losses_with_actual.iterrows():
-                    mt, dist, _, _ = classify_miss(
-                        lr.get('Proj', 0), lr.get('Line', 0),
-                        lr.get('Actual', 0), lr.get('Vote', ''),
-                        lr.get('Actual_Mins', None)
-                    )
+                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''), row.get('Actual_Mins', None), row.get('Actual_Fouls', None))
                     if mt: miss_types.append({
                         'type': mt, 'dist': dist,
                         'stat': lr.get('Stat', ''),
