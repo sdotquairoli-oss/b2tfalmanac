@@ -2456,7 +2456,7 @@ def render_syndicate_board(league_key):
                    
                     # 🛎️ CONSULT THE SYNDICATE BOARD (AI DEBATE)
                     st.markdown("---")
-                    if st.button("🛎️ Consult Syndicate Board (AI Debate)", use_container_width=True, key=f"consult_board_{league_name}"):
+                    if st.button("🛎️ Consult Syndicate Board (AI Debate)", use_container_width=True, key=f"consult_board_{league_key}"):
                         with st.spinner("The CFO (Claude) and COO (Gemini) are reviewing the setup..."):
                             # Bundle up the exact state of the app
                             context = f"Player: {target_player}\nMarket: {stat_type} (Line: {line})\nOdds: {odds}\n"
