@@ -558,8 +558,10 @@ def get_nba_schedule():
             home_team = next(t for t in c['competitors'] if t['homeAway'] == 'home')
             away_team = next(t for t in c['competitors'] if t['homeAway'] == 'away')
             
-            home_abbrev = home_team['team']['abbreviation']
-            away_abbrev = away_team['team']['abbreviation']
+            # Normalize ESPN abbreviations to standard 3-letter NBA codes
+            espn_fix = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA"}
+            home_abbrev = espn_fix.get(home_team['team']['abbreviation'].upper(), home_team['team']['abbreviation'].upper())
+            away_abbrev = espn_fix.get(away_team['team']['abbreviation'].upper(), away_team['team']['abbreviation'].upper())
             
             # Safe score parsing
             home_score = int(home_team.get('score', 0)) if home_team.get('score') else 0
