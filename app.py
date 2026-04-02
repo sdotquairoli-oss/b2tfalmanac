@@ -2228,38 +2228,39 @@ def render_syndicate_board(league_key):
                 blowout_penalty = 1.0
                 final_consensus = raw_consensus
     
-                if spread_val >= 10.0:
+                if abs(spread_val) >= 10.0:
                     script_color    = "#ff0055"
                     script_icon     = "🚨 SEVERE"
                     blowout_penalty = 0.80
-                    script_msg = (f"Team is a +{spread_val:.1f} point underdog. "
+                    role = "underdog (+)" if spread_val > 0 else "heavy favorite (-)"
+                    script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
                                   f"Severe blowout risk — starters historically "
                                   f"sit in the fourth quarter in games like this. "
                                   f"Points, Assists, and Minutes props are highly "
                                   f"unreliable. Strong recommendation to pass "
                                   f"regardless of model signal."
                     )
-                elif spread_val >= 6.5:
+                elif abs(spread_val) >= 6.5:
                     script_color    = "#f59e0b"
                     script_icon     = "⚠️ ELEVATED"
                     blowout_penalty = 0.90
-                    script_msg = (f"Team is a +{spread_val:.1f} point underdog. "
+                    role = "underdog (+)" if spread_val > 0 else "favorite (-)"
+                    script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
                                   f"Elevated game script risk — if the game gets "
                                   f"out of hand early, expect reduced minutes and "
-                                  f"fewer offensive opportunities. Consider passing "
-                                  f"on Points and Assists props."
+                                  f"fewer offensive opportunities. Consider passing."
                     )
-                elif spread_val <= -7.0:
+                elif -6.0 <= spread_val < 0:
                     script_color    = None
                     script_msg      = None
                     st.caption(f"✅ Game Script Favorable: Team favored by "
-                               f"{abs(spread_val):.1f} — normal rotation expected, "
-                               f"possible garbage time minutes boost late."
+                               f"{abs(spread_val):.1f} — competitive game expected, "
+                               f"normal rotation."
                     )
                 else:
                     script_color    = None
                     script_msg      = None
-    
+        
                 if script_msg:
                     final_consensus = raw_consensus * blowout_penalty
                     df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
@@ -2270,7 +2271,7 @@ def render_syndicate_board(league_key):
                                 GAME SCRIPT RISK — {script_icon}
                             </span>
                             <span style="font-size:11px; color:#94a3b8;">
-                                Spread: +{spread_val:.1f}
+                                Spread: {spread_val:+.1f}
                             </span>
                         </div>
                         <div style="font-size:12px; color:#f8fafc; line-height:1.5;">{script_msg}</div>
