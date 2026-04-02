@@ -2091,723 +2091,723 @@ def render_syndicate_board(league_key):
     with btn_c1: analyze_pressed = st.button(f"🚀 Analyze Matchup", type="primary", use_container_width=True, key=f"{lk}.btn_analyze")
 
     if analyze_pressed and player_name: st.session_state[f"{lk}.target_player"] = player_name
-    target_player = st.session_state.get(f"{lk}.target_player")
+target_player = st.session_state.get(f"{lk}.target_player")
 
-    if target_player:
-        if stat_type in ["Moneyline", "Spread", "Total (O/U)"]:
-            st.markdown("---")
-            st.markdown(f"### 🏟️ Syndicate Team Bet: {stat_type}")
-            st.info(f"**{target_player}** selected. The AI player model is bypassed for game lines.")
-            m_c1, m_c2 = st.columns(2)
-            with m_c1: st.metric("Target Line", line if stat_type != "Moneyline" else "Win")
-            with m_c2: st.metric("Odds", odds)
-            
-            user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True, key=f"{lk}.user_side")
-
-            if st.button(f"🔒 Lock {league_key} Pick"):
-                ssave_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50, float(line))
-                st.success(f"Team Pick Locked: {user_side}")
-        # ✅ SAME-GAME CORRELATION WARNING
-            # Flags when you already have a pending pick in tonight's game
-            try:
-                today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
-                existing_ledger = load_ledger()
-                today_pending = existing_ledger[
-                    (existing_ledger['Result'] == 'Pending') &
-                    (existing_ledger['Date'] == today_str)
-                ]
-
-                if not today_pending.empty and '(' in target_player:
-                    player_team = target_player.split('(')[1].replace(')', '').strip().upper()
-
-                    # Build list of teams already bet on today
-                    locked_teams = set()
-                    locked_opps = set()
-                    for _, lp in today_pending.iterrows():
-                        lp_player = str(lp.get('Player', ''))
-                        # Try to match team from ledger player name
-                        # We store opponent in the ledger — use that
-                        locked_opps.add(str(lp.get('Stat', '')))
-
-                    # Simpler approach — check if opp or player_team
-                    # appeared in any of today's pending picks
-                    all_today_text = ' '.join(
-                        today_pending['Player'].astype(str).tolist()
-                    ).upper()
-
-                    same_game_flag = (
-                        opp.upper() in all_today_text or
-                        player_team in all_today_text
-                    )
-
-                    if same_game_flag:
-                        st.markdown(f"""
-                        <div style="background-color: rgba(255, 165, 0, 0.1);
-                             border: 1px solid #f59e0b; border-radius: 8px;
-                             padding: 12px; margin-bottom: 15px;">
-                            <span style="font-size:15px; font-weight:900;
-                                 color:#f59e0b;">
-                                🔗 SAME GAME CORRELATION RISK
-                            </span>
-                            <div style="font-size:12px; color:#f8fafc;
-                                 margin-top:6px; line-height:1.5;">
-                                You already have a pending pick involving
-                                <b>{opp}</b> or <b>{player_team}</b> tonight.
-                                Both bets may require similar game script
-                                conditions. A blowout in either direction
-                                could kill both positions simultaneously.
-                                Consider whether the combined exposure is
-                                justified.
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-            except:
-                pass
-                
-        else:
-            suppressed = get_suppressed_stats(league_key)
-            if stat_type in suppressed:
-                graded = load_ledger()
-                graded = graded[(graded['Result'].isin(['Win', 'Loss'])) & (graded['League'] == league_key) & (graded['Stat'] == stat_type)]
-                wins = len(graded[graded['Result'] == 'Win'])
-                total = len(graded)
-                wr = wins / total * 100 if total > 0 else 0
-                st.error(
-                    f"🛑 **SKYNET AUTO-SUPPRESSION ACTIVE**\n\n"
-                    f"Your historical record on **{league_key} {stat_type}** is "
-                    f"**{wins}-{total - wins}** ({wr:.1f}% win rate) — below the 42% floor. "
-                    f"Syndicate recommends skipping this market entirely until your edge is reestablished. "
-                    f"Clear the Skynet Cache above to re-evaluate after new data comes in."
-                )
-                st.stop()
-
-            with st.spinner(f"Scouting data for {target_player}..."):
-                if league_key == "NBA": df, status_code, _ = get_nba_stats(target_player)
-                elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
-                else: df, status_code, _ = get_nhl_stats(target_player)
-
-            if status_code == 429:
-                st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
-                st.stop()
-            elif status_code == 500:
-                st.warning("🟡 **Server Error.** Try again in a moment.")
-                st.stop()
-            elif df.empty:
-                st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}.")
-                st.stop()
-            elif not df.empty:
-                s_col = S_MAP.get(stat_type, "PTS")
-                if league_key == "NBA":
-                    if s_col == "A": s_col = "AST"
-                    if s_col == "PRA": df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
-                    if s_col == "PR": df['PR'] = df['PTS'] + df['TRB']
-                    if s_col == "PA": df['PA'] = df['PTS'] + df['AST']
-                    if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
-                    if s_col in ["DD", "TD"]:
-                        tens = (df['PTS'] >= 10).astype(int) + (df['TRB'] >= 10).astype(int) + (df['AST'] >= 10).astype(int) + (df.get('STL', pd.Series(0, index=df.index)) >= 10).astype(int) + (df.get('BLK', pd.Series(0, index=df.index)) >= 10).astype(int)
-                        df['DD'] = (tens >= 2).astype(int)
-                        df['TD'] = (tens >= 3).astype(int)
-
-                st.session_state.pop(f"{lk}.stake_modifier", None)
-                
-                df_hash = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.2f}" if s_col in df.columns else str(len(df))
-                current_ledger = load_ledger()
-                graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
-                ledger_hash = str(hash(str(sorted(graded_counts.items()))))
-
-                df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote = run_ml_board(
-                    df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
-                )
-                
-                # ✅ COMBO PROP MODE BANNER — shown in UI (not in cached fn)
-                COMBO_STATS = {"PRA", "PR", "PA", "RA"}
-                if s_col in COMBO_STATS:
-                    st.markdown("""
-                    <div style="background-color: rgba(245, 158, 11, 0.08);
-                         border: 1px solid #f59e0b; border-radius: 6px;
-                         padding: 8px 12px; margin-bottom: 10px;">
-                        <span style="font-size:12px; font-weight:900; color:#f59e0b;">
-                            ⚠️ COMBO PROP MODE
-                        </span>
-                        <span style="font-size:11px; color:#f8fafc; margin-left:8px;">
-                            Threshold raised 30% — stacked stats require wider gap
-                            to offset multiplicative variance.
-                        </span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # ✅ GAME SCRIPT RISK FLAG (Unified Engine)
-                spread_val = st.session_state.get(f"{lk}.spread", 0.0)
-                blowout_penalty = 1.0
-                final_consensus = raw_consensus
-    
-                if abs(spread_val) >= 10.0:
-                    script_color    = "#ff0055"
-                    script_icon     = "🚨 SEVERE"
-                    blowout_penalty = 0.80
-                    role = "underdog (+)" if spread_val > 0 else "heavy favorite (-)"
-                    script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
-                                  f"Severe blowout risk — starters historically "
-                                  f"sit in the fourth quarter in games like this. "
-                                  f"Points, Assists, and Minutes props are highly "
-                                  f"unreliable. Strong recommendation to pass "
-                                  f"regardless of model signal."
-                    )
-                elif abs(spread_val) >= 6.5:
-                    script_color    = "#f59e0b"
-                    script_icon     = "⚠️ ELEVATED"
-                    blowout_penalty = 0.90
-                    role = "underdog (+)" if spread_val > 0 else "favorite (-)"
-                    script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
-                                  f"Elevated game script risk — if the game gets "
-                                  f"out of hand early, expect reduced minutes and "
-                                  f"fewer offensive opportunities. Consider passing."
-                    )
-                elif -6.0 <= spread_val < 0:
-                    script_color    = None
-                    script_msg      = None
-                    st.caption(f"✅ Game Script Favorable: Team favored by "
-                               f"{abs(spread_val):.1f} — competitive game expected, "
-                               f"normal rotation."
-                    )
-                else:
-                    script_color    = None
-                    script_msg      = None
+if target_player:
+    if stat_type in ["Moneyline", "Spread", "Total (O/U)"]:
+        st.markdown("---")
+        st.markdown(f"### 🏟️ Syndicate Team Bet: {stat_type}")
+        st.info(f"**{target_player}** selected. The AI player model is bypassed for game lines.")
+        m_c1, m_c2 = st.columns(2)
+        with m_c1: st.metric("Target Line", line if stat_type != "Moneyline" else "Win")
+        with m_c2: st.metric("Odds", odds)
         
-                if script_msg:
-                    final_consensus = raw_consensus * blowout_penalty
-                    df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
-                    st.markdown(f"""
-                    <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {script_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <span style="font-size:15px; font-weight:900; color:{script_color};">
-                                GAME SCRIPT RISK — {script_icon}
-                            </span>
-                            <span style="font-size:11px; color:#94a3b8;">
-                                Spread: {spread_val:+.1f}
-                            </span>
-                        </div>
-                        <div style="font-size:12px; color:#f8fafc; line-height:1.5;">{script_msg}</div>
-                        <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
-                            Projection adjusted: <span style="color:{script_color}; font-weight:bold;">
-                            ×{blowout_penalty:.2f} applied to consensus
-                            </span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                        
-                skynet_data = apply_skynet(raw_vote, stat_type, league_key)
-                if 'blowout_penalty' in locals() and blowout_penalty < 1.0:
-                    final_consensus = final_consensus * skynet_data["mod"]
-                else:
-                    final_consensus = raw_consensus * skynet_data["mod"]
+        user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True, key=f"{lk}.user_side")
 
-                if st.session_state.get(f"{lk}.injury_boost", False):
-                    pre_boost = final_consensus
-                    final_consensus = final_consensus * 1.08
-                    df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * 1.08
+        if st.button(f"🔒 Lock {league_key} Pick"):
+            ssave_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50, float(line))
+            st.success(f"Team Pick Locked: {user_side}")
+    # ✅ SAME-GAME CORRELATION WARNING
+        # Flags when you already have a pending pick in tonight's game
+        try:
+            today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
+            existing_ledger = load_ledger()
+            today_pending = existing_ledger[
+                (existing_ledger['Result'] == 'Pending') &
+                (existing_ledger['Date'] == today_str)
+            ]
+
+            if not today_pending.empty and '(' in target_player:
+                player_team = target_player.split('(')[1].replace(')', '').strip().upper()
+
+                # Build list of teams already bet on today
+                locked_teams = set()
+                locked_opps = set()
+                for _, lp in today_pending.iterrows():
+                    lp_player = str(lp.get('Player', ''))
+                    # Try to match team from ledger player name
+                    # We store opponent in the ledger — use that
+                    locked_opps.add(str(lp.get('Stat', '')))
+
+                # Simpler approach — check if opp or player_team
+                # appeared in any of today's pending picks
+                all_today_text = ' '.join(
+                    today_pending['Player'].astype(str).tolist()
+                ).upper()
+
+                same_game_flag = (
+                    opp.upper() in all_today_text or
+                    player_team in all_today_text
+                )
+
+                if same_game_flag:
                     st.markdown(f"""
-                    <div style="background-color: rgba(255, 165, 0, 0.1); border: 1px solid #f59e0b;
-                         border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-                        <span style="font-size:14px; font-weight:900; color:#f59e0b;">
-                            🚑 INJURY REDISTRIBUTION ACTIVE
+                    <div style="background-color: rgba(255, 165, 0, 0.1);
+                         border: 1px solid #f59e0b; border-radius: 8px;
+                         padding: 12px; margin-bottom: 15px;">
+                        <span style="font-size:15px; font-weight:900;
+                             color:#f59e0b;">
+                            🔗 SAME GAME CORRELATION RISK
                         </span>
-                        <div style="font-size:12px; color:#f8fafc; margin-top:4px;">
-                            Key teammate confirmed out — usage redistributed to {target_player.split("(")[0].strip()}.
-                        </div>
-                        <div style="font-size:11px; color:#94a3b8; margin-top:3px;">
-                            Projection adjusted: 
-                            <span style="color:#94a3b8;">{pre_boost:.2f}</span> → 
-                            <span style="color:#f59e0b; font-weight:bold;">{final_consensus:.2f}</span>
-                            <span style="color:#f59e0b;"> (+8% usage bump)</span>
+                        <div style="font-size:12px; color:#f8fafc;
+                             margin-top:6px; line-height:1.5;">
+                            You already have a pending pick involving
+                            <b>{opp}</b> or <b>{player_team}</b> tonight.
+                            Both bets may require similar game script
+                            conditions. A blowout in either direction
+                            could kill both positions simultaneously.
+                            Consider whether the combined exposure is
+                            justified.
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+        except:
+            pass
+            
+    else:
+        suppressed = get_suppressed_stats(league_key)
+        if stat_type in suppressed:
+            graded = load_ledger()
+            graded = graded[(graded['Result'].isin(['Win', 'Loss'])) & (graded['League'] == league_key) & (graded['Stat'] == stat_type)]
+            wins = len(graded[graded['Result'] == 'Win'])
+            total = len(graded)
+            wr = wins / total * 100 if total > 0 else 0
+            st.error(
+                f"🛑 **SKYNET AUTO-SUPPRESSION ACTIVE**\n\n"
+                f"Your historical record on **{league_key} {stat_type}** is "
+                f"**{wins}-{total - wins}** ({wr:.1f}% win rate) — below the 42% floor. "
+                f"Syndicate recommends skipping this market entirely until your edge is reestablished. "
+                f"Clear the Skynet Cache above to re-evaluate after new data comes in."
+            )
+            st.stop()
 
-                dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
-                def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
-                
-                c_vote, c_color = get_final_vote(final_consensus)
-                c_proj = final_consensus
-                skynet_msg, skynet_color = skynet_data["msg"], skynet_data["color"]
+        with st.spinner(f"Scouting data for {target_player}..."):
+            if league_key == "NBA": df, status_code, _ = get_nba_stats(target_player)
+            elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
+            else: df, status_code, _ = get_nhl_stats(target_player)
 
-                if len(board) == 0: st.warning(f"⚠️ **Insufficient Data:** {target_player} has played fewer than 5 games this season.")
+        if status_code == 429:
+            st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
+            st.stop()
+        elif status_code == 500:
+            st.warning("🟡 **Server Error.** Try again in a moment.")
+            st.stop()
+        elif df.empty:
+            st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}.")
+            st.stop()
+        elif not df.empty:
+            s_col = S_MAP.get(stat_type, "PTS")
+            if league_key == "NBA":
+                if s_col == "A": s_col = "AST"
+                if s_col == "PRA": df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
+                if s_col == "PR": df['PR'] = df['PTS'] + df['TRB']
+                if s_col == "PA": df['PA'] = df['PTS'] + df['AST']
+                if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
+                if s_col in ["DD", "TD"]:
+                    tens = (df['PTS'] >= 10).astype(int) + (df['TRB'] >= 10).astype(int) + (df['AST'] >= 10).astype(int) + (df.get('STL', pd.Series(0, index=df.index)) >= 10).astype(int) + (df.get('BLK', pd.Series(0, index=df.index)) >= 10).astype(int)
+                    df['DD'] = (tens >= 2).astype(int)
+                    df['TD'] = (tens >= 3).astype(int)
+
+            st.session_state.pop(f"{lk}.stake_modifier", None)
+            
+            df_hash = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.2f}" if s_col in df.columns else str(len(df))
+            current_ledger = load_ledger()
+            graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
+            ledger_hash = str(hash(str(sorted(graded_counts.items()))))
+
+            df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote = run_ml_board(
+                df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
+            )
+            
+            # ✅ COMBO PROP MODE BANNER — shown in UI (not in cached fn)
+            COMBO_STATS = {"PRA", "PR", "PA", "RA"}
+            if s_col in COMBO_STATS:
+                st.markdown("""
+                <div style="background-color: rgba(245, 158, 11, 0.08);
+                     border: 1px solid #f59e0b; border-radius: 6px;
+                     padding: 8px 12px; margin-bottom: 10px;">
+                    <span style="font-size:12px; font-weight:900; color:#f59e0b;">
+                        ⚠️ COMBO PROP MODE
+                    </span>
+                    <span style="font-size:11px; color:#f8fafc; margin-left:8px;">
+                        Threshold raised 30% — stacked stats require wider gap
+                        to offset multiplicative variance.
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # ✅ GAME SCRIPT RISK FLAG (Unified Engine)
+            spread_val = st.session_state.get(f"{lk}.spread", 0.0)
+            blowout_penalty = 1.0
+            final_consensus = raw_consensus
+
+            if abs(spread_val) >= 10.0:
+                script_color    = "#ff0055"
+                script_icon     = "🚨 SEVERE"
+                blowout_penalty = 0.80
+                role = "underdog (+)" if spread_val > 0 else "heavy favorite (-)"
+                script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
+                              f"Severe blowout risk — starters historically "
+                              f"sit in the fourth quarter in games like this. "
+                              f"Points, Assists, and Minutes props are highly "
+                              f"unreliable. Strong recommendation to pass "
+                              f"regardless of model signal."
+                )
+            elif abs(spread_val) >= 6.5:
+                script_color    = "#f59e0b"
+                script_icon     = "⚠️ ELEVATED"
+                blowout_penalty = 0.90
+                role = "underdog (+)" if spread_val > 0 else "favorite (-)"
+                script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
+                              f"Elevated game script risk — if the game gets "
+                              f"out of hand early, expect reduced minutes and "
+                              f"fewer offensive opportunities. Consider passing."
+                )
+            elif -6.0 <= spread_val < 0:
+                script_color    = None
+                script_msg      = None
+                st.caption(f"✅ Game Script Favorable: Team favored by "
+                           f"{abs(spread_val):.1f} — competitive game expected, "
+                           f"normal rotation."
+                )
+            else:
+                script_color    = None
+                script_msg      = None
+    
+            if script_msg:
+                final_consensus = raw_consensus * blowout_penalty
+                df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
+                st.markdown(f"""
+                <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {script_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size:15px; font-weight:900; color:{script_color};">
+                            GAME SCRIPT RISK — {script_icon}
+                        </span>
+                        <span style="font-size:11px; color:#94a3b8;">
+                            Spread: {spread_val:+.1f}
+                        </span>
+                    </div>
+                    <div style="font-size:12px; color:#f8fafc; line-height:1.5;">{script_msg}</div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                        Projection adjusted: <span style="color:{script_color}; font-weight:bold;">
+                        ×{blowout_penalty:.2f} applied to consensus
+                        </span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                    
+            skynet_data = apply_skynet(raw_vote, stat_type, league_key)
+            if 'blowout_penalty' in locals() and blowout_penalty < 1.0:
+                final_consensus = final_consensus * skynet_data["mod"]
+            else:
+                final_consensus = raw_consensus * skynet_data["mod"]
+
+            if st.session_state.get(f"{lk}.injury_boost", False):
+                pre_boost = final_consensus
+                final_consensus = final_consensus * 1.08
+                df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * 1.08
+                st.markdown(f"""
+                <div style="background-color: rgba(255, 165, 0, 0.1); border: 1px solid #f59e0b;
+                     border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                    <span style="font-size:14px; font-weight:900; color:#f59e0b;">
+                        🚑 INJURY REDISTRIBUTION ACTIVE
+                    </span>
+                    <div style="font-size:12px; color:#f8fafc; margin-top:4px;">
+                        Key teammate confirmed out — usage redistributed to {target_player.split("(")[0].strip()}.
+                    </div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:3px;">
+                        Projection adjusted: 
+                        <span style="color:#94a3b8;">{pre_boost:.2f}</span> → 
+                        <span style="color:#f59e0b; font-weight:bold;">{final_consensus:.2f}</span>
+                        <span style="color:#f59e0b;"> (+8% usage bump)</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            dynamic_thresh = PASS_THRESHOLDS.get(s_col, 0.3)
+            def get_final_vote(p): return ("OVER", "#00c853") if p >= line + dynamic_thresh else (("UNDER", "#d50000") if p <= line - dynamic_thresh else ("PASS", "#94a3b8"))
+            
+            c_vote, c_color = get_final_vote(final_consensus)
+            c_proj = final_consensus
+            skynet_msg, skynet_color = skynet_data["msg"], skynet_data["color"]
+
+            if len(board) == 0: st.warning(f"⚠️ **Insufficient Data:** {target_player} has played fewer than 5 games this season.")
+            else:
+                df_with_ml['Residual'] = df_with_ml[s_col] - df_with_ml['AI_Proj']
+                residual_std = df_with_ml['Residual'].std()
+                if np.isnan(residual_std) or residual_std == 0:
+                    residual_std = df_with_ml[s_col].std()
+                    if np.isnan(residual_std) or residual_std == 0: residual_std = 1.0
+
+                if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB','Double Double', 'Triple Double']:
+                   lam_val = max(0.001, c_proj)
+                   sims = np.random.poisson(lam=lam_val, size=5000)
+                elif s_col in COMBO_STATS:
+                    combo_std = residual_std * 1.40
+                    sims = np.random.normal(loc=c_proj, scale=combo_std, size=5000)
                 else:
-                    df_with_ml['Residual'] = df_with_ml[s_col] - df_with_ml['AI_Proj']
-                    residual_std = df_with_ml['Residual'].std()
-                    if np.isnan(residual_std) or residual_std == 0:
-                        residual_std = df_with_ml[s_col].std()
-                        if np.isnan(residual_std) or residual_std == 0: residual_std = 1.0
+                    sims = np.random.normal(loc=c_proj, scale=residual_std, size=5000)
 
-                    if stat_type in ['HR', 'Goals', 'RBI', 'R', 'Steals', 'SB','Double Double', 'Triple Double']:
-                       lam_val = max(0.001, c_proj)
-                       sims = np.random.poisson(lam=lam_val, size=5000)
-                    elif s_col in COMBO_STATS:
-                        combo_std = residual_std * 1.40
-                        sims = np.random.normal(loc=c_proj, scale=combo_std, size=5000)
-                    else:
-                        sims = np.random.normal(loc=c_proj, scale=residual_std, size=5000)
+                if c_vote == "OVER": win_prob = np.sum(sims > line) / 5000.0
+                elif c_vote == "UNDER": win_prob = np.sum(sims < line) / 5000.0
+                else: win_prob = 0.50
 
-                    if c_vote == "OVER": win_prob = np.sum(sims > line) / 5000.0
-                    elif c_vote == "UNDER": win_prob = np.sum(sims < line) / 5000.0
-                    else: win_prob = 0.50
+                if odds < 0: implied_prob = abs(odds) / (abs(odds) + 100); profit = 100 / (abs(odds) / 100); risk = 100; b_odds = 100 / abs(odds)
+                else: implied_prob = 100 / (odds + 100); profit = odds; risk = 100; b_odds = odds / 100
 
-                    if odds < 0: implied_prob = abs(odds) / (abs(odds) + 100); profit = 100 / (abs(odds) / 100); risk = 100; b_odds = 100 / abs(odds)
-                    else: implied_prob = 100 / (odds + 100); profit = odds; risk = 100; b_odds = odds / 100
+                ev_dollars = (win_prob * profit) - ((1 - win_prob) * risk)
+                edge_pct = (win_prob - implied_prob) * 100
 
-                    ev_dollars = (win_prob * profit) - ((1 - win_prob) * risk)
-                    edge_pct = (win_prob - implied_prob) * 100
+                liq_bal = get_liquid_balance()
+                kelly_pct = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
+                rec_stake = liq_bal * (kelly_pct * 0.5)
+                stake_modifier = st.session_state.get(f"{lk}.stake_modifier", 1.0)
+                rec_stake = rec_stake * stake_modifier
 
-                    liq_bal = get_liquid_balance()
-                    kelly_pct = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
-                    rec_stake = liq_bal * (kelly_pct * 0.5)
-                    stake_modifier = st.session_state.get(f"{lk}.stake_modifier", 1.0)
-                    rec_stake = rec_stake * stake_modifier
+                memory_mult = 1.0
+                mem_notes = []
+                try:
+                    mem_df = load_ledger()
+                    if not mem_df.empty and c_vote not in ["PASS", "VETO"]:
+                        mem_graded = mem_df[mem_df['Result'].isin(['Win', 'Loss'])]
+                        p_hist = mem_graded[(mem_graded['Player'] == target_player) & (mem_graded['Stat'] == stat_type)]
+                        p_w, p_l = len(p_hist[p_hist['Result']=='Win']), len(p_hist[p_hist['Result']=='Loss'])
+                        s_hist = mem_graded[(mem_graded['Stat'] == stat_type) & (mem_graded['League'] == league_key)]
+                        s_w, s_l = len(s_hist[s_hist['Result']=='Win']), len(s_hist[s_hist['Result']=='Loss'])
+                        if (p_w + p_l) >= 3:
+                            p_pct = p_w / (p_w + p_l)
+                            if p_pct <= 0.35: memory_mult *= 0.5; mem_notes.append(f"🛑 <b>FADE:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s. Halving risk.")
+                            elif p_pct >= 0.65: memory_mult *= 1.5; mem_notes.append(f"🔥 <b>SMASH:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s. Boosting risk.")
+                            else: mem_notes.append(f"⚖️ <b>NEUTRAL:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s.")
+                        if (s_w + s_l) >= 10:
+                            s_pct = s_w / (s_w + s_l)
+                            if s_pct <= 0.45: memory_mult *= 0.75; mem_notes.append(f"⚠️ <b>LEAK:</b> Syndicate win rate on {stat_type}s is {s_pct*100:.1f}%. Trimming risk.")
+                            elif s_pct >= 0.58: memory_mult *= 1.25; mem_notes.append(f"📈 <b>EDGE:</b> Syndicate crushes {stat_type}s ({s_pct*100:.1f}%). Boosting risk.")
+                except: pass
 
-                    memory_mult = 1.0
-                    mem_notes = []
-                    try:
-                        mem_df = load_ledger()
-                        if not mem_df.empty and c_vote not in ["PASS", "VETO"]:
-                            mem_graded = mem_df[mem_df['Result'].isin(['Win', 'Loss'])]
-                            p_hist = mem_graded[(mem_graded['Player'] == target_player) & (mem_graded['Stat'] == stat_type)]
-                            p_w, p_l = len(p_hist[p_hist['Result']=='Win']), len(p_hist[p_hist['Result']=='Loss'])
-                            s_hist = mem_graded[(mem_graded['Stat'] == stat_type) & (mem_graded['League'] == league_key)]
-                            s_w, s_l = len(s_hist[s_hist['Result']=='Win']), len(s_hist[s_hist['Result']=='Loss'])
-                            if (p_w + p_l) >= 3:
-                                p_pct = p_w / (p_w + p_l)
-                                if p_pct <= 0.35: memory_mult *= 0.5; mem_notes.append(f"🛑 <b>FADE:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s. Halving risk.")
-                                elif p_pct >= 0.65: memory_mult *= 1.5; mem_notes.append(f"🔥 <b>SMASH:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s. Boosting risk.")
-                                else: mem_notes.append(f"⚖️ <b>NEUTRAL:</b> You are {p_w}-{p_l} on {target_player} {stat_type}s.")
-                            if (s_w + s_l) >= 10:
-                                s_pct = s_w / (s_w + s_l)
-                                if s_pct <= 0.45: memory_mult *= 0.75; mem_notes.append(f"⚠️ <b>LEAK:</b> Syndicate win rate on {stat_type}s is {s_pct*100:.1f}%. Trimming risk.")
-                                elif s_pct >= 0.58: memory_mult *= 1.25; mem_notes.append(f"📈 <b>EDGE:</b> Syndicate crushes {stat_type}s ({s_pct*100:.1f}%). Boosting risk.")
-                    except: pass
+                rec_stake = rec_stake * min(memory_mult, 2.0)
+                memory_html = f"<div style='margin-top:12px; padding-top:10px; border-top:1px dashed #334155; font-size:12px; color:#FFD700; line-height:1.4;'>{'<br>'.join(mem_notes)}</div>" if mem_notes else ""
 
-                    rec_stake = rec_stake * min(memory_mult, 2.0)
-                    memory_html = f"<div style='margin-top:12px; padding-top:10px; border-top:1px dashed #334155; font-size:12px; color:#FFD700; line-height:1.4;'>{'<br>'.join(mem_notes)}</div>" if mem_notes else ""
+                suppressed_stats = get_suppressed_stats(league_key)
+                is_suppressed = stat_type in suppressed_stats
 
-                    suppressed_stats = get_suppressed_stats(league_key)
-                    is_suppressed = stat_type in suppressed_stats
+                if is_suppressed:
+                    c_vote = "VETO"
+                    c_color = "#ff0055"
+                    rec_stake = 0.0
+                    ai_summary_short = f"🛑 <b>STAT LOCKED ({stat_type}):</b> Your Syndicate win rate on this market is dangerously low (under 42%). Skynet is physically blocking this bet to protect your bankroll until you improve."
+                elif edge_pct < 0 and c_vote != "PASS":
+                    c_vote = "VETO"
+                    c_color = "#ff0055"
+                    rec_stake = 0.0
+                    ai_summary_short = f"🛑 <b>NEGATIVE EV DETECTED.</b><br>Vegas requires a {implied_prob*100:.1f}% win rate, but Skynet only projects {win_prob*100:.1f}%. The math is toxic. Do not bet."
+                else:
+                    ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
+                    if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
+                    elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
+                    ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
+                    ai_summary_short += memory_html
 
-                    if is_suppressed:
-                        c_vote = "VETO"
-                        c_color = "#ff0055"
-                        rec_stake = 0.0
-                        ai_summary_short = f"🛑 <b>STAT LOCKED ({stat_type}):</b> Your Syndicate win rate on this market is dangerously low (under 42%). Skynet is physically blocking this bet to protect your bankroll until you improve."
-                    elif edge_pct < 0 and c_vote != "PASS":
-                        c_vote = "VETO"
-                        c_color = "#ff0055"
-                        rec_stake = 0.0
-                        ai_summary_short = f"🛑 <b>NEGATIVE EV DETECTED.</b><br>Vegas requires a {implied_prob*100:.1f}% win rate, but Skynet only projects {win_prob*100:.1f}%. The math is toxic. Do not bet."
-                    else:
-                        ai_summary_short = f"Projected to {'clear' if c_vote == 'OVER' else ('stay under' if c_vote == 'UNDER' else 'too close to')} {line} with a {win_prob*100:.1f}% probability."
-                        if league_key == "NBA" and "Exploit" in mod_desc: ai_summary_short += f"<br><span style='color:#FFD700; font-weight:bold;'>🚨 Archetype Exploit vs {opp}</span>"
-                        elif league_key == "NBA" and "Fade" in mod_desc: ai_summary_short += f"<br><span style='color:#ff0055; font-weight:bold;'>🛑 Archetype Fade vs {opp}</span>"
-                        ai_summary_short += f"<br><br><span style='color:{skynet_color}; font-weight:bold;'>{skynet_msg}</span>"
-                        ai_summary_short += memory_html
+                votes = [m['vote'] for m in board]
+                agree_count = max(votes.count("OVER"), votes.count("UNDER"), votes.count("PASS"))
+                is_near_unanimous = agree_count >= 4
+                consensus_pct = int((agree_count / len(board)) * 100)
 
-                    votes = [m['vote'] for m in board]
-                    agree_count = max(votes.count("OVER"), votes.count("UNDER"), votes.count("PASS"))
-                    is_near_unanimous = agree_count >= 4
-                    consensus_pct = int((agree_count / len(board)) * 100)
+                if not is_near_unanimous and c_vote not in ["PASS", "VETO"]:
+                    c_vote = "PASS"
+                    c_color = "#94a3b8"
+                    rec_stake = 0.0
+                    ai_summary_short = f"⚠️ <b>SPLIT BOARD ({agree_count}/5):</b> The models are divided. Vegas has priced this line efficiently. Pass."
+                    st.markdown(f"""
+                    <div style="background-color: rgba(255,69,0,0.1); border: 1px solid #ff4500; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                        <span style="font-size:16px; font-weight:900; color:#ff4500;">⚠️ SPLIT BOARD — NO BET RECOMMENDED</span>
+                        <div style="font-size:13px; color:#94a3b8; margin-top:4px;">Board agreement: {agree_count}/5 ({consensus_pct}%). Syndicate requires 4/5 consensus.</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif is_near_unanimous and c_vote not in ["PASS", "VETO"]:
+                    consensus_label = "🟢 UNANIMOUS (5/5)" if agree_count == 5 else "🟡 STRONG CONSENSUS (4/5)"
+                    st.caption(f"{consensus_label} — Board in agreement.")
 
-                    if not is_near_unanimous and c_vote not in ["PASS", "VETO"]:
-                        c_vote = "PASS"
-                        c_color = "#94a3b8"
-                        rec_stake = 0.0
-                        ai_summary_short = f"⚠️ <b>SPLIT BOARD ({agree_count}/5):</b> The models are divided. Vegas has priced this line efficiently. Pass."
-                        st.markdown(f"""
-                        <div style="background-color: rgba(255,69,0,0.1); border: 1px solid #ff4500; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                            <span style="font-size:16px; font-weight:900; color:#ff4500;">⚠️ SPLIT BOARD — NO BET RECOMMENDED</span>
-                            <div style="font-size:13px; color:#94a3b8; margin-top:4px;">Board agreement: {agree_count}/5 ({consensus_pct}%). Syndicate requires 4/5 consensus.</div>
+                # 🟢 CUSTOM CSS FOR THE HAZMAT OVERRIDE BUTTON
+                st.markdown("""
+                <style>
+                button[title="hazmat_override"] {
+                    background: repeating-linear-gradient(45deg, #FFD700, #FFD700 10px, #1e293b 10px, #1e293b 20px) !important;
+                    border: 2px solid #ff0055 !important;
+                    box-shadow: 0px 0px 15px rgba(255, 0, 85, 0.5) !important;
+                    transition: transform 0.2s;
+                }
+                button[title="hazmat_override"]:hover {
+                    transform: scale(1.02);
+                    box-shadow: 0px 0px 25px rgba(255, 0, 85, 0.8) !important;
+                }
+                button[title="hazmat_override"] p {
+                    color: #ffffff !important;
+                    background-color: #ff0055 !important;
+                    padding: 2px 10px;
+                    border-radius: 4px;
+                    font-weight: 900 !important;
+                    font-size: 16px !important;
+                    letter-spacing: 1px;
+                    text-shadow: 1px 1px 2px #000;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+               
+                # 🛎️ CONSULT THE SYNDICATE BOARD (AI DEBATE)
+                st.markdown("---")
+                if st.button("🛎️ Consult Syndicate Board (AI Debate)", use_container_width=True, key=f"consult_board_{league_name}"):
+                    with st.spinner("The CFO (Claude) and COO (Gemini) are reviewing the setup..."):
+                        # Bundle up the exact state of the app
+                        context = f"Player: {target_player}\nMarket: {stat_type} (Line: {line})\nOdds: {odds}\n"
+                        context += f"Opponent: {opp}\nFatigue: {rest}\n"
+                        context += f"ML Consensus Proj: {c_proj:.2f} (Vote: {c_vote})\n"
+                        context += f"Win Prob: {win_prob*100:.1f}%\n"
+                        context += f"Defense Intel: {mod_desc}\n"
+                        
+                        # Safely fetch the move_msg directly from memory
+                        board_move_msg = st.session_state.get(f"{lk}.line_move_msg")
+                        if board_move_msg: context += f"Line Movement: {board_move_msg}\n"
+                        
+                        # Fire APIs
+                        cfo_res, coo_res = consult_the_board(context)
+                        
+                        # 🟢 Normalizes font size by stripping out massive markdown headers
+                        cfo_res = cfo_res.replace("#", "")
+                        coo_res = coo_res.replace("#", "")
+                        
+                        # Render the Boardroom
+                        st.markdown("""
+                        <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                            <h4 style="color: #00E5FF; margin-top: 0px; text-align: center;">🏛️ THE SYNDICATE BOARDROOM</h4>
                         </div>
                         """, unsafe_allow_html=True)
-                    elif is_near_unanimous and c_vote not in ["PASS", "VETO"]:
-                        consensus_label = "🟢 UNANIMOUS (5/5)" if agree_count == 5 else "🟡 STRONG CONSENSUS (4/5)"
-                        st.caption(f"{consensus_label} — Board in agreement.")
+                        
+                        moe_c1, moe_c2 = st.columns(2)
+                        with moe_c1:
+                            st.markdown(f"**👔 Claude (CFO)**<br><span style='color:#94a3b8; font-size:12px;'>*Focus: Math, ROI & Risk*</span>\n\n> {cfo_res}", unsafe_allow_html=True)
+                        with moe_c2:
+                            st.markdown(f"**📋 Gemini (COO)**<br><span style='color:#94a3b8; font-size:12px;'>*Focus: Game Script & Matchups*</span>\n\n> {coo_res}", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
 
-                    # 🟢 CUSTOM CSS FOR THE HAZMAT OVERRIDE BUTTON
-                    st.markdown("""
-                    <style>
-                    button[title="hazmat_override"] {
-                        background: repeating-linear-gradient(45deg, #FFD700, #FFD700 10px, #1e293b 10px, #1e293b 20px) !important;
-                        border: 2px solid #ff0055 !important;
-                        box-shadow: 0px 0px 15px rgba(255, 0, 85, 0.5) !important;
-                        transition: transform 0.2s;
-                    }
-                    button[title="hazmat_override"]:hover {
-                        transform: scale(1.02);
-                        box-shadow: 0px 0px 25px rgba(255, 0, 85, 0.8) !important;
-                    }
-                    button[title="hazmat_override"] p {
-                        color: #ffffff !important;
-                        background-color: #ff0055 !important;
-                        padding: 2px 10px;
-                        border-radius: 4px;
-                        font-weight: 900 !important;
-                        font-size: 16px !important;
-                        letter-spacing: 1px;
-                        text-shadow: 1px 1px 2px #000;
-                    }
-                    </style>
-                    """, unsafe_allow_html=True)
-                   
-                    # 🛎️ CONSULT THE SYNDICATE BOARD (AI DEBATE)
-                    st.markdown("---")
-                    if st.button("🛎️ Consult Syndicate Board (AI Debate)", use_container_width=True, key=f"consult_board_{league_name}"):
-                        with st.spinner("The CFO (Claude) and COO (Gemini) are reviewing the setup..."):
-                            # Bundle up the exact state of the app
-                            context = f"Player: {target_player}\nMarket: {stat_type} (Line: {line})\nOdds: {odds}\n"
-                            context += f"Opponent: {opp}\nFatigue: {rest}\n"
-                            context += f"ML Consensus Proj: {c_proj:.2f} (Vote: {c_vote})\n"
-                            context += f"Win Prob: {win_prob*100:.1f}%\n"
-                            context += f"Defense Intel: {mod_desc}\n"
-                            
-                            # Safely fetch the move_msg directly from memory
-                            board_move_msg = st.session_state.get(f"{lk}.line_move_msg")
-                            if board_move_msg: context += f"Line Movement: {board_move_msg}\n"
-                            
-                            # Fire APIs
-                            cfo_res, coo_res = consult_the_board(context)
-                            
-                            # 🟢 Normalizes font size by stripping out massive markdown headers
-                            cfo_res = cfo_res.replace("#", "")
-                            coo_res = coo_res.replace("#", "")
-                            
-                            # Render the Boardroom
-                            st.markdown("""
-                            <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-                                <h4 style="color: #00E5FF; margin-top: 0px; text-align: center;">🏛️ THE SYNDICATE BOARDROOM</h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            moe_c1, moe_c2 = st.columns(2)
-                            with moe_c1:
-                                st.markdown(f"**👔 Claude (CFO)**<br><span style='color:#94a3b8; font-size:12px;'>*Focus: Math, ROI & Risk*</span>\n\n> {cfo_res}", unsafe_allow_html=True)
-                            with moe_c2:
-                                st.markdown(f"**📋 Gemini (COO)**<br><span style='color:#94a3b8; font-size:12px;'>*Focus: Game Script & Matchups*</span>\n\n> {coo_res}", unsafe_allow_html=True)
-                    st.markdown("<br>", unsafe_allow_html=True)
+                lock_pressed = False
+                final_side = c_vote
+                
+                if c_vote not in ["PASS", "VETO"]:
+                    with btn_c2:
+                        lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
+                    with btn_c3:
+                        if stat_type in ["Double Double", "Triple Double"]:
+                            side_choice = st.radio("Side", ["YES", "NO"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side_dd", label_visibility="collapsed")
+                            final_side = "OVER" if side_choice == "YES" else "UNDER"
+                        else:
+                            final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
+                else:
+                    with btn_c2:
+                        lock_pressed = st.button("🚨 OVERRIDE 🚨", use_container_width=True, key=f"{lk}.override_lock")
+                    with btn_c3:
+                        if stat_type in ["Double Double", "Triple Double"]:
+                            side_choice = st.radio("Side", ["YES", "NO"], index=0, horizontal=True, key=f"{lk}.override_side_dd", label_visibility="collapsed")
+                            final_side = "OVER" if side_choice == "YES" else "UNDER"
+                        else:
+                            final_side = st.radio("Side", ["OVER", "UNDER"], index=0, horizontal=True, key=f"{lk}.override_side", label_visibility="collapsed")
 
-                    lock_pressed = False
-                    final_side = c_vote
-                    
-                    if c_vote not in ["PASS", "VETO"]:
-                        with btn_c2:
-                            lock_pressed = st.button(f"🔒 Lock Pick", use_container_width=True, type="primary", key=f"{lk}.smart_lock")
-                        with btn_c3:
-                            if stat_type in ["Double Double", "Triple Double"]:
-                                side_choice = st.radio("Side", ["YES", "NO"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side_dd", label_visibility="collapsed")
-                                final_side = "OVER" if side_choice == "YES" else "UNDER"
-                            else:
-                                final_side = st.radio("Side", ["OVER", "UNDER"], index=0 if c_vote == "OVER" else 1, horizontal=True, key=f"{lk}.smart_side", label_visibility="collapsed")
+                    import streamlit.components.v1 as components
+                    components.html(
+                        """
+                        <script>
+                        const buttons = window.parent.document.querySelectorAll('.stButton button');
+                        buttons.forEach(b => {
+                            if(b.innerText.includes('OVERRIDE')) {
+                                b.style.cssText = 'background: repeating-linear-gradient(45deg, #FFD700, #FFD700 10px, #000000 10px, #000000 20px) !important; border: 2px solid #ff0055 !important; box-shadow: 0px 0px 15px rgba(255, 0, 85, 0.5) !important;';
+                                const text = b.querySelector('p') || b.querySelector('div') || b;
+                                text.style.cssText = 'color: #ffffff !important; background-color: #ff0055 !important; padding: 2px 10px !important; border-radius: 4px !important; font-weight: 900 !important; font-size: 16px !important; text-shadow: 1px 1px 2px #000 !important;';
+                            }
+                        });
+                        </script>
+                        """,
+                        height=0, width=0
+                    )
+
+                if lock_pressed:
+                    if c_vote in ["PASS", "VETO"]:
+                        if final_side == "OVER":
+                            true_prob = np.sum(sims > line) / 5000.0
+                        else:
+                            true_prob = np.sum(sims < line) / 5000.0
+                        auto_user_p = true_prob
+                        win_prob = true_prob
+                        user_edge_pct = (auto_user_p - implied_prob) * 100
                     else:
-                        with btn_c2:
-                            lock_pressed = st.button("🚨 OVERRIDE 🚨", use_container_width=True, key=f"{lk}.override_lock")
-                        with btn_c3:
-                            if stat_type in ["Double Double", "Triple Double"]:
-                                side_choice = st.radio("Side", ["YES", "NO"], index=0, horizontal=True, key=f"{lk}.override_side_dd", label_visibility="collapsed")
-                                final_side = "OVER" if side_choice == "YES" else "UNDER"
-                            else:
-                                final_side = st.radio("Side", ["OVER", "UNDER"], index=0, horizontal=True, key=f"{lk}.override_side", label_visibility="collapsed")
-
-                        import streamlit.components.v1 as components
-                        components.html(
-                            """
-                            <script>
-                            const buttons = window.parent.document.querySelectorAll('.stButton button');
-                            buttons.forEach(b => {
-                                if(b.innerText.includes('OVERRIDE')) {
-                                    b.style.cssText = 'background: repeating-linear-gradient(45deg, #FFD700, #FFD700 10px, #000000 10px, #000000 20px) !important; border: 2px solid #ff0055 !important; box-shadow: 0px 0px 15px rgba(255, 0, 85, 0.5) !important;';
-                                    const text = b.querySelector('p') || b.querySelector('div') || b;
-                                    text.style.cssText = 'color: #ffffff !important; background-color: #ff0055 !important; padding: 2px 10px !important; border-radius: 4px !important; font-weight: 900 !important; font-size: 16px !important; text-shadow: 1px 1px 2px #000 !important;';
-                                }
-                            });
-                            </script>
-                            """,
-                            height=0, width=0
-                        )
-
-                    if lock_pressed:
-                        if c_vote in ["PASS", "VETO"]:
-                            if final_side == "OVER":
-                                true_prob = np.sum(sims > line) / 5000.0
-                            else:
-                                true_prob = np.sum(sims < line) / 5000.0
-                            auto_user_p = true_prob
-                            win_prob = true_prob
+                        if final_side != c_vote:
+                            auto_user_p = 1.0 - win_prob
                             user_edge_pct = (auto_user_p - implied_prob) * 100
                         else:
-                            if final_side != c_vote:
-                                auto_user_p = 1.0 - win_prob
-                                user_edge_pct = (auto_user_p - implied_prob) * 100
-                            else:
-                                auto_user_p = win_prob
-                                user_edge_pct = edge_pct
+                            auto_user_p = win_prob
+                            user_edge_pct = edge_pct
 
-                        s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
-                        opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
-                        opening_line_val = float(st.session_state.get(opening_key, line))
-                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p, opening_line_val)
-
-                        today_date = datetime.now().strftime("%Y-%m-%d")
-                        is_override_bet = c_vote in ["PASS", "VETO"]
-                        log_prediction_receipt(target_player, stat_type, c_proj, today_date, is_override=is_override_bet)
-
-                        st.success(f"Hazmat Override Locked: {final_side}! (True Prob: {auto_user_p*100:.1f}%)")
-                        st.toast(f"✅ Pre-Game Projection Locked in Google Vault!", icon="🔐")
-
-                    if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
-                        s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
-                        if s_score >= 75: banner_label = f"🌟 ELITE AI TOP PICK: {c_vote} 🌟"
-                        elif s_score >= 55: banner_label = f"✅ SOLID AI TOP PICK: {c_vote}"
-                        else: banner_label = f"🎯 AI TOP PICK: {c_vote}"
-
-                        st.markdown(f"""
-                        <div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);">
-                            <div style="background-color: #0f172a; padding: 12px; border-radius: 6px; text-align: center;">
-                                <span style="font-size: 18px; font-weight: 900; color: #FFD700; letter-spacing: 2px;">{banner_label}</span>
-                                <div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">
-                                    <b>Score: {s_score}/100</b> | {win_prob*100:.1f}% Win Prob for the <b>{c_vote}</b> | Recommend risking <b>${rec_stake:.2f}</b>
-                                </div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
+                    s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
                     opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
-                    opener = st.session_state.get(opening_key)
-                    if opener and c_vote not in ["PASS", "VETO"]:
-                        line_drift = line - float(opener) if c_vote == "OVER" else float(opener) - line
-                        if abs(line_drift) >= 0.5:
-                            if line_drift > 0:
-                                timing_color = "#ff4500"
-                                timing_icon  = "🛑"
-                                timing_msg   = (
-                                    f"Line has moved **{abs(line_drift):.1f} units against** your {c_vote} "
-                                    f"since it opened at {opener}. "
-                                    f"Sharp money appears to be on the other side. "
-                                    f"You are buying a worse number than early bettors received."
-                                )
-                            else:
-                                timing_color = "#00E676"
-                                timing_icon  = "⚡"
-                                timing_msg   = (
-                                    f"Line has moved **{abs(line_drift):.1f} units in your favor** "
-                                    f"since it opened at {opener}. "
-                                    f"You are getting a better number than the opener — "
-                                    f"this is positive market timing."
-                                )
-                            st.markdown(f"""
-                            <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {timing_color};
-                                 border-radius: 8px; padding: 10px; margin-bottom: 12px;">
-                                <span style="font-size:14px; font-weight:900; color:{timing_color};">
-                                    {timing_icon} MARKET TIMING
-                                </span>
-                                <div style="font-size:12px; color:#f8fafc; margin-top:4px;">{timing_msg}</div>
-                                <div style="font-size:11px; color:#94a3b8; margin-top:3px;">
-                                    Opened: <b>{opener}</b> → Current: <b>{line}</b> → 
-                                    Drift: <span style="color:{timing_color}; font-weight:bold;">{line_drift:+.1f}</span>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                    opening_line_val = float(st.session_state.get(opening_key, line))
+                    save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p, opening_line_val)
 
-                    move_msg = st.session_state.get(f"{lk}.line_move_msg")
-                    move_dir = st.session_state.get(f"{lk}.line_move_dir")
-                    if move_msg and c_vote != "PASS":
-                        is_against = ((c_vote == "OVER" and move_dir == "down") or (c_vote == "UNDER" and move_dir == "up"))
-                        border_color = "#ff4500" if is_against else "#00E676"
-                        icon = "🚨" if is_against else "✅"
-                        severity = "Sharp money appears to be on the **same side** as your pick. Good sign." if not is_against else "Sharp money appears to be **against** your pick. Proceed with caution or reduce stake."
-                        st.markdown(f"""
-                        <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {border_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                            <span style="font-size:15px; font-weight:900; color:{border_color};">{icon} LINE MOVEMENT ALERT</span>
-                            <div style="font-size:13px; color:#f8fafc; margin-top:4px;">{move_msg}</div>
-                            <div style="font-size:12px; color:#94a3b8; margin-top:4px;">{severity}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    today_date = datetime.now().strftime("%Y-%m-%d")
+                    is_override_bet = c_vote in ["PASS", "VETO"]
+                    log_prediction_receipt(target_player, stat_type, c_proj, today_date, is_override=is_override_bet)
 
-                # 🎯 HYBRID VEGAS DIVERGENCE DETECTOR
-        stake_modifier = 1.0
-        if len(df_with_ml) > 0 and s_col in df_with_ml.columns:
-            baseline_avg = df_with_ml[s_col].mean()
-            
-            if not pd.isna(baseline_avg) and baseline_avg > 0:
-                line_vs_avg_gap = line - baseline_avg
-                
-                # Dynamically scale thresholds based on stat type
-                base_thresh = PASS_THRESHOLDS.get(s_col, 0.75)
-                elevated_thresh = base_thresh * 2.5
-                severe_thresh = base_thresh * 4.0
-                
-                div_msg = ""
-                div_color = ""
-                
-                # 🔴 UNDER TRAPS (Vegas sets line suspiciously high)
-                if line_vs_avg_gap >= severe_thresh and c_vote == "UNDER":
-                    div_color = "#ff0055"
-                    stake_modifier = 0.40
-                    div_msg = f"<b>SEVERE UNDER TRAP:</b> Line is {line_vs_avg_gap:.1f} units higher than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Vegas expects a spike. Public will bet Under. Sharp lean: <b>OVER</b>. Stake reduced to 40%.</span>"
-                elif line_vs_avg_gap >= elevated_thresh and c_vote == "UNDER":
-                    div_color = "#f59e0b"
-                    stake_modifier = 0.60
-                    div_msg = f"<b>ELEVATED UNDER TRAP:</b> Line is {line_vs_avg_gap:.1f} units higher than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Proceed with caution. Stake reduced to 60%.</span>"
-                    
-                # 🟢 OVER TRAPS (Vegas sets line suspiciously low - usually injury/rest risk)
-                elif line_vs_avg_gap <= -severe_thresh and c_vote == "OVER":
-                    div_color = "#ff4500"
-                    div_msg = f"<b>SEVERE OVER TRAP:</b> Line is {abs(line_vs_avg_gap):.1f} units lower than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Vegas expects a floor game. Verify starter status/minutes!</span>"
-                elif line_vs_avg_gap <= -elevated_thresh and c_vote == "OVER":
-                    div_color = "#FFD700"
-                    div_msg = f"<b>ELEVATED OVER TRAP:</b> Line is {abs(line_vs_avg_gap):.1f} units lower than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Proceed with caution.</span>"
+                    st.success(f"Hazmat Override Locked: {final_side}! (True Prob: {auto_user_p*100:.1f}%)")
+                    st.toast(f"✅ Pre-Game Projection Locked in Google Vault!", icon="🔐")
 
-                if div_msg:
+                if win_prob >= 0.60 and edge_pct >= 5.0 and c_vote != "PASS":
+                    s_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
+                    if s_score >= 75: banner_label = f"🌟 ELITE AI TOP PICK: {c_vote} 🌟"
+                    elif s_score >= 55: banner_label = f"✅ SOLID AI TOP PICK: {c_vote}"
+                    else: banner_label = f"🎯 AI TOP PICK: {c_vote}"
+
                     st.markdown(f"""
-                    <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {div_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                        <span style="font-size:15px; font-weight:900; color:{div_color};">👀 VEGAS LINE DIVERGENCE</span>
-                        <div style="font-size:13px; color:#f8fafc; margin-top:6px; line-height: 1.4;">{div_msg}</div>
+                    <div style="background: linear-gradient(90deg, #FFD700 0%, #ff8c00 100%); padding: 3px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0px 0px 15px rgba(255, 215, 0, 0.4);">
+                        <div style="background-color: #0f172a; padding: 12px; border-radius: 6px; text-align: center;">
+                            <span style="font-size: 18px; font-weight: 900; color: #FFD700; letter-spacing: 2px;">{banner_label}</span>
+                            <div style="font-size: 13px; color: #f8fafc; margin-top: 4px;">
+                                <b>Score: {s_score}/100</b> | {win_prob*100:.1f}% Win Prob for the <b>{c_vote}</b> | Recommend risking <b>${rec_stake:.2f}</b>
+                            </div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
-                    st.session_state[f"{lk}.stake_modifier"] = stake_modifier
+
+                opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
+                opener = st.session_state.get(opening_key)
+                if opener and c_vote not in ["PASS", "VETO"]:
+                    line_drift = line - float(opener) if c_vote == "OVER" else float(opener) - line
+                    if abs(line_drift) >= 0.5:
+                        if line_drift > 0:
+                            timing_color = "#ff4500"
+                            timing_icon  = "🛑"
+                            timing_msg   = (
+                                f"Line has moved **{abs(line_drift):.1f} units against** your {c_vote} "
+                                f"since it opened at {opener}. "
+                                f"Sharp money appears to be on the other side. "
+                                f"You are buying a worse number than early bettors received."
+                            )
+                        else:
+                            timing_color = "#00E676"
+                            timing_icon  = "⚡"
+                            timing_msg   = (
+                                f"Line has moved **{abs(line_drift):.1f} units in your favor** "
+                                f"since it opened at {opener}. "
+                                f"You are getting a better number than the opener — "
+                                f"this is positive market timing."
+                            )
+                        st.markdown(f"""
+                        <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {timing_color};
+                             border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+                            <span style="font-size:14px; font-weight:900; color:{timing_color};">
+                                {timing_icon} MARKET TIMING
+                            </span>
+                            <div style="font-size:12px; color:#f8fafc; margin-top:4px;">{timing_msg}</div>
+                            <div style="font-size:11px; color:#94a3b8; margin-top:3px;">
+                                Opened: <b>{opener}</b> → Current: <b>{line}</b> → 
+                                Drift: <span style="color:{timing_color}; font-weight:bold;">{line_drift:+.1f}</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                move_msg = st.session_state.get(f"{lk}.line_move_msg")
+                move_dir = st.session_state.get(f"{lk}.line_move_dir")
+                if move_msg and c_vote != "PASS":
+                    is_against = ((c_vote == "OVER" and move_dir == "down") or (c_vote == "UNDER" and move_dir == "up"))
+                    border_color = "#ff4500" if is_against else "#00E676"
+                    icon = "🚨" if is_against else "✅"
+                    severity = "Sharp money appears to be on the **same side** as your pick. Good sign." if not is_against else "Sharp money appears to be **against** your pick. Proceed with caution or reduce stake."
+                    st.markdown(f"""
+                    <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {border_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                        <span style="font-size:15px; font-weight:900; color:{border_color};">{icon} LINE MOVEMENT ALERT</span>
+                        <div style="font-size:13px; color:#f8fafc; margin-top:4px;">{move_msg}</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">{severity}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                        # 🎯 HYBRID VEGAS DIVERGENCE DETECTOR
+                stake_modifier = 1.0
+                if len(df_with_ml) > 0 and s_col in df_with_ml.columns:
+                    baseline_avg = df_with_ml[s_col].mean()
                     
-                sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
-                with sum_c1:
-                    display_vote = c_vote
-                    if stat_type in ["Double Double", "Triple Double"] and c_vote in ["OVER", "UNDER"]:
-                        display_vote = "YES" if c_vote == "OVER" else "NO"
-                    st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{display_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
-                with sum_c2:
-                    if c_vote == "PASS" or edge_pct <= 0:
-                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">RECOMMENDED RISK</div><div style="font-size:22px; font-weight:900; color:#94a3b8;">$0.00 (PASS)</div><div style="font-size:12px; color:#94a3b8;">Negative EV or too tight.</div></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #00E5FF; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#00E5FF; letter-spacing: 1px;">HALF-KELLY STAKE</div><div style="font-size:26px; font-weight:900; color:#00E5FF; margin: 4px 0px;">${rec_stake:.2f}</div><div style="font-size:12px; color:#94a3b8;">EV: ${ev_dollars:+.2f}/$100 | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
-                with sum_c3:
-                    df_l10, df_l5 = df_with_ml.tail(10).reset_index(drop=True), df_with_ml.tail(5)
-                    l10_hits, l5_hits = int((df_l10[s_col] >= line).sum()), int((df_l5[s_col] >= line).sum())
-                    hit_color = "#00c853" if l10_hits >= 6 else ("#d50000" if l10_hits <= 4 else "#FFD700")
-                    st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">HIT RATE (OVER {line})</div><div style="font-size:22px; font-weight:900; color:{hit_color};">{l10_hits}/10</div><div style="font-size:13px;">L5: {l5_hits}/5</div></div>', unsafe_allow_html=True)
-                with sum_c4:
-                    s_avg, l10_avg, l5_avg = round(df[s_col].mean(), 1), round(df_l10[s_col].mean(), 1), round(df_with_ml.tail(5)[s_col].mean(), 1)
-                    trend_color = "#00c853" if l5_avg >= s_avg * 1.1 else ("#d50000" if l5_avg <= s_avg * 0.9 else "#fff")
-                    st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px; margin-bottom: 2px;">RECENT AVERAGES</div><div style="display: flex; justify-content: space-around; align-items: center; margin-top: 2px;"><div><div style="font-size:10px; color:#94a3b8;">Season</div><div style="font-size:18px; font-weight:900;">{s_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L10</div><div style="font-size:18px; font-weight:900;">{l10_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L5</div><div style="font-size:18px; font-weight:900; color:{trend_color};">{l5_avg}</div></div></div></div>', unsafe_allow_html=True)
-
-                b_cols = st.columns(len(board))
-                for i, m in enumerate(board):
-                    b_cols[i].markdown(f'<div class="board-member"><div class="board-name">{m["name"]}</div><div class="board-model">{m["model"]}</div><div style="font-size:11px; color:#94a3b8; font-style:italic; line-height:1.3; margin-bottom:12px; min-height:45px;">"{m["quote"]}"</div><div style="color:#94a3b8; font-size:12px; border-top:1px dashed #334155; padding-top:8px;">Proj: <span style="color:#fff; font-weight:bold;">{m["proj"]:.2f}</span></div><div class="board-vote" style="color:{m["color"]}; margin-top:2px;">{m["vote"]}</div></div>', unsafe_allow_html=True)
-
-                st.markdown("#### 📊 L10 Performance vs Line")
-                chart_col, side_col = st.columns([3.2, 1.4])
-
-                with chart_col:
-                    df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
-                    df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
-                    df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
-
-                    df_l10['Saved_Proj'] = np.nan
-                    try:
-                        receipt_dict = load_vault_receipts(target_player, stat_type)
-                        if receipt_dict:
-                            date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
-                            df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
-                            df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
-                    except:
-                        pass
-
-                    bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
-                        x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
-                        y=alt.Y(s_col, title=stat_type),
-                        color=alt.condition(alt.datum[s_col] >= line, alt.value('#00c853'), alt.value('#d50000')),
-                        stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
-                        strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
-                        tooltip=[
-                            alt.Tooltip('ShortDate', title='Date'),
-                            alt.Tooltip('Matchup_Formatted', title='Opponent'),
-                            alt.Tooltip('MINS', title='Minutes', format='.1f'),
-                            alt.Tooltip(s_col, title='Actual Stats'),
-                            alt.Tooltip('AI_Proj', title='Retro AI Projection', format='.2f'),
-                            alt.Tooltip('Saved_Proj', title='PRE-GAME Vault Proj', format='.2f')
-                        ]
-                    ).properties(height=350)
-
-                    vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
-                    ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
-
-                    red_dots = alt.Chart(df_l10).mark_circle(color='#ff0055', size=150, opacity=1).encode(
-                        x=alt.X('Matchup_Label', sort=None),
-                        y=alt.Y('Saved_Proj')
-                    ).transform_filter("isValid(datum.Saved_Proj)")
-
-                    text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
-                    final_chart = (bars + vegas_rule + ai_line + red_dots + text)
-
-                    st.altair_chart(final_chart.configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
-                    st.caption("🟡 Dashed Yellow: Vegas Line &nbsp; | &nbsp; 🔵 Cyan Line: Retro AI &nbsp; | &nbsp; 🔴 <span style='color:#ff0055; font-weight:bold;'>Red Dot: Pre-Game Vault</span> &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Target Opp</span>", unsafe_allow_html=True)
-
-                with side_col:
-                    with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
-                        player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
-                        team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
-                        opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
-                        st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
-
-                        if league_key == "NBA":
-                            st.caption("**🧬 AI Player Archetype & Rotation**")
-                            st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
-                            st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:6px; line-height:1.4; font-weight:500;'>{mod_desc}</div>", unsafe_allow_html=True)
-                            if 'USG_PCT' in df_with_ml.columns:
-                                usg = float(df_with_ml['USG_PCT'].iloc[-1]) * 100
-                                if usg >= 30:
-                                    usg_color = "#ff0055"
-                                    usg_label = "ELITE USAGE"
-                                elif usg >= 25:
-                                    usg_color = "#f59e0b"
-                                    usg_label = "HIGH USAGE"
-                                elif usg >= 20:
-                                    usg_color = "#00E676"
-                                    usg_label = "NORMAL USAGE"
+                    if not pd.isna(baseline_avg) and baseline_avg > 0:
+                        line_vs_avg_gap = line - baseline_avg
+                        
+                        # Dynamically scale thresholds based on stat type
+                        base_thresh = PASS_THRESHOLDS.get(s_col, 0.75)
+                        elevated_thresh = base_thresh * 2.5
+                        severe_thresh = base_thresh * 4.0
+                        
+                        div_msg = ""
+                        div_color = ""
+                        
+                        # 🔴 UNDER TRAPS (Vegas sets line suspiciously high)
+                        if line_vs_avg_gap >= severe_thresh and c_vote == "UNDER":
+                            div_color = "#ff0055"
+                            stake_modifier = 0.40
+                            div_msg = f"<b>SEVERE UNDER TRAP:</b> Line is {line_vs_avg_gap:.1f} units higher than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Vegas expects a spike. Public will bet Under. Sharp lean: <b>OVER</b>. Stake reduced to 40%.</span>"
+                        elif line_vs_avg_gap >= elevated_thresh and c_vote == "UNDER":
+                            div_color = "#f59e0b"
+                            stake_modifier = 0.60
+                            div_msg = f"<b>ELEVATED UNDER TRAP:</b> Line is {line_vs_avg_gap:.1f} units higher than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Proceed with caution. Stake reduced to 60%.</span>"
+                            
+                        # 🟢 OVER TRAPS (Vegas sets line suspiciously low - usually injury/rest risk)
+                        elif line_vs_avg_gap <= -severe_thresh and c_vote == "OVER":
+                            div_color = "#ff4500"
+                            div_msg = f"<b>SEVERE OVER TRAP:</b> Line is {abs(line_vs_avg_gap):.1f} units lower than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Vegas expects a floor game. Verify starter status/minutes!</span>"
+                        elif line_vs_avg_gap <= -elevated_thresh and c_vote == "OVER":
+                            div_color = "#FFD700"
+                            div_msg = f"<b>ELEVATED OVER TRAP:</b> Line is {abs(line_vs_avg_gap):.1f} units lower than their {len(df_with_ml)}G average ({baseline_avg:.1f}).<br><span style='color:#94a3b8;'>Proceed with caution.</span>"
+            
+                        if div_msg:
+                            st.markdown(f"""
+                            <div style="background-color: rgba(255,255,255,0.03); border: 1px solid {div_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                                <span style="font-size:15px; font-weight:900; color:{div_color};">👀 VEGAS LINE DIVERGENCE</span>
+                                <div style="font-size:13px; color:#f8fafc; margin-top:6px; line-height: 1.4;">{div_msg}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            st.session_state[f"{lk}.stake_modifier"] = stake_modifier
+                            
+                        sum_c1, sum_c2, sum_c3, sum_c4 = st.columns(4)
+                        with sum_c1:
+                            display_vote = c_vote
+                            if stat_type in ["Double Double", "Triple Double"] and c_vote in ["OVER", "UNDER"]:
+                                display_vote = "YES" if c_vote == "OVER" else "NO"
+                            st.markdown(f"""<div class="verdict-box" style="background-color: {c_color}15; border-color: {c_color}; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:{c_color}; letter-spacing: 1px;">AI CONSENSUS</div><div style="font-size:26px; font-weight:900; margin: 4px 0px;">{display_vote}</div><div style="font-size:14px; font-weight:bold; margin-bottom: 6px;">Proj: {c_proj:.2f}</div><div style="font-size:11px; color:#94a3b8; border-top: 1px solid {c_color}50; padding-top: 8px; line-height: 1.3;">{ai_summary_short}</div></div>""", unsafe_allow_html=True)
+                        with sum_c2:
+                            if c_vote == "PASS" or edge_pct <= 0:
+                                st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">RECOMMENDED RISK</div><div style="font-size:22px; font-weight:900; color:#94a3b8;">$0.00 (PASS)</div><div style="font-size:12px; color:#94a3b8;">Negative EV or too tight.</div></div>', unsafe_allow_html=True)
+                            else:
+                                st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #00E5FF; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#00E5FF; letter-spacing: 1px;">HALF-KELLY STAKE</div><div style="font-size:26px; font-weight:900; color:#00E5FF; margin: 4px 0px;">${rec_stake:.2f}</div><div style="font-size:12px; color:#94a3b8;">EV: ${ev_dollars:+.2f}/$100 | Edge: {edge_pct:+.1f}%</div></div>', unsafe_allow_html=True)
+                        with sum_c3:
+                            df_l10, df_l5 = df_with_ml.tail(10).reset_index(drop=True), df_with_ml.tail(5)
+                            l10_hits, l5_hits = int((df_l10[s_col] >= line).sum()), int((df_l5[s_col] >= line).sum())
+                            hit_color = "#00c853" if l10_hits >= 6 else ("#d50000" if l10_hits <= 4 else "#FFD700")
+                            st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px;">HIT RATE (OVER {line})</div><div style="font-size:22px; font-weight:900; color:{hit_color};">{l10_hits}/10</div><div style="font-size:13px;">L5: {l5_hits}/5</div></div>', unsafe_allow_html=True)
+                        with sum_c4:
+                            s_avg, l10_avg, l5_avg = round(df[s_col].mean(), 1), round(df_l10[s_col].mean(), 1), round(df_with_ml.tail(5)[s_col].mean(), 1)
+                            trend_color = "#00c853" if l5_avg >= s_avg * 1.1 else ("#d50000" if l5_avg <= s_avg * 0.9 else "#fff")
+                            st.markdown(f'<div class="verdict-box" style="background-color: #1e293b; border-color: #334155; color: #fff; height: 100%;"><div style="font-size:10px; font-weight:bold; color:#94a3b8; letter-spacing: 1px; margin-bottom: 2px;">RECENT AVERAGES</div><div style="display: flex; justify-content: space-around; align-items: center; margin-top: 2px;"><div><div style="font-size:10px; color:#94a3b8;">Season</div><div style="font-size:18px; font-weight:900;">{s_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L10</div><div style="font-size:18px; font-weight:900;">{l10_avg}</div></div><div><div style="font-size:10px; color:#94a3b8;">L5</div><div style="font-size:18px; font-weight:900; color:{trend_color};">{l5_avg}</div></div></div></div>', unsafe_allow_html=True)
+            
+                        b_cols = st.columns(len(board))
+                        for i, m in enumerate(board):
+                            b_cols[i].markdown(f'<div class="board-member"><div class="board-name">{m["name"]}</div><div class="board-model">{m["model"]}</div><div style="font-size:11px; color:#94a3b8; font-style:italic; line-height:1.3; margin-bottom:12px; min-height:45px;">"{m["quote"]}"</div><div style="color:#94a3b8; font-size:12px; border-top:1px dashed #334155; padding-top:8px;">Proj: <span style="color:#fff; font-weight:bold;">{m["proj"]:.2f}</span></div><div class="board-vote" style="color:{m["color"]}; margin-top:2px;">{m["vote"]}</div></div>', unsafe_allow_html=True)
+            
+                        st.markdown("#### 📊 L10 Performance vs Line")
+                        chart_col, side_col = st.columns([3.2, 1.4])
+            
+                        with chart_col:
+                            df_l10['Matchup_Formatted'] = np.where(df_l10['Is_Home'] == 1, "vs " + df_l10['MATCHUP'], "@ " + df_l10['MATCHUP'])
+                            df_l10['Matchup_Label'] = df_l10['ShortDate'] + "|" + df_l10['Matchup_Formatted']
+                            df_l10['Is_Target_Opp'] = df_l10['MATCHUP'] == opp
+            
+                            df_l10['Saved_Proj'] = np.nan
+                            try:
+                                receipt_dict = load_vault_receipts(target_player, stat_type)
+                                if receipt_dict:
+                                    date_col = 'ValidDate' if 'ValidDate' in df_l10.columns else 'Date'
+                                    df_l10_date_strs = pd.to_datetime(df_l10[date_col]).dt.strftime('%Y-%m-%d')
+                                    df_l10['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
+                            except:
+                                pass
+            
+                            bars = alt.Chart(df_l10).mark_bar(opacity=0.85).encode(
+                                x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
+                                y=alt.Y(s_col, title=stat_type),
+                                color=alt.condition(alt.datum[s_col] >= line, alt.value('#00c853'), alt.value('#d50000')),
+                                stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
+                                strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
+                                tooltip=[
+                                    alt.Tooltip('ShortDate', title='Date'),
+                                    alt.Tooltip('Matchup_Formatted', title='Opponent'),
+                                    alt.Tooltip('MINS', title='Minutes', format='.1f'),
+                                    alt.Tooltip(s_col, title='Actual Stats'),
+                                    alt.Tooltip('AI_Proj', title='Retro AI Projection', format='.2f'),
+                                    alt.Tooltip('Saved_Proj', title='PRE-GAME Vault Proj', format='.2f')
+                                ]
+                            ).properties(height=350)
+            
+                            vegas_rule = alt.Chart(pd.DataFrame({'y': [line]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
+                            ai_line = alt.Chart(df_l10).mark_line(color='#00E5FF', strokeWidth=3, point=alt.OverlayMarkDef(color='#00E5FF', size=60)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
+            
+                            red_dots = alt.Chart(df_l10).mark_circle(color='#ff0055', size=150, opacity=1).encode(
+                                x=alt.X('Matchup_Label', sort=None),
+                                y=alt.Y('Saved_Proj')
+                            ).transform_filter("isValid(datum.Saved_Proj)")
+            
+                            text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=15, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
+                            final_chart = (bars + vegas_rule + ai_line + red_dots + text)
+            
+                            st.altair_chart(final_chart.configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
+                            st.caption("🟡 Dashed Yellow: Vegas Line &nbsp; | &nbsp; 🔵 Cyan Line: Retro AI &nbsp; | &nbsp; 🔴 <span style='color:#ff0055; font-weight:bold;'>Red Dot: Pre-Game Vault</span> &nbsp; | &nbsp; 🏆 <span style='color:#FFD700;'>Gold Border: Target Opp</span>", unsafe_allow_html=True)
+            
+                        with side_col:
+                            with st.expander("📊 Matchup Intel (Team Stats)", expanded=True):
+                                player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
+                                team_logo_html = f"<img src='{get_team_logo(league_key, player_team)}' width='28' style='vertical-align:middle; margin-right: 8px;'>"
+                                opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
+                                st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
+            
+                                if league_key == "NBA":
+                                    st.caption("**🧬 AI Player Archetype & Rotation**")
+                                    st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
+                                    st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:6px; line-height:1.4; font-weight:500;'>{mod_desc}</div>", unsafe_allow_html=True)
+                                    if 'USG_PCT' in df_with_ml.columns:
+                                        usg = float(df_with_ml['USG_PCT'].iloc[-1]) * 100
+                                        if usg >= 30:
+                                            usg_color = "#ff0055"
+                                            usg_label = "ELITE USAGE"
+                                        elif usg >= 25:
+                                            usg_color = "#f59e0b"
+                                            usg_label = "HIGH USAGE"
+                                        elif usg >= 20:
+                                            usg_color = "#00E676"
+                                            usg_label = "NORMAL USAGE"
+                                        else:
+                                            usg_color = "#94a3b8"
+                                            usg_label = "LOW USAGE"
+                                        st.markdown(
+                                            f"<div style='font-size:12px; color:{usg_color}; "
+                                            f"font-weight:bold; margin-top:6px;'>"
+                                            f"📊 USG%: {usg:.1f}% — {usg_label}</div>",
+                                            unsafe_allow_html=True
+                                        )
                                 else:
-                                    usg_color = "#94a3b8"
-                                    usg_label = "LOW USAGE"
-                                st.markdown(
-                                    f"<div style='font-size:12px; color:{usg_color}; "
-                                    f"font-weight:bold; margin-top:6px;'>"
-                                    f"📊 USG%: {usg:.1f}% — {usg_label}</div>",
-                                    unsafe_allow_html=True
-                                )
-                        else:
-                            st.caption(f"**🛡️ {opp} Defense Difficulty**")
-                            import re
-                            clean_desc = re.sub(r'<[^>]+>', '', mod_desc).replace('\n', ' ').strip()
-                            # Only show the last segment (actual defense label, not vol warnings)
-                            desc_parts = [p.strip() for p in clean_desc.split('🎯') if p.strip()]
-                            progress_text = desc_parts[-1].strip() if desc_parts else clean_desc
-                            st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=progress_text)
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        st.caption(f"**⚔️ History vs {opp} (All Time)**")
-
-                        df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
-                        opp_total = len(df_opp)
-
-                        if opp_total >= 5:
-                            opp_hits = int((df_opp[s_col] >= line).sum())
-                            opp_win_pct = (opp_hits / opp_total) * 100
-                            h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
-                            st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
-                        elif opp_total >= 2:
-                            opp_hits = int((df_opp[s_col] >= line).sum())
-                            opp_win_pct = (opp_hits / opp_total) * 100
-                            h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
-                            st.markdown(f"<div style='font-size:18px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:12px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
-                            st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
-
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        st.caption(f"**🏟️ Venue Advantage ({split_text})**")
-                        st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        st.caption(f"**🔋 Energy Levels**")
-                        st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
+                                    st.caption(f"**🛡️ {opp} Defense Difficulty**")
+                                    import re
+                                    clean_desc = re.sub(r'<[^>]+>', '', mod_desc).replace('\n', ' ').strip()
+                                    # Only show the last segment (actual defense label, not vol warnings)
+                                    desc_parts = [p.strip() for p in clean_desc.split('🎯') if p.strip()]
+                                    progress_text = desc_parts[-1].strip() if desc_parts else clean_desc
+                                    st.progress(max(0.0, min(1.0, (95 if mod_val < 1.0 else (15 if mod_val > 1.0 else 50)) / 100.0)), text=progress_text)
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                st.caption(f"**⚔️ History vs {opp} (All Time)**")
+            
+                                df_opp = df_with_ml[df_with_ml['MATCHUP'] == opp]
+                                opp_total = len(df_opp)
+            
+                                if opp_total >= 5:
+                                    opp_hits = int((df_opp[s_col] >= line).sum())
+                                    opp_win_pct = (opp_hits / opp_total) * 100
+                                    h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
+                                    st.markdown(f"<div style='font-size:22px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:14px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
+                                elif opp_total >= 2:
+                                    opp_hits = int((df_opp[s_col] >= line).sum())
+                                    opp_win_pct = (opp_hits / opp_total) * 100
+                                    h2h_color = '#00c853' if opp_win_pct >= 60 else ('#d50000' if opp_win_pct <= 40 else '#FFD700')
+                                    st.markdown(f"<div style='font-size:18px; font-weight:900; color:{h2h_color};'>{opp_win_pct:.0f}% <span style='font-size:12px; color:#94a3b8; font-weight:normal;'>({opp_hits}/{opp_total} G)</span></div>", unsafe_allow_html=True)
+                                    st.markdown(f"<div style='font-size:11px; color:#f59e0b; margin-top:2px;'>⚠️ Only {opp_total} games vs {opp} — treat with caution.</div>", unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f"<div style='font-size:13px; color:#94a3b8;'>Insufficient H2H data vs {opp}.<br><span style='font-size:11px;'>Model is using league-wide averages instead.</span></div>", unsafe_allow_html=True)
+            
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                st.caption(f"**🏟️ Venue Advantage ({split_text})**")
+                                st.progress(max(0.0, min(1.0, (current_split_mod - 0.8) / 0.4)), text=split_desc)
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                st.caption(f"**🔋 Energy Levels**")
+                                st.progress((100 if fatigue_val == 1.0 else (70 if fatigue_val == 0.95 else 40)) / 100.0, text=fatigue_desc)
 
 def render_league_tab(league_name, get_sched_func):
     lk = league_name.lower()
