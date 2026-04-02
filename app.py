@@ -2283,13 +2283,13 @@ def render_syndicate_board(league_key):
                     """, unsafe_allow_html=True)
                         
                     elif spread_val is not None and not is_dog:
-                        # Team is a favorite — note for context but no warning needed
-                        favorite_margin = abs(spread_val)
-                        if favorite_margin >= 7.0:
-                            st.caption(
-                                f"✅ Game Script Favorable: Team favored by "
-                                f"{favorite_margin:.1f} — potential garbage time "
-                                f"minutes boost for bench players."
+                    # Team is a favorite — note for context but no warning needed
+                    favorite_margin = abs(spread_val)
+                    if favorite_margin >= 7.0:
+                        st.caption(
+                            f"✅ Game Script Favorable: Team favored by "
+                            f"{favorite_margin:.1f} — potential garbage time "
+                            f"minutes boost for bench players."
                             )
                     # ✅ GAME SCRIPT RISK — Manual spread input
                     # Negative spread = underdog, Positive = favorite
