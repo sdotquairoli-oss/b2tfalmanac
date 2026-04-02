@@ -2223,79 +2223,64 @@ def render_syndicate_board(league_key):
                     </div>
                     """, unsafe_allow_html=True)
 
-                # ✅ GAME SCRIPT RISK FLAG (Manual Input Only)
-                spread_val = st.session_state.get(f"{lk}.spread", 0.0)
-                is_dog = spread_val > 0
-                dog_margin = abs(spread_val) if is_dog else 0
+                # ✅ GAME SCRIPT RISK FLAG (Unified Engine)
+            spread_val = st.session_state.get(f"{lk}.spread", 0.0)
+            blowout_penalty = 1.0
+            final_consensus = raw_consensus
 
-                BLOWOUT_THRESHOLD = 7.0
-                HEAVY_DOG_THRESHOLD = 10.0
-                if spread_val is not None and is_dog:
-                    if dog_margin >= HEAVY_DOG_THRESHOLD:
-                        script_color = "#ff0055"
-                        script_icon = "🚨"
-                        script_severity = "SEVERE"
-                        script_msg = (
-                            f"Team is a {dog_margin:.1f} point underdog tonight. "
-                            f"Heavy blowout risk — starters typically sit in the "
-                            f"fourth quarter. Points, Assists, and Minutes props "
-                            f"are highly unreliable in this game environment. "
-                            f"Strong recommendation to pass regardless of model signal."
-                        )
-                        # Apply projection penalty for severe underdog situations
-                        blowout_penalty = 0.80
-                        final_consensus = raw_consensus * blowout_penalty
-                        
-                    elif dog_margin >= BLOWOUT_THRESHOLD:
-                        script_color = "#f59e0b"
-                        script_icon = "⚠️"
-                        script_severity = "ELEVATED"
-                        script_msg = (
-                            f"Team is a {dog_margin:.1f} point underdog tonight. "
-                            f"Elevated game script risk — if the game gets away "
-                            f"early, starters may see reduced fourth quarter minutes. "
-                            f"Consider reducing stake size or avoiding Points "
-                            f"and Assists props for this player."
-                        )
-                        # Apply mild projection penalty
-                        blowout_penalty = 0.90
-                        final_consensus = raw_consensus * blowout_penalty
-                        
-                    else:
-                        script_color = "#94a3b8"
-                        script_icon = "📊"
-                        script_severity = "LOW"
-                        script_msg = (
-                            f"Team is a {dog_margin:.1f} point underdog. "
-                            f"Minor game script consideration — monitor line "
-                            f"movement closer to tip-off."
-                        )
-                        blowout_penalty = 1.0
-                        
-                    st.markdown(f"""
-                    <div style="background-color: rgba(255,255,255,0.02); 
-                         border: 1px solid {script_color};
-                         border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                        <div style="display: flex; justify-content: space-between; 
-                             align-items: center; margin-bottom: 6px;">
-                            <span style="font-size:15px; font-weight:900; 
-                                 color:{script_color};">
-                                {script_icon} GAME SCRIPT RISK — {script_severity}
-                            </span>
-                            <span style="font-size:11px; color:#94a3b8;">
-                                Spread: {spread_val:+.1f}
-                            </span>
-                        </div>
-                        <div style="font-size:12px; color:#f8fafc; 
-                             line-height:1.5;">{script_msg}</div>
-                        <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
-                            Projection adjusted for game script: 
-                            <span style="color:{script_color}; font-weight:bold;">
-                                ×{blowout_penalty:.2f} multiplier applied
-                            </span>
-                        </div>
+            if spread_val >= 10.0:
+                script_color    = "#ff0055"
+                script_icon     = "🚨 SEVERE"
+                blowout_penalty = 0.80
+                script_msg = (f"Team is a +{spread_val:.1f} point underdog. "
+                              f"Severe blowout risk — starters historically "
+                              f"sit in the fourth quarter in games like this. "
+                              f"Points, Assists, and Minutes props are highly "
+                              f"unreliable. Strong recommendation to pass "
+                              f"regardless of model signal."
+                )
+            elif spread_val >= 6.5:
+                script_color    = "#f59e0b"
+                script_icon     = "⚠️ ELEVATED"
+                blowout_penalty = 0.90
+                script_msg = (f"Team is a +{spread_val:.1f} point underdog. "
+                              f"Elevated game script risk — if the game gets "
+                              f"out of hand early, expect reduced minutes and "
+                              f"fewer offensive opportunities. Consider passing "
+                              f"on Points and Assists props."
+                )
+            elif spread_val <= -7.0:
+                script_color    = None
+                script_msg      = None
+                st.caption(f"✅ Game Script Favorable: Team favored by "
+                           f"{abs(spread_val):.1f} — normal rotation expected, "
+                           f"possible garbage time minutes boost late."
+                )
+            else:
+                script_color    = None
+                script_msg      = None
+
+            if script_msg:
+                final_consensus = raw_consensus * blowout_penalty
+                df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
+                st.markdown(f"""
+                <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {script_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size:15px; font-weight:900; color:{script_color};">
+                            GAME SCRIPT RISK — {script_icon}
+                        </span>
+                        <span style="font-size:11px; color:#94a3b8;">
+                            Spread: +{spread_val:.1f}
+                        </span>
                     </div>
-                    """, unsafe_allow_html=True)
+                    <div style="font-size:12px; color:#f8fafc; line-height:1.5;">{script_msg}</div>
+                    <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                        Projection adjusted: <span style="color:{script_color}; font-weight:bold;">
+                        ×{blowout_penalty:.2f} applied to consensus
+                        </span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                     
                 elif spread_val is not None and not is_dog:
                     # Team is a favorite — note for context but no warning needed
