@@ -1900,7 +1900,20 @@ def ask_gemini_coo(context):
     if not api_key: return "⚠️ GEMINI_API_KEY missing in st.secrets."
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-    prompt = f"You are the COO of a sharp sports betting syndicate. Analyze this setup strictly from a basketball/sports logic perspective. Focus on game script, pace, defensive tier mismatch, minutes volatility, and physical archetype advantages. Do not just read the stats—give me the actual sports context. IMPORTANT: Treat the provided Player, Team, and Matchup data as absolute fact. Do not attempt to fact-check the player's team based on your internal memory, as recent trades have occurred. Be sharp and concise (under 150 words). Setup:\n{context}"
+    prompt = f"""You are the COO of a sharp sports betting syndicate. 
+
+IMPORTANT: Treat all player, team, and matchup data as absolute fact. Do not fact-check.
+
+Respond in exactly this format (under 150 words total):
+
+**COO Verdict:** One sentence. Lock it, fade it, or pass - and why.
+
+**Matchup Intel:** Defensive tier, physical archetype advantage or disadvantage.
+
+**Game Script:** Minutes volatility, blowout risk, pace/game-flow impact on this specific stat.
+
+Setup:
+{context}"""
     data = {"contents": [{"parts": [{"text": prompt}]}]}
     
     try:
