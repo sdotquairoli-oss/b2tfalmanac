@@ -3260,15 +3260,15 @@ with t_roi:
                     for i, (_, row) in enumerate(blacklist.iterrows()):
                         with cols[i % 3]:
                             st.markdown(f"""
-                            <div style="border-left: 3px solid #FF004D; padding-left: 12px; margin-bottom: 12px; background-color: rgba(255,0,77,0.05); border-radius: 4px;">
-                                <div style="font-weight: bold; font-size: 1.05em; margin-bottom: 2px; color: #fff;">
-                                    {row['Player']} <span style="font-weight: normal; color: #a0aec0;">({row['Stat']})</span>
+                            <div style="border-left: 3px solid #ff0055; padding-left: 10px; margin-bottom: 12px; background-color: rgba(255, 0, 85, 0.05); border-radius: 4px; padding-top: 8px; padding-bottom: 8px;">
+                                <div style="font-weight: 900; font-size: 14px; margin-bottom: 2px; color: #f8fafc; letter-spacing: 0.5px;">
+                                    {row['Player']} <span style="font-weight: normal; color: #94a3b8; font-size: 12px;">({row['Stat']})</span>
                                 </div>
-                                <div style="font-size: 0.85em; color: #94a3b8; margin-bottom: 2px;">
-                                    {row['Total_Bets']} bets | {row['Win_Rate']:.0f}% Win
+                                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase;">
+                                    {row['Total_Bets']} bets &nbsp;|&nbsp; {row['Win_Rate']:.0f}% Win
                                 </div>
-                                <div style="color: #FF004D; font-weight: bold; font-size: 1.1em;">
-                                    {row['ROI']:.1f}% ROI <span style="font-size: 0.8em; color: #a0aec0; font-weight: normal;">(${row['Net_Profit']:.2f})</span>
+                                <div style="color: #ff0055; font-weight: 900; font-size: 16px;">
+                                    {row['ROI']:.1f}% <span style="font-size: 12px; color: #94a3b8; font-weight: normal; margin-left: 4px;">(${row['Net_Profit']:.2f})</span>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
