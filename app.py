@@ -1880,7 +1880,7 @@ def ask_claude_cfo(context):
     
     headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
     prompt = f"You are the CFO of a sharp sports betting syndicate. Analyze this setup strictly from a risk management, CLV, variance, and line movement perspective. Be ruthless, cynical, and concise (under 150 words). Focus purely on the math and market efficiency. Setup:\n{context}"
-    data = {"model": "claude-3-5-sonnet-20241022", "max_tokens": 300, "messages": [{"role": "user", "content": prompt}]}
+    data = { "model" : "claude-sonnet-4-6" , "max_tokens" : 300 , "messages" : [ { "role" : "user" , "content" : prompt } ] }
     
     try:
         r = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=data, timeout=12)
