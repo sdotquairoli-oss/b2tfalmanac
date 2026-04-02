@@ -2459,6 +2459,10 @@ def render_syndicate_board(league_key):
                             # Fire APIs
                             cfo_res, coo_res = consult_the_board(context)
                             
+                            # 🟢 Normalizes font size by stripping out massive markdown headers
+                            cfo_res = cfo_res.replace("#", "")
+                            coo_res = coo_res.replace("#", "")
+                            
                             # Render the Boardroom
                             st.markdown("""
                             <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
