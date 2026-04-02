@@ -2889,172 +2889,181 @@ with t_nfl:
     """, unsafe_allow_html=True)
 
 with t_parlay:
-    st.markdown("## 🎟️ Syndicate Parlay Builder")
-    ledger_df = load_ledger()
-    pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
+            st.markdown("## 🎟️ Syndicate Parlay Builder")
+            ledger_df = load_ledger()
+            pending_picks = ledger_df[ledger_df['Result'] == 'Pending']
 
-    if pending_picks.empty:
-        st.info("No pending singles. Add picks from the NBA/NHL/MLB boards first.")
-    else:
-        pick_options, pick_odds_map, pick_prob_map = [], {}, {}
-        for _, r in pending_picks.iterrows():
-            o = int(pd.to_numeric(r['Odds'], errors='coerce'))
-            prob = float(r.get('Win_Prob', 0.55))
-            label = f"{r['Player']} ({r['Stat']} {r['Vote']} {r['Line']}) [{o:+d}]"
-            pick_options.append(label)
-            pick_odds_map[label] = o
-            pick_prob_map[label] = prob
-        selected_picks = st.multiselect("🔗 Link Pending Picks into a Ticket", pick_options, key="parlay_picker")
-        calc_dec, c_prob = 1.0, 1.0
-        for p in selected_picks:
-            o = pick_odds_map[p]
-            calc_dec *= ((o / 100.0) + 1.0) if o > 0 else ((100.0 / abs(o)) + 1.0)
-            c_prob *= pick_prob_map.get(p, 0.55)
-        true_american = int(round((calc_dec - 1.0) * 100)) if calc_dec >= 2.0 else int(round(-100.0 / (calc_dec - 1.0))) if selected_picks else 150
-        def_prob = min(99.9, c_prob * 100) if selected_picks else 55.0
-
-        with st.expander("📘 Open Bankroll Advisor (Calculate Bet Size)", expanded=False):
-            liq_bal = get_liquid_balance()
-            st.markdown(f"**Live Bankroll:** ${liq_bal:.2f}")
-            if "Micro" in st.radio("Select Strategy", ["🔥 Micro-Aggressor (Tiered)", "🤖 True Kelly (AI Math)"], horizontal=True, label_visibility="collapsed", key="parlay_strat"):
-                s_rec, p_rec = (5.0, 2.0) if liq_bal < 100 else ((10.0, 4.0) if liq_bal <= 200 else ((15.0, 5.0) if liq_bal <= 500 else (liq_bal * 0.03, liq_bal * 0.01)))
-                st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #ff0055; margin-top: 10px;"><div style="display: flex; justify-content: space-around; text-align: center;"><div><div style="font-size: 12px; color: #94a3b8;">Standard Single Wager</div><div style="font-size: 24px; font-weight: 900; color: #ff0055;">${s_rec:.2f}</div></div><div><div style="font-size: 12px; color: #94a3b8;">Standard Parlay Risk</div><div style="font-size: 24px; font-weight: 900; color: #00E5FF;">${p_rec:.2f}</div></div></div></div>""", unsafe_allow_html=True)
+            # ── 1. PARLAY BUILDER UI ───────────────────────────────────────
+            if pending_picks.empty:
+                st.info("No pending singles. Add picks from the NBA/NHL/MLB boards first.")
             else:
-                kc1, kc2 = st.columns(2)
-                k_prob, k_odds = kc1.number_input("Est. Win Prob (%)", min_value=0.1, max_value=99.9, value=float(def_prob), step=1.0, key="parlay_kprob"), kc2.number_input("Bet Odds", value=true_american, step=10, key="parlay_kodds")
-                win_prob_dec, b_odds = k_prob / 100.0, (100 / abs(k_odds)) if k_odds < 0 else (k_odds / 100)
-                s_rec = liq_bal * (max(0.0, (b_odds * win_prob_dec - (1 - win_prob_dec)) / b_odds if b_odds > 0 else 0) * 0.5)
-                st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E676; margin-top: 10px; text-align: center;"><div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div><div style="font-size: 24px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div></div>""", unsafe_allow_html=True)
+                pick_options, pick_odds_map, pick_prob_map = [], {}, {}
+                for _, r in pending_picks.iterrows():
+                    o = int(pd.to_numeric(r['Odds'], errors='coerce'))
+                    prob = float(r.get('Win_Prob', 0.55))
+                    label = f"{r['Player']} ({r['Stat']} {r['Vote']} {r['Line']}) [{o:+d}]"
+                    pick_options.append(label)
+                    pick_odds_map[label] = o
+                    pick_prob_map[label] = prob
 
-        p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
-        with p_col1: p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68)
-        with p_col2: p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10)
-        with p_col3: p_risk = st.number_input("Risk ($)", value=10.0, step=5.0)
-        with p_col4:
-            p_book = st.selectbox("Sportsbook", SPORTSBOOKS)
-            p_free = st.checkbox("🆓 Free Bet")
-            p_boost = st.checkbox("🚀 Odds Boost")
+                selected_picks = st.multiselect("🔗 Link Pending Picks into a Ticket", pick_options, key="parlay_picker")
+                calc_dec, c_prob = 1.0, 1.0
+                for p in selected_picks:
+                    o = pick_odds_map[p]
+                    calc_dec *= ((o / 100.0) + 1.0) if o > 0 else ((100.0 / abs(o)) + 1.0)
+                    c_prob *= pick_prob_map.get(p, 0.55)
 
-        proj_profit = (p_risk * (p_odds / 100) if p_odds > 0 else p_risk / (abs(p_odds) / 100)) if p_odds != 0 else 0.0
-        st.info(f"💸 **Projected Payout:** ${(proj_profit if p_free else p_risk + proj_profit):.2f} (Profit: ${proj_profit:.2f})")
+                true_american = int(round((calc_dec - 1.0) * 100)) if calc_dec >= 2.0 else int(round(-100.0 / (calc_dec - 1.0))) if selected_picks else 150
+                def_prob = min(99.9, c_prob * 100) if selected_picks else 55.0
 
-        if st.button("➕ Add Bet to Tracker", type="primary"):
-            if p_desc: save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost); st.success("Bet Added!"); time.sleep(1.0); st.rerun()
-            else: st.error("Please enter a description.")
+                with st.expander("📘 Open Bankroll Advisor (Calculate Bet Size)", expanded=False):
+                    liq_bal = get_liquid_balance()
+                    st.markdown(f"**Live Bankroll:** ${liq_bal:.2f}")
+                    if "Micro" in st.radio("Select Strategy", ["🔥 Micro-Aggressor (Tiered)", "🤖 True Kelly (AI Math)"], horizontal=True, label_visibility="collapsed", key="parlay_strat"):
+                        s_rec, p_rec = (5.0, 2.0) if liq_bal < 100 else ((10.0, 4.0) if liq_bal <= 200 else ((15.0, 5.0) if liq_bal <= 500 else (liq_bal * 0.03, liq_bal * 0.01)))
+                        st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #ff0055; margin-top: 10px;"><div style="display: flex; justify-content: space-around; text-align: center;"><div><div style="font-size: 12px; color: #94a3b8;">Standard Single Wager</div><div style="font-size: 24px; font-weight: 900; color: #ff0055;">${s_rec:.2f}</div></div><div><div style="font-size: 12px; color: #94a3b8;">Standard Parlay Risk</div><div style="font-size: 24px; font-weight: 900; color: #00E5FF;">${p_rec:.2f}</div></div></div></div>""", unsafe_allow_html=True)
+                    else:
+                        kc1, kc2 = st.columns(2)
+                        k_prob, k_odds = kc1.number_input("Est. Win Prob (%)", min_value=0.1, max_value=99.9, value=float(def_prob), step=1.0, key="parlay_kprob"), kc2.number_input("Bet Odds", value=true_american, step=10, key="parlay_kodds")
+                        win_prob_dec, b_odds = k_prob / 100.0, (100 / abs(k_odds)) if k_odds < 0 else (k_odds / 100)
+                        s_rec = liq_bal * (max(0.0, (b_odds * win_prob_dec - (1 - win_prob_dec)) / b_odds if b_odds > 0 else 0) * 0.5)
+                        st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E676; margin-top: 10px; text-align: center;"><div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div><div style="font-size: 24px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div></div>""", unsafe_allow_html=True)
 
-    parlay_df = load_parlay_ledger()
-    if not parlay_df.empty:
-        st.markdown("---")
-        graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
-        p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
+                p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
+                with p_col1:
+                    p_desc = st.text_area("Bet Description", value=" + ".join(selected_picks) if selected_picks else "", height=68)
+                with p_col2:
+                    p_odds = st.number_input("Final Odds (w/ Boosts)", value=true_american, step=10)
+                with p_col3:
+                    p_risk = st.number_input("Risk ($)", value=10.0, step=5.0)
+                with p_col4:
+                    p_book = st.selectbox("Sportsbook", SPORTSBOOKS)
+                    p_free = st.checkbox("🆓 Free Bet")
+                    p_boost = st.checkbox("🚀 Odds Boost")
+                
+                proj_profit = (p_risk * (p_odds / 100) if p_odds > 0 else p_risk / (abs(p_odds) / 100)) if p_odds != 0 else 0.0
+                st.info(f"💸 **Projected Payout:** ${(proj_profit if p_free else p_risk + proj_profit):.2f} (Profit: ${proj_profit:.2f})")
 
-        # ✅ Profit calculation loop — no UI elements here
-        for _, row in graded_p.iterrows():
-            o, r, is_f = pd.to_numeric(row['Odds'], errors='coerce'), pd.to_numeric(row['Risk'], errors='coerce'), row.get('Is_Free_Bet', False)
-            if not is_f:
-                total_staked += r
-            if row['Result'] == 'Win':
-                p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
-            elif row['Result'] == 'Cash Out':
-                ret_val = row.get('Return', '')
-                try:
-                    ret_val = float(ret_val) if str(ret_val).strip() != '' else r
-                except:
-                    ret_val = r
-                p_profit += (ret_val - r)
-            else:
-                p_profit -= (0 if is_f else r)
-
-        # ✅ Metrics rendered ONCE, outside the loop
-        pm1, pm2, pm3, pm4 = st.columns(4)
-        pm1.metric("Total Graded Live/Parlays", f"{p_total}")
-        pm2.metric("Win Rate", f"{(p_wins / p_total * 100) if p_total > 0 else 0.0:.1f}%")
-        pm3.metric("Net Profit", f"${p_profit:+.2f}")
-        pm4.metric("ROI (%)", f"{(p_profit / total_staked * 100) if p_total > 0 and total_staked > 0 else 0.0:+.1f}%")
-
-        st.markdown("---")
-
-        # ✅ Header and Save button rendered ONCE, outside the loop
-        header_c1, header_c2 = st.columns([3, 1])
-        with header_c1:
-            st.markdown("#### 🎫 Your Live / Parlay Slips")
-        with header_c2:
-            if st.button("💾 Save All Grades", type="primary", use_container_width=True, key="parlay_save_all_grades"):
-                updated_count = 0
-                for orig_idx in parlay_df.index:
-                    k = f"p_res_{orig_idx}"
-                    if k in st.session_state:
-                        new_val = st.session_state[k]
-                        if parlay_df.at[orig_idx, 'Result'] != new_val:
-                            parlay_df.at[orig_idx, 'Result'] = new_val
-                            updated_count += 1
-                if updated_count > 0:
-                    overwrite_sheet("Parlay_Ledger", parlay_df)
-                    st.success(f"Successfully locked {updated_count} new grades!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.info("No new grades to save.")
-
-        # ✅ Slip cards loop — UI only, no metrics or headers
-        for i, row in parlay_df.iloc[::-1].reset_index().iterrows():
-            orig_idx = row['index']
-            odds_raw = pd.to_numeric(row['Odds'], errors='coerce')
-            risk_raw = pd.to_numeric(row['Risk'], errors='coerce')
-            
-            o = int(odds_raw) if not pd.isna(odds_raw) else 0
-            r = float(risk_raw) if not pd.isna(risk_raw) else 0.0
-            is_f = row.get('Is_Free_Bet', False)
-            
-            payout_label = "Payout"
-            if row['Result'] == "Cash Out":
-                payout_label = "Cashed Out"
-                ret_val = row.get('Return', '')
-                try:
-                    payout = float(ret_val) if str(ret_val).strip() != '' else r
-                except:
-                    payout = r
-            else:
-                if o > 0:
-                    payout = (r * (o / 100)) if is_f else r + (r * (o / 100))
-                elif o < 0:
-                    payout = (r / (abs(o) / 100)) if is_f else r + (r / (abs(o) / 100))
-                else:
-                    payout = r
-
-            status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] in ["Push", "Cash Out"] else "#94a3b8"))
-            legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
-            boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
-            
-            pc1, pc2 = st.columns([4, 1])
-            with pc1:
-                book_name = row.get('Sportsbook', 'LIVE BET')
-                logo_img = BOOK_LOGOS.get(book_name, "")
-                book_html = f'<img src="{logo_img}" width="16" height="16" style="border-radius: 50%; vertical-align: middle; margin-right: 6px;"> {book_name.upper()} • ' if logo_img else f"{book_name.upper()} • "
-                st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{book_html}{row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">{payout_label}: ${payout:.2f}</span></div></div>""", unsafe_allow_html=True)
-            
-            with pc2:
-                st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-                opts = ["Pending", "Win", "Loss", "Cash Out", "Void"]
-                if row['Result'] == "Push":
-                    opts.append("Push")
-                selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
-                if selected_grade == "Cash Out" and row['Result'] != "Cash Out":
-                    st.warning("⚠️ Enter exact return.")
-                    cash_out_value = st.number_input(
-                        "Return Amount ($):",
-                        min_value=0.0,
-                        value=float(r),
-                        step=0.50,
-                        key=f"cashout_val_{orig_idx}"
-                    )
-                    if st.button("💸 Confirm", key=f"confirm_{orig_idx}", use_container_width=True):
-                        parlay_df.at[orig_idx, 'Result'] = "Cash Out"
-                        parlay_df.at[orig_idx, 'Return'] = float(cash_out_value)
-                        overwrite_sheet("Parlay_Ledger", parlay_df)
-                        st.success(f"✅ Saved!")
-                        time.sleep(1)
+                if st.button("➕ Add Bet to Tracker", type="primary"):
+                    if p_desc:
+                        save_to_parlay_ledger(p_desc, p_odds, p_risk, p_book, p_free, p_boost)
+                        st.success("Bet Added!")
+                        time.sleep(1.0)
                         st.rerun()
+                    else:
+                        st.error("Please enter a description.")
+
+            # ── 2. PARLAY HISTORY & GRADING ────────────────────────────────
+            # (Always visible, even if there are no pending single picks)
+            parlay_df = load_parlay_ledger()
+            if not parlay_df.empty:
+                st.markdown("---")
+                graded_p = parlay_df[parlay_df['Result'].isin(['Win', 'Loss', 'Cash Out'])]
+                p_wins, p_total, p_profit, total_staked = len(graded_p[graded_p['Result'] == 'Win']), len(graded_p), 0.0, 0.0
+
+                # Profit Math Loop
+                for _, row in graded_p.iterrows():
+                    o_val = pd.to_numeric(row['Odds'], errors='coerce')
+                    r_val = pd.to_numeric(row['Risk'], errors='coerce')
+                    o = int(o_val) if pd.notna(o_val) else 0
+                    r = float(r_val) if pd.notna(r_val) else 0.0
+                    is_f = row.get('Is_Free_Bet', False)
+
+                    if not is_f: total_staked += r
+                    if row['Result'] == 'Win':
+                        p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+                    elif row['Result'] == 'Cash Out':
+                        ret_val = row.get('Return', '')
+                        try:
+                            ret_val = float(ret_val) if str(ret_val).strip() != '' else r
+                        except:
+                            ret_val = r
+                        p_profit += (ret_val - r)
+                    else:
+                        p_profit -= (0 if is_f else r)
+
+                # Metrics Rendered ONCE
+                pm1, pm2, pm3, pm4 = st.columns(4)
+                pm1.metric("Total Graded Live/Parlays", f"{p_total}")
+                pm2.metric("Win Rate", f"{(p_wins / p_total * 100) if p_total > 0 else 0.0:.1f}%")
+                pm3.metric("Net Profit", f"${p_profit:+.2f}")
+                pm4.metric("ROI (%)", f"{(p_profit / total_staked * 100) if p_total > 0 and total_staked > 0 else 0.0:+.1f}%")
+                st.markdown("---")
+
+                # Header and Save Button Rendered ONCE
+                header_c1, header_c2 = st.columns([3, 1])
+                with header_c1:
+                    st.markdown("#### 🎫 Your Live / Parlay Slips")
+                with header_c2:
+                    if st.button("💾 Save All Grades", type="primary", use_container_width=True, key="parlay_save_all_grades"):
+                        updated_count = 0
+                        for orig_idx in parlay_df.index:
+                            k = f"p_res_{orig_idx}"
+                            if k in st.session_state:
+                                new_val = st.session_state[k]
+                                if parlay_df.at[orig_idx, 'Result'] != new_val:
+                                    parlay_df.at[orig_idx, 'Result'] = new_val
+                                    updated_count += 1
+                        if updated_count > 0:
+                            overwrite_sheet("Parlay_Ledger", parlay_df)
+                            st.success(f"Successfully locked {updated_count} new grades!")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.info("No new grades to save.")
+
+                # Slip Render Loop
+                for i, row in parlay_df.reset_index().iloc[::-1].iterrows():
+                    orig_idx = row['index']
+                    odds_raw = pd.to_numeric(row['Odds'], errors='coerce')
+                    risk_raw = pd.to_numeric(row['Risk'], errors='coerce')
+                    o = int(odds_raw) if not pd.isna(odds_raw) else 0
+                    r = float(risk_raw) if not pd.isna(risk_raw) else 0.0
+                    is_f = row.get('Is_Free_Bet', False)
+
+                    payout_label = "Payout"
+                    if row['Result'] == "Cash Out":
+                        payout_label = "Cashed Out"
+                        ret_val = row.get('Return', '')
+                        try:
+                            payout = float(ret_val) if str(ret_val).strip() != '' else r
+                        except:
+                            payout = r
+                    else:
+                        if o > 0:
+                            payout = (r * (o / 100)) if is_f else r + (r * (o / 100))
+                        elif o < 0:
+                            payout = (r / (abs(o) / 100)) if is_f else r + (r / (abs(o) / 100))
+                        else:
+                            payout = r
+
+                    status_color = "#00E676" if row['Result'] == "Win" else ("#ff0055" if row['Result'] == "Loss" else ("#FFD700" if row['Result'] in ["Push", "Cash Out"] else "#94a3b8"))
+                    legs_html = "".join([f"<div style='margin-bottom: 4px;'>🎟️ {leg}</div>" for leg in str(row['Description']).split(" + ")])
+                    boost_tag = " <span style='color:#FFD700; font-size:12px;'>🚀 BOOSTED</span>" if row.get('Is_Boosted', False) else ""
+
+                    pc1, pc2 = st.columns([4, 1])
+                    with pc1:
+                        book_name = row.get('Sportsbook', 'LIVE BET')
+                        logo_img = BOOK_LOGOS.get(book_name, "")
+                        book_html = f'<img src="{logo_img}" width="16" height="16" style="border-radius: 50%; vertical-align: middle; margin-right: 6px;"> {book_name.upper()} • ' if logo_img else f"{book_name.upper()} • "
+                        st.markdown(f"""<div style="background-color: #0f172a; border-radius: 8px; border: 1px solid #334155; border-left: 6px solid {status_color}; padding: 12px; margin-bottom: 5px;"><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 12px; color: #94a3b8; font-weight: bold; letter-spacing: 1px;">{book_html}{row['Date']}</span><span style="font-size: 14px; color: #fff; font-weight: bold;">{o:+d}{boost_tag}</span></div><div style="font-size: 13px; color: #f8fafc; margin-bottom: 10px; line-height: 1.5;">{legs_html}</div><div style="margin-top: 10px; border-top: 1px dashed #334155; padding-top: 8px; display: flex; justify-content: space-between;"><span style="font-size: 12px; color: #94a3b8;">{"🆓 FREE BET: $" + str(r) if is_f else "Risk: $" + str(r)}</span><span style="font-size: 12px; font-weight: bold; color: {status_color};">{payout_label}: ${payout:.2f}</span></div></div>""", unsafe_allow_html=True)
+                    
+                    with pc2:
+                        st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+                        opts = ["Pending", "Win", "Loss", "Cash Out", "Void"]
+                        if row['Result'] == "Push": opts.append("Push")
+                        selected_grade = st.selectbox("Grade", opts, index=opts.index(row['Result']) if row['Result'] in opts else 0, key=f"p_res_{orig_idx}", label_visibility="collapsed")
+                        
+                        if selected_grade == "Cash Out" and row['Result'] != "Cash Out":
+                            st.warning("⚠️ Enter exact return.")
+                            cash_out_value = st.number_input("Return Amount ($):", min_value=0.0, value=float(r), step=0.50, key=f"cashout_val_{orig_idx}")
+                            if st.button("💸 Confirm", key=f"confirm_{orig_idx}", use_container_width=True):
+                                parlay_df.at[orig_idx, 'Result'] = "Cash Out"
+                                parlay_df.at[orig_idx, 'Return'] = float(cash_out_value)
+                                overwrite_sheet("Parlay_Ledger", parlay_df)
+                                st.success(f"✅ Saved!")
+                                time.sleep(1)
+                                st.rerun()
 with t_roi:
     roi_col1, roi_col2 = st.columns([4, 1])
     with roi_col1: st.markdown("### 🏦 Syndicate Analytics & ROI")
