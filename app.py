@@ -1936,12 +1936,15 @@ def run_dual_autopsy(context):
         if not api_key: return "⚠️ ANTHROPIC_API_KEY missing."
         headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
         prompt = f"You are the CFO of a sports betting syndicate doing a POST-GAME AUTOPSY on a losing bet. Analyze why it lost strictly from a math, CLV, and variance perspective. Was it a bad beat (good process, bad luck) or a fundamentally bad bet? Be ruthless and concise (under 100 words). Game Data:\n{ctx}"
-        data = {"model": "claude-3-5-sonnet-20241022", "max_tokens": 250, "messages": [{"role": "user", "content": prompt}]}
+        data = {"model": "claude-sonnet-4-6", "max_tokens": 250, "messages": [{"role": "user", "content": prompt}]}
         try:
             r = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=data, timeout=12)
-            if r.status_code != 200: return f"⚠️ API Error ({r.status_code})"
+            if r.status_code != 200:
+                error_msg = r.json().get('error', {}).get('message', 'Unknown API Error')
+                return f"⚠️ Anthropic API Error ({r.status_code}): {error_msg}"
             return r.json().get('content', [{'text': 'API Error'}])[0]['text']
-        except Exception as e: return f"CFO Offline: {e}"
+        except Exception as e:
+            return f"CFO Offline: {e}"
 
     def ask_gemini_autopsy(ctx):
         api_key = st.secrets.get("GEMINI_API_KEY")
