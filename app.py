@@ -662,7 +662,6 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "nah'shon hyland": "bones hyland",
         "tj mcconnell": "t.j. mcconnell",
         "cj mccollum": "c.j. mccollum",
-}
     }
     
     clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
