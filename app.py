@@ -654,7 +654,15 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "robert williams": "robert williams iii",
         "p.j. washington": "pj washington",
         "karl-anthony towns": "karl anthony towns",
-        "shai gilgeous-alexander": "shai gilgeous alexander"
+        "shai gilgeous-alexander": "shai gilgeous alexander",
+        "carlton carrington": "bub carrington",
+        "og anunoby": "o.g. anunoby",
+        "gg jackson": "gregory jackson ii",
+        "bones hyland": "nah'shon hyland",
+        "nah'shon hyland": "bones hyland",
+        "tj mcconnell": "t.j. mcconnell",
+        "cj mccollum": "c.j. mccollum",
+}
     }
     
     clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
@@ -713,7 +721,16 @@ def get_nba_stats(player_label):
         "kelly oubre": "Kelly Oubre Jr.",
         "timothy hardaway": "Tim Hardaway Jr.",
         "robert williams": "Robert Williams III",
-        "karl-anthony towns": "Karl-Anthony Towns"
+        "karl-anthony towns": "Karl-Anthony Towns",
+        "bub carrington": "Carlton Carrington",
+        "og anunoby": "O.G. Anunoby",
+        "gg jackson": "Gregory Jackson II",
+        "aj green": "AJ Green",
+        "pj washington": "P.J. Washington",
+        "tj mcconnell": "T.J. McConnell",
+        "cj mccollum": "CJ McCollum",
+        "jj redick": "JJ Redick",
+        "bones hyland": "Nah'Shon Hyland",
     }
     
     if cn.lower() in ALIASES:
