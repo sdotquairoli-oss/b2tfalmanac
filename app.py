@@ -504,7 +504,7 @@ def search_nba_players(query):
     # 🟢 NICKNAME INTERCEPTOR: Translate search before hitting BDL database
     q_lower = query.lower().strip()
     NICKNAMES = {
-        "bub": "carlton",
+        "bub": "carlton carrington",
         "bub carrington": "carlton carrington",
         "gg": "gregory",
         "gg jackson": "gregory jackson",
@@ -675,7 +675,6 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "p.j. washington": "pj washington",
         "karl-anthony towns": "karl anthony towns",
         "shai gilgeous-alexander": "shai gilgeous alexander",
-        "carlton carrington": "bub carrington",
         "bub carrington": "carlton carrington",
         "og anunoby": "o.g. anunoby",
         "gg jackson": "gregory jackson ii",
