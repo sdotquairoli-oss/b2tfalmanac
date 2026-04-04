@@ -500,17 +500,37 @@ def check_api_quota(force_refresh=False):
 @st.cache_data(ttl=3600)
 def search_nba_players(query):
     if not query: return []
+    
+    # 🟢 NICKNAME INTERCEPTOR: Translate search before hitting BDL database
+    q_lower = query.lower().strip()
+    NICKNAMES = {
+        "bub": "carlton",
+        "bub carrington": "carlton carrington",
+        "gg": "gregory",
+        "gg jackson": "gregory jackson",
+        "steph": "stephen",
+        "steph curry": "stephen curry",
+        "cam": "cameron",
+        "cam thomas": "cameron thomas",
+        "nic": "nicolas",
+        "nic claxton": "nicolas claxton"
+    }
+    api_query = NICKNAMES.get(q_lower, query)
+    
     try:
-        search_term = query.split()[-1] if " " in query else query
+        search_term = api_query.split()[-1] if " " in api_query else api_query
         r = requests.get("https://api.balldontlie.io/v1/players", headers={"Authorization": BDL_API_KEY}, params={"search": search_term, "per_page": 100}, timeout=5)
         if r.status_code == 200:
             matches = []
             for p in r.json().get('data', []):
                 if p.get('team'):
                     full_name = f"{p['first_name']} {p['last_name']}"
-                    if query.lower() in full_name.lower(): matches.append(f"{full_name} ({p['team']['abbreviation']})")
+                    # Match if it contains the nickname OR the legal name
+                    if q_lower in full_name.lower() or api_query.lower() in full_name.lower():
+                        matches.append(f"{full_name} ({p['team']['abbreviation']})")
             return matches
-    except: pass; return []
+    except:
+        pass; return []
 
 @st.cache_data(ttl=3600)
 def search_nhl_players(query):
