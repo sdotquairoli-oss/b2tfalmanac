@@ -3136,16 +3136,67 @@ with t_roi:
                 return ((100 / (abs(o_val)/100)) if o_val < 0 else o_val) if r['Result'] == 'Win' else -100.0
             graded_df['Profit_Per_Bet'] = graded_df.apply(row_profit, axis=1)
             
-            wins = len(graded_df[graded_df['Result'] == 'Win'])
-            losses = len(graded_df[graded_df['Result'] == 'Loss'])
-            profit = graded_df['Profit_Per_Bet'].sum()
+        # 🤖 vs 👤 MAN VS MACHINE SPLIT
+            def is_aligned(row):
+                try:
+                    proj = float(row['Proj'])
+                    line = float(row['Line'])
+                    vote = str(row['Vote']).strip().upper()
+                    if vote == "OVER":
+                        return proj >= line
+                    elif vote == "UNDER":
+                        return proj <= line
+                    return False
+                except:
+                    return False
 
-            # TOP METRICS
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Total Graded Picks", f"{wins + losses}")
-            m2.metric("Win Rate", f"{(wins / (wins + losses) * 100) if (wins+losses) > 0 else 0.0:.1f}%")
-            m3.metric("Net Profit (1 Unit = $100)", f"${profit:+.2f}")
-            m4.metric("ROI (%)", f"{(profit / ((wins + losses) * 100) * 100) if (wins+losses) > 0 else 0.0:+.1f}%")
+            graded_df['Is_Aligned'] = graded_df.apply(is_aligned, axis=1)
+            df_machine = graded_df[graded_df['Is_Aligned'] == True]
+            df_man = graded_df[graded_df['Is_Aligned'] == False]
+
+            # Helper to calculate metrics for a subset
+            def calc_subset_metrics(df_sub):
+                wins = len(df_sub[df_sub['Result'] == 'Win'])
+                total = len(df_sub[df_sub['Result'].isin(['Win', 'Loss'])])
+                profit = 0.0
+                staked = 0.0
+                for _, r in df_sub.iterrows():
+                    o = pd.to_numeric(r['Odds'], errors='coerce')
+                    risk = 100.0  # Assuming 1U = $100 for standard ROI calc
+                    if pd.isna(o): continue
+                    if r['Result'] in ['Win', 'Loss']: staked += risk
+                    if r['Result'] == 'Win':
+                        profit += (risk * (o / 100)) if o > 0 else (risk / (abs(o) / 100))
+                    elif r['Result'] == 'Loss':
+                        profit -= risk
+                roi = (profit / staked * 100) if staked > 0 else 0.0
+                return wins, total, profit, roi
+
+            # Calculate both sides
+            m_wins, m_tot, m_prof, m_roi = calc_subset_metrics(df_machine)
+            h_wins, h_tot, h_prof, h_roi = calc_subset_metrics(df_man)
+
+            # Render the Head-to-Head UI
+            st.markdown("### 🥊 Man vs. Machine Performance")
+            col_machine, col_man = st.columns(2)
+
+            with col_machine:
+                st.markdown("<div style='text-align: center; padding: 10px; background-color: #0f172a; border-radius: 8px; border-top: 4px solid #00E5FF;'>", unsafe_allow_html=True)
+                st.markdown("#### 🤖 The Almanac (Systematic)")
+                st.caption("Bets aligned with AI projections")
+                m1, m2 = st.columns(2)
+                m1.metric("Win Rate", f"{(m_wins/m_tot*100) if m_tot > 0 else 0.0:.1f}%", f"{m_wins}-{m_tot-m_wins}")
+                m2.metric("ROI", f"{m_roi:+.1f}%", f"${m_prof:+.2f}")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            with col_man:
+                st.markdown("<div style='text-align: center; padding: 10px; background-color: #0f172a; border-radius: 8px; border-top: 4px solid #ff0055;'>", unsafe_allow_html=True)
+                st.markdown("#### 👤 The Rogue (Discretionary)")
+                st.caption("Fades and manual overrides")
+                h1, h2 = st.columns(2)
+                h1.metric("Win Rate", f"{(h_wins/h_tot*100) if h_tot > 0 else 0.0:.1f}%", f"{h_wins}-{h_tot-h_wins}")
+                h2.metric("ROI", f"{h_roi:+.1f}%", f"${h_prof:+.2f}")
+                st.markdown("</div>", unsafe_allow_html=True)
             
             st.markdown("---")
             
