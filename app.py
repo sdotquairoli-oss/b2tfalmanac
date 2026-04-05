@@ -3177,12 +3177,12 @@ with t_roi:
             h_wins, h_tot, h_prof, h_roi = calc_subset_metrics(df_man)
 
             # Render the Head-to-Head UI
-            st.markdown("### 🥊 Man vs. Machine Performance")
+            st.markdown("###  Man vs. Machine Performance")
             col_machine, col_man = st.columns(2)
 
             with col_machine:
                 st.markdown("<div style='text-align: center; padding: 10px; background-color: #0f172a; border-radius: 8px; border-top: 4px solid #00E5FF;'>", unsafe_allow_html=True)
-                st.markdown("#### 🤖 The Almanac (Systematic)")
+                st.markdown("#### The Almanac (Systematic)")
                 st.caption("Bets aligned with AI projections")
                 m1, m2 = st.columns(2)
                 m1.metric("Win Rate", f"{(m_wins/m_tot*100) if m_tot > 0 else 0.0:.1f}%", f"{m_wins}-{m_tot-m_wins}")
@@ -3191,7 +3191,7 @@ with t_roi:
 
             with col_man:
                 st.markdown("<div style='text-align: center; padding: 10px; background-color: #0f172a; border-radius: 8px; border-top: 4px solid #ff0055;'>", unsafe_allow_html=True)
-                st.markdown("#### 👤 The Rogue (Discretionary)")
+                st.markdown("####  The Man (Discretionary)")
                 st.caption("Fades and manual overrides")
                 h1, h2 = st.columns(2)
                 h1.metric("Win Rate", f"{(h_wins/h_tot*100) if h_tot > 0 else 0.0:.1f}%", f"{h_wins}-{h_tot-h_wins}")
