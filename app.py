@@ -3209,457 +3209,462 @@ with t_roi:
                 st.markdown("</div>", unsafe_allow_html=True)
             
             st.markdown("---")
-            
-            # CHARTS & LEAK FINDER
-            graded_df['Date_DT'] = pd.to_datetime(graded_df['Date'])
-            graded_df = graded_df.sort_values('Date_DT')
-            graded_df['Cumulative_Profit'] = graded_df['Profit_Per_Bet'].cumsum()
-            
-            ac1, ac2 = st.columns([2, 1.2])
-            with ac1:
-                st.markdown("#### 📈 Bankroll Trajectory")
-                line_chart = alt.Chart(graded_df).mark_area(
-                    line={'color':'#00E5FF'}, 
-                    color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='#00E5FF', offset=0), alt.GradientStop(color='rgba(0, 229, 255, 0)', offset=1)], x1=1, x2=1, y1=1, y2=0)
-                ).encode(
-                    x=alt.X('Date_DT:T', title='Date'), 
-                    y=alt.Y('Cumulative_Profit:Q', title='Net Profit ($)'), 
-                    tooltip=['Date:N', 'Player:N', 'Stat:N', alt.Tooltip('Profit_Per_Bet:Q', title='Bet Result', format='+.2f'), alt.Tooltip('Cumulative_Profit:Q', title='Total Bankroll', format='+.2f')]
-                ).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
-                st.altair_chart(line_chart, use_container_width=True)
-            
-            with ac2:
-                st.markdown("#### 🎯 The Leak Finder")
-                stat_profit = graded_df.groupby('Stat').agg(
-                    Net_Profit=('Profit_Per_Bet', 'sum'),
-                    Bets=('Result', 'count'),
-                    Wins=('Result', lambda x: (x == 'Win').sum())
-                ).reset_index()
-                stat_profit['Win_Rate'] = (stat_profit['Wins'] / stat_profit['Bets'] * 100).round(1)
                 
-                bar_chart = alt.Chart(stat_profit).mark_bar(cornerRadiusEnd=4).encode(
-                    y=alt.Y('Stat:N', sort='-x', title=None, axis=alt.Axis(labelLimit=120)),
-                    x=alt.X('Net_Profit:Q', title='Net Profit ($)'),
-                    color=alt.condition(alt.datum.Net_Profit > 0, alt.value('#00c853'), alt.value('#ff0055')),
-                    tooltip=[
-                        alt.Tooltip('Stat:N', title='Market'),
-                        alt.Tooltip('Net_Profit:Q', title='Net Profit', format='+.2f'),
-                        alt.Tooltip('Win_Rate:Q', title='Win Rate (%)', format='.1f'),
-                        alt.Tooltip('Bets:Q', title='Volume')
-                    ]
-                ).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
-                st.altair_chart(bar_chart, use_container_width=True)
-            
-            st.markdown("---")
-# ═══════════════════════════════════════════════
-            # 📊 CLV DASHBOARD
-            # ═══════════════════════════════════════════════
-            clv_eligible = graded_df[
-                (graded_df['Closing_Line'].apply(lambda x: float(x) if str(x).strip() not in ['', '0', '0.0', 'nan'] else 0) > 0) &
-                (graded_df['Vote'].isin(['OVER', 'UNDER']))
-            ].copy()
+            # 🗂️ CLEAN LAYOUT: Split into Sub-Tabs
+            roi_tab_slips, roi_tab_data = st.tabs(["🎫 Your Bet Slips", "📊 Deep Analytics & Charts"])
 
-            if len(clv_eligible) >= 3:
-                with st.expander(f"📊 Closing Line Value Report  ({len(clv_eligible)} tracked bets)", expanded=False):
-
-                    clv_results = []
-                    for _, cr in clv_eligible.iterrows():
-                        bet_clv, timing_clv, clv_rating, timing_rating = calculate_clv(
-                            cr.get('Line', 0), cr.get('Closing_Line', 0),
-                            cr.get('Opening_Line', 0), cr.get('Vote', '')
-                        )
-                        if bet_clv is not None:
-                            clv_results.append({
-                                'bet_clv': bet_clv,
-                                'timing_clv': timing_clv,
-                                'result': cr.get('Result', ''),
-                                'clv_label': clv_rating[0],
-                                'timing_label': timing_rating[0]
-                            })
-
-                    if clv_results:
-                        avg_clv    = sum(r['bet_clv'] for r in clv_results) / len(clv_results)
-                        avg_timing = sum(r['timing_clv'] for r in clv_results) / len(clv_results)
-                        beat_close = sum(1 for r in clv_results if r['bet_clv'] > 0)
-                        beat_open  = sum(1 for r in clv_results if r['timing_clv'] > 0)
-
-                        cv1, cv2, cv3, cv4 = st.columns(4)
-                        cv1.metric("Avg CLV vs Close", f"{avg_clv:+.2f}",
-                                   help="Positive = your number was better than where the line settled")
-                        cv2.metric("Avg Timing vs Open", f"{avg_timing:+.2f}",
-                                   help="Positive = you bet before sharp money moved the line against you")
-                        cv3.metric("Beat Closing Line", f"{beat_close}/{len(clv_results)}",
-                                   f"{beat_close/len(clv_results)*100:.0f}%", delta_color="off")
-                        cv4.metric("Beat Opening Line", f"{beat_open}/{len(clv_results)}",
-                                   f"{beat_open/len(clv_results)*100:.0f}%", delta_color="off")
-
-                        st.markdown("---")
-
-                        # Interpretation
-                        if avg_clv >= 0.5:
-                            st.success(
-                                f"✅ **Positive CLV detected (+{avg_clv:.2f} avg).** "
-                                f"Your number consistently beats the closing line — this is the most reliable "
-                                f"long-term signal that your edge is real and not variance."
-                            )
-                        elif avg_clv <= -0.5:
-                            st.warning(
-                                f"⚠️ **Negative CLV ({avg_clv:.2f} avg).** "
-                                f"You're consistently getting worse numbers than where the market settles. "
-                                f"This suggests you're betting too late after sharp money has already moved lines. "
-                                f"Try locking bets earlier in the day."
-                            )
-                        else:
-                            st.info(
-                                f"📊 **Neutral CLV ({avg_clv:+.2f} avg).** "
-                                f"You're roughly matching the market. Add more closing lines to get a clearer signal."
-                            )
-
-                        if avg_timing >= 0.5:
-                            st.success(
-                                f"⚡ **Strong timing (+{avg_timing:.2f} avg vs opener).** "
-                                f"You're getting in before the line moves against you — "
-                                f"this means you're identifying value before the broader market does."
-                            )
-                        elif avg_timing <= -0.5:
-                            st.warning(
-                                f"🛑 **Chasing lines ({avg_timing:.2f} avg vs opener).** "
-                                f"You're consistently betting after the line has already moved against your side. "
-                                f"Sync odds earlier and lock bets before sharp action hits."
-                            )            
-# --- NEW SYNDICATE HALL OF FAME ---
-            def render_syndicate_hall_of_fame(df):
-                # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/STAT
-                grouped = df.groupby(['Player', 'Stat']).agg(
-                    Total_Bets=('Result', 'count'),
-                    Wins=('Result', lambda x: (x == 'Win').sum()),
-                    Net_Profit=('Profit_Per_Bet', 'sum')
-                ).reset_index()
-
-                # 2. CALCULATE ADVANCED METRICS (Win Rate & ROI)
-                grouped['Total_Risk'] = grouped['Total_Bets'] * 100
-                grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
-                grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
-
-                # 3. APPLY MINIMUM THRESHOLD FILTER
-                MIN_BETS = 5
-                qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
-
-                # 4. SPLIT BY PROFITABILITY SO NO ONE APPEARS ON BOTH LISTS
-                profitable = qualified_props[qualified_props['ROI'] > 0]
-                unprofitable = qualified_props[qualified_props['ROI'] < 0]
-
-                # 5. SORT BY ROI (Expanded to 6 items to perfectly fill a 3x2 grid)
-                hall_of_fame = profitable.sort_values(by='ROI', ascending=False).head(6)
-                blacklist = unprofitable.sort_values(by='ROI', ascending=True).head(6)
-
-                # --- STREAMLIT UI RENDERING ---
-                st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
-
-                # ROW 1: THE HALL OF FAME
-                st.markdown("<h4 style='color: #00FF00; font-size: 14px; margin-top: 10px;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
-                if hall_of_fame.empty:
-                    st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
-                else:
-                    cols = st.columns(3)
-                    for i, (_, row) in enumerate(hall_of_fame.iterrows()):
-                        with cols[i % 3]:
-                            st.markdown(f"""
-                            <div style="border-left: 3px solid #00E676; padding-left: 10px; margin-bottom: 12px; background-color: rgba(0, 230, 118, 0.05); border-radius: 4px; padding-top: 8px; padding-bottom: 8px;">
-                                <div style="font-weight: 900; font-size: 14px; margin-bottom: 2px; color: #f8fafc; letter-spacing: 0.5px;">
-                                    {row['Player']} <span style="font-weight: normal; color: #94a3b8; font-size: 12px;">({row['Stat']})</span>
-                                </div>
-                                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase;">
-                                    {row['Total_Bets']} bets &nbsp;|&nbsp; {row['Win_Rate']:.0f}% Win
-                                </div>
-                                <div style="color: #00E676; font-weight: 900; font-size: 16px;">
-                                    +{row['ROI']:.1f}% <span style="font-size: 12px; color: #94a3b8; font-weight: normal; margin-left: 4px;">(+${row['Net_Profit']:.2f})</span>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-
-                # ROW 2: THE BLACKLIST
-                st.markdown("<h4 style='color: #FF004D; font-size: 14px; margin-top: 15px;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
-                if blacklist.empty:
-                    st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
-                else:
-                    cols = st.columns(3)
-                    for i, (_, row) in enumerate(blacklist.iterrows()):
-                        with cols[i % 3]:
-                            st.markdown(f"""
-                            <div style="border-left: 3px solid #ff0055; padding-left: 10px; margin-bottom: 12px; background-color: rgba(255, 0, 85, 0.05); border-radius: 4px; padding-top: 8px; padding-bottom: 8px;">
-                                <div style="font-weight: 900; font-size: 14px; margin-bottom: 2px; color: #f8fafc; letter-spacing: 0.5px;">
-                                    {row['Player']} <span style="font-weight: normal; color: #94a3b8; font-size: 12px;">({row['Stat']})</span>
-                                </div>
-                                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase;">
-                                    {row['Total_Bets']} bets &nbsp;|&nbsp; {row['Win_Rate']:.0f}% Win
-                                </div>
-                                <div style="color: #ff0055; font-weight: 900; font-size: 16px;">
-                                    {row['ROI']:.1f}% <span style="font-size: 12px; color: #94a3b8; font-weight: normal; margin-left: 4px;">(${row['Net_Profit']:.2f})</span>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-
-            # 🚀 Execute the function using your actual dataframe!
-            render_syndicate_hall_of_fame(graded_df)
-        # ═══════════════════════════════════════════════
-        # 🔬 LOSS PATTERN REPORT
-        # ═══════════════════════════════════════════════
-        losses_with_actual = ledger_df[
-            (ledger_df['Result'] == 'Loss') &
-            (ledger_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
-        ]
-
-        if len(losses_with_actual) >= 3:
-            with st.expander(f"🔬 Loss Pattern Report  ({len(losses_with_actual)} analysed losses)", expanded=False):
-
-                miss_types = []
-                for _, lr in losses_with_actual.iterrows():
-                    mt, dist, _, _ = classify_miss(lr.get('Proj', 0), lr.get('Line', 0), lr.get('Actual', 0), lr.get('Vote', ''), lr.get('Actual_Mins', None), lr.get('Actual_Fouls', None))
-                    if mt: miss_types.append({
-                        'type': mt, 'dist': dist,
-                        'stat': lr.get('Stat', ''),
-                        'league': lr.get('League', ''),
-                        'score': lr.get('Setup_Score', 0)
-                    })
-
-                total = len(miss_types)
-                bad_beats  = [m for m in miss_types if "BAD BEAT"  in m['type']]
-                model_miss = [m for m in miss_types if "MODEL"     in m['type']]
-                blowouts   = [m for m in miss_types if "BLOWOUT"   in m['type']]
-
-                pr1, pr2, pr3 = st.columns(3)
-                pr1.metric("😔 Bad Beats", f"{len(bad_beats)}/{total}", f"{len(bad_beats)/total*100:.0f}% of losses", delta_color="off")
-                pr2.metric("⚠️ Model Misses", f"{len(model_miss)}/{total}", f"{len(model_miss)/total*100:.0f}% of losses", delta_color="off")
-                pr3.metric("💥 Blowout Misses", f"{len(blowouts)}/{total}", f"{len(blowouts)/total*100:.0f}% of losses", delta_color="off")
+            with roi_tab_data:
+                # CHARTS & LEAK FINDER
+                graded_df['Date_DT'] = pd.to_datetime(graded_df['Date'])
+                graded_df = graded_df.sort_values('Date_DT')
+                graded_df['Cumulative_Profit'] = graded_df['Profit_Per_Bet'].cumsum()
+                
+                ac1, ac2 = st.columns([2, 1.2])
+                with ac1:
+                    st.markdown("#### 📈 Bankroll Trajectory")
+                    line_chart = alt.Chart(graded_df).mark_area(
+                        line={'color':'#00E5FF'}, 
+                        color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='#00E5FF', offset=0), alt.GradientStop(color='rgba(0, 229, 255, 0)', offset=1)], x1=1, x2=1, y1=1, y2=0)
+                    ).encode(
+                        x=alt.X('Date_DT:T', title='Date'), 
+                        y=alt.Y('Cumulative_Profit:Q', title='Net Profit ($)'), 
+                        tooltip=['Date:N', 'Player:N', 'Stat:N', alt.Tooltip('Profit_Per_Bet:Q', title='Bet Result', format='+.2f'), alt.Tooltip('Cumulative_Profit:Q', title='Total Bankroll', format='+.2f')]
+                    ).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
+                    st.altair_chart(line_chart, use_container_width=True)
+                
+                with ac2:
+                    st.markdown("#### 🎯 The Leak Finder")
+                    stat_profit = graded_df.groupby('Stat').agg(
+                        Net_Profit=('Profit_Per_Bet', 'sum'),
+                        Bets=('Result', 'count'),
+                        Wins=('Result', lambda x: (x == 'Win').sum())
+                    ).reset_index()
+                    stat_profit['Win_Rate'] = (stat_profit['Wins'] / stat_profit['Bets'] * 100).round(1)
+                    
+                    bar_chart = alt.Chart(stat_profit).mark_bar(cornerRadiusEnd=4).encode(
+                        y=alt.Y('Stat:N', sort='-x', title=None, axis=alt.Axis(labelLimit=120)),
+                        x=alt.X('Net_Profit:Q', title='Net Profit ($)'),
+                        color=alt.condition(alt.datum.Net_Profit > 0, alt.value('#00c853'), alt.value('#ff0055')),
+                        tooltip=[
+                            alt.Tooltip('Stat:N', title='Market'),
+                            alt.Tooltip('Net_Profit:Q', title='Net Profit', format='+.2f'),
+                            alt.Tooltip('Win_Rate:Q', title='Win Rate (%)', format='.1f'),
+                            alt.Tooltip('Bets:Q', title='Volume')
+                        ]
+                    ).properties(height=280, background='transparent').configure_view(strokeWidth=0).configure_axis(gridColor='#1e293b', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc')
+                    st.altair_chart(bar_chart, use_container_width=True)
+                
                 st.markdown("---")
-
-                if total >= 5:
-                    bad_beat_rate  = len(bad_beats)  / total
-                    blowout_rate   = len(blowouts)   / total
-
-                    if bad_beat_rate >= 0.50:
-                        st.success("✅ **Your model is working.** Over half your losses are bad beats — the direction was right and you ran into variance. Increase volume on high-conviction setups rather than changing the model.")
-                    if blowout_rate >= 0.35:
-                        blowout_stats = pd.Series([m['stat'] for m in blowouts]).value_counts()
-                        top_blowout_stat = blowout_stats.index[0] if not blowout_stats.empty else "Unknown"
-                        st.warning(f"⚠️ **High blowout rate ({blowout_rate*100:.0f}%).** Most blowout misses cluster on **{top_blowout_stat}**. This suggests a model blind spot — likely minute volatility or lineup changes that the archetype engine isn't catching. Consider raising the edge threshold for this stat type in `PASS_THRESHOLDS`.")
-
-                try:
-                    elite_losses = [m for m in miss_types if int(float(m.get('score', 0) or 0)) >= 70]
-                    if elite_losses:
-                        el_blowouts = [m for m in elite_losses if "BLOWOUT" in m['type']]
-                        st.markdown(f"**🎯 High-Score Losses (Setup ≥ 70):** {len(elite_losses)} bet(s) with SOLID/ELITE scores still lost. " + (f"**{len(el_blowouts)} were blowout misses** — investigate these manually for lineup/injury patterns." if el_blowouts else "Most were bad beats or tight misses — expected at this confidence level."))
-                except: pass
-
-                if miss_types:
-                    loss_by_stat = pd.Series([m['stat'] for m in miss_types]).value_counts()
-                    if not loss_by_stat.empty:
-                        st.markdown("**📉 Most Frequent Loss Markets:**")
-                        for stat_name, cnt in loss_by_stat.head(3).items():
-                            pct = cnt / total * 100
-                            st.markdown(f"&nbsp;&nbsp;• **{stat_name}**: {cnt} losses ({pct:.0f}% of all losses)", unsafe_allow_html=True)
-                            
-        st.markdown("#### 🎫 Your Bet Slips")
-
-        ROI_PAGE_SIZE = 25
-        total_slips = len(ledger_df)
-        slips_to_render = ledger_df.reset_index().iloc[::-1].head(ROI_PAGE_SIZE)
-
-        if total_slips > ROI_PAGE_SIZE:
-            st.caption(f"📋 Showing most recent {ROI_PAGE_SIZE} of {total_slips} slips. Grade older bets via Auto-Grade.")
-
-        for i, row in slips_to_render.iterrows():
-            status = str(row.get('Result', 'Pending')).strip()
-            if status == 'Win': b_color = "#00c853"
-            elif status == 'Loss': b_color = "#ff0055"
-            elif status == 'Void': b_color = "#FFD700"
-            else: b_color = "#3b82f6"
-
-            league = row.get('League', 'N/A')
-            date = row.get('Date', 'N/A')
-            odds = row.get('Odds', 'N/A')
-            player = row.get('Player', 'Unknown')
-            stat = row.get('Stat', '')
-            vote = row.get('Vote', '')
-            line = row.get('Line', '')
-            proj = row.get('Proj', 'N/A')
-
-            is_boosted = str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True
-            boost_html = '<span style="color: #f59e0b; font-size: 10px; font-weight: 900; letter-spacing: 1px;">🚀 BOOSTED</span> &nbsp;' if is_boosted else ''
-
-            raw_score = row.get('Setup_Score', 0)
-            try: setup_score_val = int(float(raw_score))
-            except: setup_score_val = 0
-
-            if setup_score_val >= 75: score_color, score_label = "#00E676", "ELITE"
-            elif setup_score_val >= 55: score_color, score_label = "#FFD700", "SOLID"
-            elif setup_score_val >= 35: score_color, score_label = "#f59e0b", "MARGINAL"
-            else: score_color, score_label = "#94a3b8", "WEAK"
-
-            score_html = (f"<span style='color:{score_color}; font-weight:900;'>⚡ {setup_score_val}/100</span> <span style='color:{score_color}; font-size:10px; font-weight:bold;'>{score_label}</span>") if setup_score_val > 0 else ""
-            
-            if stat in ["Moneyline", "Spread", "Total (O/U)"]:
-                market_html = f"<b>{player}</b> ({stat} {line})"
-                proj_html = "AI Proj: <span style='color: #00E5FF; font-weight: bold;'>Bypassed</span>"
-            else:
-                market_html = f"<b>{player}</b> ({stat} {vote} {line})"
-                proj_html = f"🤖 AI Proj: <span style='color: #00E5FF; font-weight: bold;'>{proj}</span>"
-
-            actual_raw = str(row.get('Actual', '')).strip()
-            
-            # 🟢 NEW: INJECT ACTUAL STATS BELOW PROJECTION
-            if actual_raw not in ['', 'nan', 'None']:
-                proj_html += f"<br> Actual: <span style='color: #FFD700; font-weight: bold;'>{actual_raw}</span>"
-            elif status == 'Pending':
-                proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>Pending</span>"
-            else:
-                proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>N/A (Manual)</span>"
-
-            has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
-            
-            if has_autopsy: sc1, sc2 = st.columns([2.4, 1.6]) 
-            else: sc1, sc2 = st.columns([4, 1])     
-
-            shield_url = LEAGUE_SHIELDS.get(league, "")
-            league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
-
-            with sc1:
-                raw_ai = row.get('Win_Prob', 0)
-                raw_user = row.get('User_Prob', '')
-                try: ai_prob_str = f"{float(raw_ai if str(raw_ai).strip() != '' else 0)*100:.1f}%"
-                except: ai_prob_str = "N/A"
-                try: user_prob_str = f"{float(raw_user if str(raw_user).strip() != '' else raw_ai)*100:.1f}%"
-                except: user_prob_str = "N/A"
-
-                st.markdown(f"""
-                <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px; height: 90%;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
-                        <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
-                        <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
-                        <div style="line-height: 1.5;">{proj_html}</div> 
-                        <div style="font-size: 11px; text-align: right; line-height: 1.5;">
-                            🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
-                            👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
-                       </div>
-                   </div>
-                    <div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            with sc2:
-                if has_autopsy:
-                    miss_type, abs_miss, likely_cause, miss_color = classify_miss(row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''), row.get('Actual_Mins', None), row.get('Actual_Fouls', None))
-                    if miss_type:
-                        proj_val = row.get('Proj', 'N/A')
-                        line_val = row.get('Line', 'N/A')
-                        try: autopsy_score_val = int(float(row.get('Setup_Score', 0)))
-                        except: autopsy_score_val = 0
-                            
-                        autopsy_score_label = ("ELITE" if autopsy_score_val >= 75 else "SOLID" if autopsy_score_val >= 55 else "MARGINAL"  if autopsy_score_val >= 35 else "WEAK")
-                        try: 
-                            prob_val = float(row.get('Win_Prob', 0))
-                            prob_str = f"{prob_val * 100:.1f}%" if prob_val <= 1.0 else f"{prob_val:.1f}%"
-                        except: 
-                            prob_str = "N/A"
-
-                        autopsy_html = (f'<div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.4);">'
-                            f'<div style="font-size: 13px; font-weight: 900; color: {miss_color}; margin-bottom: 10px; letter-spacing: 0.5px; display: flex; justify-content: space-between;">'
-                            f'<span>{miss_type}</span> <span style="color:#94a3b8; font-size:10px; font-weight:400; letter-spacing: 0px;">Miss: {abs_miss} units</span></div>'
-                            f'<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px; text-align: center;">'
-                            f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
-                            f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Proj</div>'
-                            f'<div style="color: #00E5FF; font-weight: bold; font-size: 15px;">{proj_val}</div></div>'
-                            f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
-                            f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Line</div>'
-                            f'<div style="color: #FFD700; font-weight: bold; font-size: 15px;">{line_val}</div></div>'
-                            f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
-                            f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Actual</div>'
-                            f'<div style="color: {miss_color}; font-weight: bold; font-size: 15px;">{actual_raw}</div></div></div>'
-                            f'<div style="display:flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-bottom: 10px;">'
-                            f'<div>Score: <span style="color:#fff; font-weight:bold;">{autopsy_score_val}/100 ({autopsy_score_label})</span></div>'
-                            f'<div>Prob: <span style="color:#fff; font-weight:bold;">{prob_str}</span></div></div></div>'
-                        )
-                        st.markdown(autopsy_html, unsafe_allow_html=True)
-
-                        if st.button("🧠 Run Deep AI Autopsy", key=f"deep_auto_roi_{orig_idx}_{player}", use_container_width=True):
-                            with st.spinner("CFO & COO reviewing the tape..."):
-                                # Pack the evidence
-                                context = f"Player: {player}\nMarket: {stat} (Line: {line_val})\nBet: {vote}\n"
-                                context += f"AI Proj: {proj_val} | Actual Result: {actual_raw}\n"
-                                if row.get('Actual_Mins'): context += f"Minutes Played: {row.get('Actual_Mins')}\n"
-                                if row.get('Actual_Fouls') != "": context += f"Personal Fouls: {row.get('Actual_Fouls')}\n"
-                                context += f"Miss Classification: {miss_type} ({abs_miss} units)\n"
-                                context += f"Closing Line: {current_closing}\n"
-
-                                cfo_res, coo_res = run_dual_autopsy(context)
-
+    # ═══════════════════════════════════════════════
+                # 📊 CLV DASHBOARD
+                # ═══════════════════════════════════════════════
+                clv_eligible = graded_df[
+                    (graded_df['Closing_Line'].apply(lambda x: float(x) if str(x).strip() not in ['', '0', '0.0', 'nan'] else 0) > 0) &
+                    (graded_df['Vote'].isin(['OVER', 'UNDER']))
+                ].copy()
+    
+                if len(clv_eligible) >= 3:
+                    with st.expander(f"📊 Closing Line Value Report  ({len(clv_eligible)} tracked bets)", expanded=False):
+    
+                        clv_results = []
+                        for _, cr in clv_eligible.iterrows():
+                            bet_clv, timing_clv, clv_rating, timing_rating = calculate_clv(
+                                cr.get('Line', 0), cr.get('Closing_Line', 0),
+                                cr.get('Opening_Line', 0), cr.get('Vote', '')
+                            )
+                            if bet_clv is not None:
+                                clv_results.append({
+                                    'bet_clv': bet_clv,
+                                    'timing_clv': timing_clv,
+                                    'result': cr.get('Result', ''),
+                                    'clv_label': clv_rating[0],
+                                    'timing_label': timing_rating[0]
+                                })
+    
+                        if clv_results:
+                            avg_clv    = sum(r['bet_clv'] for r in clv_results) / len(clv_results)
+                            avg_timing = sum(r['timing_clv'] for r in clv_results) / len(clv_results)
+                            beat_close = sum(1 for r in clv_results if r['bet_clv'] > 0)
+                            beat_open  = sum(1 for r in clv_results if r['timing_clv'] > 0)
+    
+                            cv1, cv2, cv3, cv4 = st.columns(4)
+                            cv1.metric("Avg CLV vs Close", f"{avg_clv:+.2f}",
+                                       help="Positive = your number was better than where the line settled")
+                            cv2.metric("Avg Timing vs Open", f"{avg_timing:+.2f}",
+                                       help="Positive = you bet before sharp money moved the line against you")
+                            cv3.metric("Beat Closing Line", f"{beat_close}/{len(clv_results)}",
+                                       f"{beat_close/len(clv_results)*100:.0f}%", delta_color="off")
+                            cv4.metric("Beat Opening Line", f"{beat_open}/{len(clv_results)}",
+                                       f"{beat_open/len(clv_results)*100:.0f}%", delta_color="off")
+    
+                            st.markdown("---")
+    
+                            # Interpretation
+                            if avg_clv >= 0.5:
+                                st.success(
+                                    f"✅ **Positive CLV detected (+{avg_clv:.2f} avg).** "
+                                    f"Your number consistently beats the closing line — this is the most reliable "
+                                    f"long-term signal that your edge is real and not variance."
+                                )
+                            elif avg_clv <= -0.5:
+                                st.warning(
+                                    f"⚠️ **Negative CLV ({avg_clv:.2f} avg).** "
+                                    f"You're consistently getting worse numbers than where the market settles. "
+                                    f"This suggests you're betting too late after sharp money has already moved lines. "
+                                    f"Try locking bets earlier in the day."
+                                )
+                            else:
+                                st.info(
+                                    f"📊 **Neutral CLV ({avg_clv:+.2f} avg).** "
+                                    f"You're roughly matching the market. Add more closing lines to get a clearer signal."
+                                )
+    
+                            if avg_timing >= 0.5:
+                                st.success(
+                                    f"⚡ **Strong timing (+{avg_timing:.2f} avg vs opener).** "
+                                    f"You're getting in before the line moves against you — "
+                                    f"this means you're identifying value before the broader market does."
+                                )
+                            elif avg_timing <= -0.5:
+                                st.warning(
+                                    f"🛑 **Chasing lines ({avg_timing:.2f} avg vs opener).** "
+                                    f"You're consistently betting after the line has already moved against your side. "
+                                    f"Sync odds earlier and lock bets before sharp action hits."
+                                )            
+    # --- NEW SYNDICATE HALL OF FAME ---
+                def render_syndicate_hall_of_fame(df):
+                    # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/STAT
+                    grouped = df.groupby(['Player', 'Stat']).agg(
+                        Total_Bets=('Result', 'count'),
+                        Wins=('Result', lambda x: (x == 'Win').sum()),
+                        Net_Profit=('Profit_Per_Bet', 'sum')
+                    ).reset_index()
+    
+                    # 2. CALCULATE ADVANCED METRICS (Win Rate & ROI)
+                    grouped['Total_Risk'] = grouped['Total_Bets'] * 100
+                    grouped['Win_Rate'] = (grouped['Wins'] / grouped['Total_Bets']) * 100
+                    grouped['ROI'] = (grouped['Net_Profit'] / grouped['Total_Risk']) * 100
+    
+                    # 3. APPLY MINIMUM THRESHOLD FILTER
+                    MIN_BETS = 5
+                    qualified_props = grouped[grouped['Total_Bets'] >= MIN_BETS]
+    
+                    # 4. SPLIT BY PROFITABILITY SO NO ONE APPEARS ON BOTH LISTS
+                    profitable = qualified_props[qualified_props['ROI'] > 0]
+                    unprofitable = qualified_props[qualified_props['ROI'] < 0]
+    
+                    # 5. SORT BY ROI (Expanded to 6 items to perfectly fill a 3x2 grid)
+                    hall_of_fame = profitable.sort_values(by='ROI', ascending=False).head(6)
+                    blacklist = unprofitable.sort_values(by='ROI', ascending=True).head(6)
+    
+                    # --- STREAMLIT UI RENDERING ---
+                    st.markdown("#### 👑 Syndicate Hall of Fame & Shame")
+    
+                    # ROW 1: THE HALL OF FAME
+                    st.markdown("<h4 style='color: #00FF00; font-size: 14px; margin-top: 10px;'>🏆 MOST PROFITABLE (By ROI)</h4>", unsafe_allow_html=True)
+                    if hall_of_fame.empty:
+                        st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+                    else:
+                        cols = st.columns(3)
+                        for i, (_, row) in enumerate(hall_of_fame.iterrows()):
+                            with cols[i % 3]:
                                 st.markdown(f"""
-                                <div style="background-color: #1e293b; border-left: 3px solid #ff0055; padding: 12px; border-radius: 6px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                                    <div style="font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">👔 Claude (CFO - Math & CLV)</div>
-                                    <div style="font-size: 12px; color: #f8fafc; margin-bottom: 12px; line-height: 1.4;">{cfo_res}</div>
-                                    <div style="font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">📋 Gemini (COO - Game Flow)</div>
-                                    <div style="font-size: 12px; color: #f8fafc; line-height: 1.4;">{coo_res}</div>
+                                <div style="border-left: 3px solid #00E676; padding-left: 10px; margin-bottom: 12px; background-color: rgba(0, 230, 118, 0.05); border-radius: 4px; padding-top: 8px; padding-bottom: 8px;">
+                                    <div style="font-weight: 900; font-size: 14px; margin-bottom: 2px; color: #f8fafc; letter-spacing: 0.5px;">
+                                        {row['Player']} <span style="font-weight: normal; color: #94a3b8; font-size: 12px;">({row['Stat']})</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase;">
+                                        {row['Total_Bets']} bets &nbsp;|&nbsp; {row['Win_Rate']:.0f}% Win
+                                    </div>
+                                    <div style="color: #00E676; font-weight: 900; font-size: 16px;">
+                                        +{row['ROI']:.1f}% <span style="font-size: 12px; color: #94a3b8; font-weight: normal; margin-left: 4px;">(+${row['Net_Profit']:.2f})</span>
+                                    </div>
                                 </div>
                                 """, unsafe_allow_html=True)
+    
+                    # ROW 2: THE BLACKLIST
+                    st.markdown("<h4 style='color: #FF004D; font-size: 14px; margin-top: 15px;'>🗑️ THE BLACKLIST (Biggest Leaks)</h4>", unsafe_allow_html=True)
+                    if blacklist.empty:
+                        st.info(f"Awaiting data. Need at least {MIN_BETS} bets on a specific prop to rank.")
+                    else:
+                        cols = st.columns(3)
+                        for i, (_, row) in enumerate(blacklist.iterrows()):
+                            with cols[i % 3]:
+                                st.markdown(f"""
+                                <div style="border-left: 3px solid #ff0055; padding-left: 10px; margin-bottom: 12px; background-color: rgba(255, 0, 85, 0.05); border-radius: 4px; padding-top: 8px; padding-bottom: 8px;">
+                                    <div style="font-weight: 900; font-size: 14px; margin-bottom: 2px; color: #f8fafc; letter-spacing: 0.5px;">
+                                        {row['Player']} <span style="font-weight: normal; color: #94a3b8; font-size: 12px;">({row['Stat']})</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase;">
+                                        {row['Total_Bets']} bets &nbsp;|&nbsp; {row['Win_Rate']:.0f}% Win
+                                    </div>
+                                    <div style="color: #ff0055; font-weight: 900; font-size: 16px;">
+                                        {row['ROI']:.1f}% <span style="font-size: 12px; color: #94a3b8; font-weight: normal; margin-left: 4px;">(${row['Net_Profit']:.2f})</span>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
+    
+                # 🚀 Execute the function using your actual dataframe!
+                render_syndicate_hall_of_fame(graded_df)
+            # ═══════════════════════════════════════════════
+            # 🔬 LOSS PATTERN REPORT
+            # ═══════════════════════════════════════════════
+            losses_with_actual = ledger_df[
+                (ledger_df['Result'] == 'Loss') &
+                (ledger_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
+            ]
+    
+            if len(losses_with_actual) >= 3:
+                with st.expander(f"🔬 Loss Pattern Report  ({len(losses_with_actual)} analysed losses)", expanded=False):
+    
+                    miss_types = []
+                    for _, lr in losses_with_actual.iterrows():
+                        mt, dist, _, _ = classify_miss(lr.get('Proj', 0), lr.get('Line', 0), lr.get('Actual', 0), lr.get('Vote', ''), lr.get('Actual_Mins', None), lr.get('Actual_Fouls', None))
+                        if mt: miss_types.append({
+                            'type': mt, 'dist': dist,
+                            'stat': lr.get('Stat', ''),
+                            'league': lr.get('League', ''),
+                            'score': lr.get('Setup_Score', 0)
+                        })
+    
+                    total = len(miss_types)
+                    bad_beats  = [m for m in miss_types if "BAD BEAT"  in m['type']]
+                    model_miss = [m for m in miss_types if "MODEL"     in m['type']]
+                    blowouts   = [m for m in miss_types if "BLOWOUT"   in m['type']]
+    
+                    pr1, pr2, pr3 = st.columns(3)
+                    pr1.metric("😔 Bad Beats", f"{len(bad_beats)}/{total}", f"{len(bad_beats)/total*100:.0f}% of losses", delta_color="off")
+                    pr2.metric("⚠️ Model Misses", f"{len(model_miss)}/{total}", f"{len(model_miss)/total*100:.0f}% of losses", delta_color="off")
+                    pr3.metric("💥 Blowout Misses", f"{len(blowouts)}/{total}", f"{len(blowouts)/total*100:.0f}% of losses", delta_color="off")
+                    st.markdown("---")
+    
+                    if total >= 5:
+                        bad_beat_rate  = len(bad_beats)  / total
+                        blowout_rate   = len(blowouts)   / total
+    
+                        if bad_beat_rate >= 0.50:
+                            st.success("✅ **Your model is working.** Over half your losses are bad beats — the direction was right and you ran into variance. Increase volume on high-conviction setups rather than changing the model.")
+                        if blowout_rate >= 0.35:
+                            blowout_stats = pd.Series([m['stat'] for m in blowouts]).value_counts()
+                            top_blowout_stat = blowout_stats.index[0] if not blowout_stats.empty else "Unknown"
+                            st.warning(f"⚠️ **High blowout rate ({blowout_rate*100:.0f}%).** Most blowout misses cluster on **{top_blowout_stat}**. This suggests a model blind spot — likely minute volatility or lineup changes that the archetype engine isn't catching. Consider raising the edge threshold for this stat type in `PASS_THRESHOLDS`.")
+    
+                    try:
+                        elite_losses = [m for m in miss_types if int(float(m.get('score', 0) or 0)) >= 70]
+                        if elite_losses:
+                            el_blowouts = [m for m in elite_losses if "BLOWOUT" in m['type']]
+                            st.markdown(f"**🎯 High-Score Losses (Setup ≥ 70):** {len(elite_losses)} bet(s) with SOLID/ELITE scores still lost. " + (f"**{len(el_blowouts)} were blowout misses** — investigate these manually for lineup/injury patterns." if el_blowouts else "Most were bad beats or tight misses — expected at this confidence level."))
+                    except: pass
+    
+                    if miss_types:
+                        loss_by_stat = pd.Series([m['stat'] for m in miss_types]).value_counts()
+                        if not loss_by_stat.empty:
+                            st.markdown("**📉 Most Frequent Loss Markets:**")
+                            for stat_name, cnt in loss_by_stat.head(3).items():
+                                pct = cnt / total * 100
+                                st.markdown(f"&nbsp;&nbsp;• **{stat_name}**: {cnt} losses ({pct:.0f}% of all losses)", unsafe_allow_html=True)
+                            
+        with roi_tab_slips:
+            st.markdown("#### 🎫 Your Bet Slips")
+            
+            ROI_PAGE_SIZE = 25
+            total_slips = len(ledger_df)
+            slips_to_render = ledger_df.reset_index().iloc[::-1].head(ROI_PAGE_SIZE)
+    
+            if total_slips > ROI_PAGE_SIZE:
+                st.caption(f"📋 Showing most recent {ROI_PAGE_SIZE} of {total_slips} slips. Grade older bets via Auto-Grade.")
+    
+            for i, row in slips_to_render.iterrows():
+                status = str(row.get('Result', 'Pending')).strip()
+                if status == 'Win': b_color = "#00c853"
+                elif status == 'Loss': b_color = "#ff0055"
+                elif status == 'Void': b_color = "#FFD700"
+                else: b_color = "#3b82f6"
+    
+                league = row.get('League', 'N/A')
+                date = row.get('Date', 'N/A')
+                odds = row.get('Odds', 'N/A')
+                player = row.get('Player', 'Unknown')
+                stat = row.get('Stat', '')
+                vote = row.get('Vote', '')
+                line = row.get('Line', '')
+                proj = row.get('Proj', 'N/A')
+    
+                is_boosted = str(row.get('Is_Boosted', 'False')).upper() == 'TRUE' or row.get('Is_Boosted') is True
+                boost_html = '<span style="color: #f59e0b; font-size: 10px; font-weight: 900; letter-spacing: 1px;">🚀 BOOSTED</span> &nbsp;' if is_boosted else ''
+    
+                raw_score = row.get('Setup_Score', 0)
+                try: setup_score_val = int(float(raw_score))
+                except: setup_score_val = 0
+    
+                if setup_score_val >= 75: score_color, score_label = "#00E676", "ELITE"
+                elif setup_score_val >= 55: score_color, score_label = "#FFD700", "SOLID"
+                elif setup_score_val >= 35: score_color, score_label = "#f59e0b", "MARGINAL"
+                else: score_color, score_label = "#94a3b8", "WEAK"
+    
+                score_html = (f"<span style='color:{score_color}; font-weight:900;'>⚡ {setup_score_val}/100</span> <span style='color:{score_color}; font-size:10px; font-weight:bold;'>{score_label}</span>") if setup_score_val > 0 else ""
+                
+                if stat in ["Moneyline", "Spread", "Total (O/U)"]:
+                    market_html = f"<b>{player}</b> ({stat} {line})"
+                    proj_html = "AI Proj: <span style='color: #00E5FF; font-weight: bold;'>Bypassed</span>"
                 else:
-                    st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+                    market_html = f"<b>{player}</b> ({stat} {vote} {line})"
+                    proj_html = f"🤖 AI Proj: <span style='color: #00E5FF; font-weight: bold;'>{proj}</span>"
+    
+                actual_raw = str(row.get('Actual', '')).strip()
+                
+                # 🟢 NEW: INJECT ACTUAL STATS BELOW PROJECTION
+                if actual_raw not in ['', 'nan', 'None']:
+                    proj_html += f"<br> Actual: <span style='color: #FFD700; font-weight: bold;'>{actual_raw}</span>"
+                elif status == 'Pending':
+                    proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>Pending</span>"
+                else:
+                    proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>N/A (Manual)</span>"
+    
+                has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
+                
+                if has_autopsy: sc1, sc2 = st.columns([2.4, 1.6]) 
+                else: sc1, sc2 = st.columns([4, 1])     
+    
+                shield_url = LEAGUE_SHIELDS.get(league, "")
+                league_icon = f"<img src='{shield_url}' width='16' style='vertical-align:middle; margin-right:4px; padding-bottom:2px;'>" if shield_url else "🛡️"
+    
+                with sc1:
+                    raw_ai = row.get('Win_Prob', 0)
+                    raw_user = row.get('User_Prob', '')
+                    try: ai_prob_str = f"{float(raw_ai if str(raw_ai).strip() != '' else 0)*100:.1f}%"
+                    except: ai_prob_str = "N/A"
+                    try: user_prob_str = f"{float(raw_user if str(raw_user).strip() != '' else raw_ai)*100:.1f}%"
+                    except: user_prob_str = "N/A"
+    
+                    st.markdown(f"""
+                    <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px; height: 90%;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                            <div style="color: #94a3b8; font-size: 12px; font-weight: bold; letter-spacing: 0.5px; display: flex; align-items: center;">{league_icon} {league} &nbsp;•&nbsp; {date}</div>
+                            <div style="color: #fff; font-size: 14px; font-weight: 900;">{boost_html}{odds}</div>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <div style="color: #f8fafc; font-size: 14px; font-weight: 500;"><span style="color: #f59e0b; margin-right: 6px;">●</span> {market_html}</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 12px;">
+                            <div style="line-height: 1.5;">{proj_html}</div> 
+                            <div style="font-size: 11px; text-align: right; line-height: 1.5;">
+                                🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
+                                👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
+                           </div>
+                       </div>
+                        <div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
-                opts = ["Pending", "Win", "Loss", "Void"]
-                start_idx = opts.index(status) if status in opts else 0
-                new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
-
-                # ✅ CLV: Closing line entry — only show for graded prop bets
-                closing_raw = row.get('Closing_Line', 0)
-                try: current_closing = float(closing_raw) if str(closing_raw).strip() not in ['', '0', '0.0', 'nan'] else 0.0
-                except: current_closing = 0.0
-
-                if status in ['Win', 'Loss'] and stat not in ["Moneyline", "Spread", "Total (O/U)"]:
-                    bet_line_val = row.get('Line', 0)
-                    try: bet_line_val = float(bet_line_val)
-                    except: bet_line_val = 0.0
-
-                    closing_input = st.number_input(
-                        "Close 📉",
-                        value=current_closing if current_closing > 0 else bet_line_val,
-                        step=0.5,
-                        key=f"close_line_{i}",
-                        help="Enter the line where this prop closed at tip-off"
-                    )
-
-                    if closing_input != current_closing and closing_input > 0:
-                        if st.button("📊 Save CLV", key=f"save_clv_{i}", use_container_width=True):
+                with sc2:
+                    if has_autopsy:
+                        miss_type, abs_miss, likely_cause, miss_color = classify_miss(row.get('Proj', 0), row.get('Line', 0), actual_raw, row.get('Vote', ''), row.get('Actual_Mins', None), row.get('Actual_Fouls', None))
+                        if miss_type:
+                            proj_val = row.get('Proj', 'N/A')
+                            line_val = row.get('Line', 'N/A')
+                            try: autopsy_score_val = int(float(row.get('Setup_Score', 0)))
+                            except: autopsy_score_val = 0
+                                
+                            autopsy_score_label = ("ELITE" if autopsy_score_val >= 75 else "SOLID" if autopsy_score_val >= 55 else "MARGINAL"  if autopsy_score_val >= 35 else "WEAK")
+                            try: 
+                                prob_val = float(row.get('Win_Prob', 0))
+                                prob_str = f"{prob_val * 100:.1f}%" if prob_val <= 1.0 else f"{prob_val:.1f}%"
+                            except: 
+                                prob_str = "N/A"
+    
+                            autopsy_html = (f'<div style="background-color: #0f172a; border: 1px solid {miss_color}; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.4);">'
+                                f'<div style="font-size: 13px; font-weight: 900; color: {miss_color}; margin-bottom: 10px; letter-spacing: 0.5px; display: flex; justify-content: space-between;">'
+                                f'<span>{miss_type}</span> <span style="color:#94a3b8; font-size:10px; font-weight:400; letter-spacing: 0px;">Miss: {abs_miss} units</span></div>'
+                                f'<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px; text-align: center;">'
+                                f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
+                                f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Proj</div>'
+                                f'<div style="color: #00E5FF; font-weight: bold; font-size: 15px;">{proj_val}</div></div>'
+                                f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
+                                f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Line</div>'
+                                f'<div style="color: #FFD700; font-weight: bold; font-size: 15px;">{line_val}</div></div>'
+                                f'<div style="background: #1e293b; padding: 6px 2px; border-radius: 4px;">'
+                                f'<div style="font-size: 9px; text-transform: uppercase; font-weight: bold; color:#94a3b8; margin-bottom:2px;">Actual</div>'
+                                f'<div style="color: {miss_color}; font-weight: bold; font-size: 15px;">{actual_raw}</div></div></div>'
+                                f'<div style="display:flex; justify-content: space-between; font-size: 10px; color: #94a3b8; margin-bottom: 10px;">'
+                                f'<div>Score: <span style="color:#fff; font-weight:bold;">{autopsy_score_val}/100 ({autopsy_score_label})</span></div>'
+                                f'<div>Prob: <span style="color:#fff; font-weight:bold;">{prob_str}</span></div></div></div>'
+                            )
+                            st.markdown(autopsy_html, unsafe_allow_html=True)
+    
+                            if st.button("🧠 Run Deep AI Autopsy", key=f"deep_auto_roi_{orig_idx}_{player}", use_container_width=True):
+                                with st.spinner("CFO & COO reviewing the tape..."):
+                                    # Pack the evidence
+                                    context = f"Player: {player}\nMarket: {stat} (Line: {line_val})\nBet: {vote}\n"
+                                    context += f"AI Proj: {proj_val} | Actual Result: {actual_raw}\n"
+                                    if row.get('Actual_Mins'): context += f"Minutes Played: {row.get('Actual_Mins')}\n"
+                                    if row.get('Actual_Fouls') != "": context += f"Personal Fouls: {row.get('Actual_Fouls')}\n"
+                                    context += f"Miss Classification: {miss_type} ({abs_miss} units)\n"
+                                    context += f"Closing Line: {current_closing}\n"
+    
+                                    cfo_res, coo_res = run_dual_autopsy(context)
+    
+                                    st.markdown(f"""
+                                    <div style="background-color: #1e293b; border-left: 3px solid #ff0055; padding: 12px; border-radius: 6px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                                        <div style="font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">👔 Claude (CFO - Math & CLV)</div>
+                                        <div style="font-size: 12px; color: #f8fafc; margin-bottom: 12px; line-height: 1.4;">{cfo_res}</div>
+                                        <div style="font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 4px; text-transform: uppercase;">📋 Gemini (COO - Game Flow)</div>
+                                        <div style="font-size: 12px; color: #f8fafc; line-height: 1.4;">{coo_res}</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                    else:
+                        st.markdown("<div style='height: 32px;'></div>", unsafe_allow_html=True)
+                        
+                    opts = ["Pending", "Win", "Loss", "Void"]
+                    start_idx = opts.index(status) if status in opts else 0
+                    new_val = st.selectbox("Result", opts, index=start_idx, key=f"res_roi_{i}", label_visibility="collapsed")
+    
+                    # ✅ CLV: Closing line entry — only show for graded prop bets
+                    closing_raw = row.get('Closing_Line', 0)
+                    try: current_closing = float(closing_raw) if str(closing_raw).strip() not in ['', '0', '0.0', 'nan'] else 0.0
+                    except: current_closing = 0.0
+    
+                    if status in ['Win', 'Loss'] and stat not in ["Moneyline", "Spread", "Total (O/U)"]:
+                        bet_line_val = row.get('Line', 0)
+                        try: bet_line_val = float(bet_line_val)
+                        except: bet_line_val = 0.0
+    
+                        closing_input = st.number_input(
+                            "Close 📉",
+                            value=current_closing if current_closing > 0 else bet_line_val,
+                            step=0.5,
+                            key=f"close_line_{i}",
+                            help="Enter the line where this prop closed at tip-off"
+                        )
+    
+                        if closing_input != current_closing and closing_input > 0:
+                            if st.button("📊 Save CLV", key=f"save_clv_{i}", use_container_width=True):
+                                orig_idx = int(row['index'])
+                                # Column P = index 16 (0-based), row offset +2 for header
+                                target_row = orig_idx + 2
+                                gc = get_gc()
+                                if gc:
+                                    ws = gc.open("B2TF_Database").worksheet("ROI_Ledger")
+                                    ws.update_acell(f"P{target_row}", closing_input)
+                                load_sheet_df.clear()
+                                load_ledger.clear()
+                                st.success("CLV saved!")
+                                time.sleep(1)
+                                st.rerun()
+    
+                    if new_val != status:
+                        if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
                             orig_idx = int(row['index'])
-                            # Column P = index 16 (0-based), row offset +2 for header
                             target_row = orig_idx + 2
                             gc = get_gc()
                             if gc:
                                 ws = gc.open("B2TF_Database").worksheet("ROI_Ledger")
-                                ws.update_acell(f"P{target_row}", closing_input)
+                                ws.update_acell(f"J{target_row}", new_val)
                             load_sheet_df.clear()
                             load_ledger.clear()
-                            st.success("CLV saved!")
+                            st.success("Grade locked!")
                             time.sleep(1)
                             st.rerun()
-
-                if new_val != status:
-                    if st.button("💾 Save", key=f"save_roi_{i}", use_container_width=True):
-                        orig_idx = int(row['index'])
-                        target_row = orig_idx + 2
-                        gc = get_gc()
-                        if gc:
-                            ws = gc.open("B2TF_Database").worksheet("ROI_Ledger")
-                            ws.update_acell(f"J{target_row}", new_val)
-                        load_sheet_df.clear()
-                        load_ledger.clear()
-                        st.success("Grade locked!")
-                        time.sleep(1)
-                        st.rerun()
 with t_wallet:
     st.markdown("### 💵 Multi-Sportsbook Wallet")
     st.caption("Track balances across different apps.")
