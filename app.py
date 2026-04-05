@@ -3175,6 +3175,16 @@ with t_roi:
             # Calculate both sides
             m_wins, m_tot, m_prof, m_roi = calc_subset_metrics(df_machine)
             h_wins, h_tot, h_prof, h_roi = calc_subset_metrics(df_man)
+            o_wins, o_tot, o_prof, o_roi = calc_subset_metrics(graded_df)
+
+            # 📊 Render Overall Totals
+            st.markdown("### 📊 Syndicate Overall Performance")
+            om1, om2, om3, om4 = st.columns(4)
+            om1.metric("Total Graded Picks", f"{o_tot}")
+            om2.metric("Win Rate", f"{(o_wins/o_tot*100) if o_tot > 0 else 0.0:.1f}%", f"{o_wins}-{o_tot-o_wins}")
+            om3.metric("Net Profit (1U = $100)", f"${o_prof:+.2f}")
+            om4.metric("ROI (%)", f"{o_roi:+.1f}%")
+            st.markdown("<br>", unsafe_allow_html=True)
 
             # Render the Head-to-Head UI
             st.markdown("###  Man vs. Machine Performance")
