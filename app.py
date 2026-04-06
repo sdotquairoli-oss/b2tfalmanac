@@ -2381,7 +2381,10 @@ def render_syndicate_board(league_key):
                 c_proj = final_consensus
                 skynet_msg, skynet_color = skynet_data["msg"], skynet_data["color"]
     
-                if len(board) == 0: st.warning(f"⚠️ **Insufficient Data:** {target_player} has played fewer than 5 games this season.")
+                if len(board) == 0:
+                    actual_games = len(df_with_ml)
+                    req_games = 3 if (league_key == "MLB" and stat_type in ["Pitcher Strikeouts", "Pitcher Earned Runs"]) else 5
+                    st.warning(f"⚠️ **Insufficient Data:** {target_player} has only played {actual_games} game(s) so far. The model requires at least {req_games} to project safely.")
                 else:
                     df_with_ml['Residual'] = df_with_ml[s_col] - df_with_ml['AI_Proj']
                     residual_std = df_with_ml['Residual'].std()
