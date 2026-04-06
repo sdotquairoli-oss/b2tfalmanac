@@ -1233,7 +1233,9 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     df_ml = df.copy()
     archetype = get_player_archetype(df_ml, league)
 
-    if len(df_ml) < 5: 
+    is_pitcher = s_col in ["K", "ER"]
+    min_games_required = 3 if (league == "MLB" and is_pitcher) else 5
+    if len(df_ml) < min_games_required: 
         return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data"
 
     weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
@@ -1436,7 +1438,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
     ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
 
-    SAMPLE_GATES = {"NBA": {"min_games": 15, "min_recent": 5}, "NHL": {"min_games": 10, "min_recent": 3}, "MLB": {"min_games": 10, "min_recent": 4}}
+    SAMPLE_GATES = {"NBA": {"min_games": 15, "min_recent": 5}, "NHL": {"min_games": 10, "min_recent": 3}, "MLB": {"min_games": 10, "min_recent": 4}, "MLB_P": {"min_games": 3, "min_recent": 1}}
     gate = SAMPLE_GATES.get(league, {"min_games": 10, "min_recent": 3})
     recent_games = int((df_ml['Days_Ago'] <= 30).sum()) if 'Days_Ago' in df_ml.columns else len(df_ml)
     low_sample_warning = ""
