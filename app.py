@@ -1233,8 +1233,8 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     df_ml = df.copy()
     archetype = get_player_archetype(df_ml, league)
 
-    if len(df_ml) < 5:
-        return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data", "#94a3b8"
+    if len(df_ml) < 5: 
+        return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data"
 
     weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
     bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
@@ -1382,8 +1382,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     smart_base = (trend_proj * w_poi) + (stat_proj * w_rf) + (con_proj * w_xgb) + (base_proj * w_hgbr)
 
     # Context Guru applies the situational modifiers (defense, fatigue, home/away) to the Smart Base
-    context_mod = float(mod_val) * float(fatigue_val) * float(current_split_mod)
-    context_mod = float(np.clip(context_mod, 0.75, 1.15))
+    context_mod = mod_val * fatigue_val * current_split_mod
     guru_proj = smart_base * context_mod
 
     # ✅ TIER MISMATCH DECAY
@@ -1431,7 +1430,8 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ⚖️ Weight the final baseline: 50% pure meta-learner stats, 50% context-modified
     raw_consensus_base = (smart_base * 0.50) + (guru_proj * 0.50)
     raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
-    raw_consensus = float(raw_consensus) * 0.92
+    raw_consensus = raw_consensus * 0.92
+    raw_consensus = float(np.clip(raw_consensus, 0.0, 200.0)) * 0.92
 
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
     ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
