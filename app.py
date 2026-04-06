@@ -3336,8 +3336,155 @@ with t_roi:
                                     f"🛑 **Chasing lines ({avg_timing:.2f} avg vs opener).** "
                                     f"You're consistently betting after the line has already moved against your side. "
                                     f"Sync odds earlier and lock bets before sharp action hits."
-                                )            
-    # --- NEW SYNDICATE HALL OF FAME ---
+                                    
+            # ═══════════════════════════════════════════════
+            # 🎯 PROJECTION ACCURACY REPORT
+            # ═══════════════════════════════════════════════
+            accuracy_eligible = ledger_df[
+                (ledger_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False) &
+                (ledger_df['Proj'].astype(str).str.strip().isin(['', 'nan', 'None']) == False) &
+                (ledger_df['Stat'].isin(['Points', 'Rebounds', 'Assists', 'Hits', 
+                                          'Pitcher Strikeouts', 'Shots on Goal', 
+                                          'Goals', 'Threes Made']))
+            ].copy()
+            
+            accuracy_eligible['Proj'] = pd.to_numeric(accuracy_eligible['Proj'], errors='coerce')
+            accuracy_eligible['Actual'] = pd.to_numeric(accuracy_eligible['Actual'], errors='coerce')
+            accuracy_eligible['Line'] = pd.to_numeric(accuracy_eligible['Line'], errors='coerce')
+            accuracy_eligible = accuracy_eligible.dropna(subset=['Proj', 'Actual', 'Line'])
+            
+            if len(accuracy_eligible) >= 5:
+                with st.expander(f"🎯 Projection Accuracy Report ({len(accuracy_eligible)} graded projections)", expanded=False):
+                    
+                    # Core metrics
+                    accuracy_eligible['Proj_Error'] = accuracy_eligible['Proj'] - accuracy_eligible['Actual']
+                    accuracy_eligible['Abs_Error'] = accuracy_eligible['Proj_Error'].abs()
+                    accuracy_eligible['Pct_Error'] = (accuracy_eligible['Abs_Error'] / accuracy_eligible['Actual'].abs().replace(0, np.nan)) * 100
+                    
+                    # Did the model call the right direction vs line
+                    def model_direction_correct(row):
+                        try:
+                            if row['Proj'] >= row['Line'] and row['Actual'] >= row['Line']:
+                                return True   # Model said over, went over
+                            if row['Proj'] <= row['Line'] and row['Actual'] <= row['Line']:
+                                return True   # Model said under, went under
+                            return False
+                        except:
+                            return False
+                    
+                    accuracy_eligible['Direction_Correct'] = accuracy_eligible.apply(model_direction_correct, axis=1)
+                    
+                    overall_mae = accuracy_eligible['Abs_Error'].mean()
+                    overall_median = accuracy_eligible['Abs_Error'].median()
+                    direction_acc = accuracy_eligible['Direction_Correct'].mean() * 100
+                    within_2 = (accuracy_eligible['Abs_Error'] <= 2.0).mean() * 100
+                    within_5 = (accuracy_eligible['Abs_Error'] <= 5.0).mean() * 100
+                    
+                    # Top metrics
+                    ac1, ac2, ac3, ac4, ac5 = st.columns(5)
+                    ac1.metric("Avg Error (MAE)", f"{overall_mae:.2f} units")
+                    ac2.metric("Median Error", f"{overall_median:.2f} units")
+                    ac3.metric("Direction Accuracy", f"{direction_acc:.1f}%",
+                               help="% of time model projected the correct side of the line")
+                    ac4.metric("Within 2 Units", f"{within_2:.1f}%",
+                               help="% of projections within 2 units of actual")
+                    ac5.metric("Within 5 Units", f"{within_5:.1f}%")
+                    
+                    st.markdown("---")
+                    
+                    # Breakdown by stat type
+                    st.markdown("#### 📊 Accuracy by Stat Type")
+                    stat_accuracy = accuracy_eligible.groupby('Stat').agg(
+                        Count=('Abs_Error', 'count'),
+                        MAE=('Abs_Error', 'mean'),
+                        Median_Error=('Abs_Error', 'median'),
+                        Direction_Acc=('Direction_Correct', 'mean'),
+                        Within_2=('Abs_Error', lambda x: (x <= 2.0).mean() * 100)
+                    ).reset_index()
+                    stat_accuracy = stat_accuracy[stat_accuracy['Count'] >= 3].sort_values('MAE')
+                    stat_accuracy['Direction_Acc'] = (stat_accuracy['Direction_Acc'] * 100).round(1)
+                    stat_accuracy['MAE'] = stat_accuracy['MAE'].round(2)
+                    stat_accuracy['Median_Error'] = stat_accuracy['Median_Error'].round(2)
+                    stat_accuracy['Within_2'] = stat_accuracy['Within_2'].round(1)
+                    
+                    if not stat_accuracy.empty:
+                        st.dataframe(
+                            stat_accuracy.rename(columns={
+                                'Stat': 'Market',
+                                'Count': 'Graded',
+                                'MAE': 'Avg Error',
+                                'Median_Error': 'Median Error',
+                                'Direction_Acc': 'Direction % ✓',
+                                'Within_2': 'Within 2 Units %'
+                            }),
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                    
+                    st.markdown("---")
+                    
+                    # Projection vs Actual scatter insight
+                    st.markdown("#### 📈 Projection Bias Analysis")
+                    over_proj = (accuracy_eligible['Proj_Error'] > 0).mean() * 100
+                    under_proj = (accuracy_eligible['Proj_Error'] < 0).mean() * 100
+                    avg_bias = accuracy_eligible['Proj_Error'].mean()
+                    
+                    bias_color = "#f59e0b" if abs(avg_bias) > 1.0 else "#00E676"
+                    bias_label = "Overprojects" if avg_bias > 0 else "Underprojects"
+                    
+                    bc1, bc2, bc3 = st.columns(3)
+                    with bc1:
+                        st.markdown(f"""
+                        <div style="background-color: #1e293b; border-radius: 8px; 
+                             padding: 16px; text-align: center;">
+                            <div style="font-size: 11px; color: #94a3b8; 
+                                 text-transform: uppercase;">Model Projects Too High</div>
+                            <div style="font-size: 28px; font-weight: 900; 
+                                 color: #f59e0b;">{over_proj:.1f}%</div>
+                            <div style="font-size: 11px; color: #94a3b8;">of the time</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with bc2:
+                        st.markdown(f"""
+                        <div style="background-color: #1e293b; border-radius: 8px; 
+                             padding: 16px; text-align: center;">
+                            <div style="font-size: 11px; color: #94a3b8; 
+                                 text-transform: uppercase;">Avg Projection Bias</div>
+                            <div style="font-size: 28px; font-weight: 900; 
+                                 color: {bias_color};">{avg_bias:+.2f}</div>
+                            <div style="font-size: 11px; color: {bias_color};">
+                                 {bias_label} on avg</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with bc3:
+                        st.markdown(f"""
+                        <div style="background-color: #1e293b; border-radius: 8px; 
+                             padding: 16px; text-align: center;">
+                            <div style="font-size: 11px; color: #94a3b8; 
+                                 text-transform: uppercase;">Model Projects Too Low</div>
+                            <div style="font-size: 28px; font-weight: 900; 
+                                 color: #00E5FF;">{under_proj:.1f}%</div>
+                            <div style="font-size: 11px; color: #94a3b8;">of the time</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Interpretation
+                    st.markdown("---")
+                    if abs(avg_bias) <= 0.5:
+                        st.success(f"✅ **Model is well calibrated** — average bias of only {avg_bias:+.2f} units. Projections are centering correctly around actual outcomes.")
+                    elif avg_bias > 0.5:
+                        st.warning(f"⚠️ **Model overprojects by {avg_bias:+.2f} units on average.** Consider whether OVER bets are being taken at lines that are already aggressive. The model may be too optimistic on ceiling scenarios.")
+                    else:
+                        st.info(f"📊 **Model underprojects by {avg_bias:.2f} units on average.** This means your UNDER bets are well supported but OVER bets may have more edge than the model is showing.")
+                    
+                    if direction_acc >= 65:
+                        st.success(f"🎯 **Strong directional accuracy at {direction_acc:.1f}%.** The model is correctly identifying which side of the line the player will land on the majority of the time.")
+                    elif direction_acc >= 55:
+                        st.info(f"📊 **Directional accuracy at {direction_acc:.1f}%.** Solid but room to improve — focus on the stat types with the highest direction accuracy from the table above.")
+                    else:
+                        st.warning(f"⚠️ **Directional accuracy at {direction_acc:.1f}%.** The model is struggling to consistently identify the correct side of the line. Review which markets are dragging this down.")                                )            
+  
+                # --- NEW SYNDICATE HALL OF FAME ---
                 def render_syndicate_hall_of_fame(df):
                     # 1. GROUP BY BOTH PLAYER AND SPECIFIC PROP/STAT
                     grouped = df.groupby(['Player', 'Stat']).agg(
