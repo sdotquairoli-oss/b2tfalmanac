@@ -3484,7 +3484,8 @@ with t_roi:
                     elif direction_acc >= 55:
                         st.info(f"📊 **Directional accuracy at {direction_acc:.1f}%.** Solid but room to improve — focus on the stat types with the highest direction accuracy from the table above.")
                     else:
-                        st.warning(f"⚠️ **Directional accuracy at {direction_acc:.1f}%.** The model is struggling to consistently identify the correct side of the line. Review which markets are dragging this down.")                                )            
+                        st.warning(f"⚠️ **Directional accuracy at {direction_acc:.1f}%.** The model is struggling to consistently identify the correct side of the line. Review which markets are dragging this down.")                                
+                        )            
   
                 # --- NEW SYNDICATE HALL OF FAME ---
                 def render_syndicate_hall_of_fame(df):
