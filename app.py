@@ -3336,6 +3336,7 @@ with t_roi:
                                     f"🛑 **Chasing lines ({avg_timing:.2f} avg vs opener).** "
                                     f"You're consistently betting after the line has already moved against your side. "
                                     f"Sync odds earlier and lock bets before sharp action hits."
+                                )
                                     
             # ═══════════════════════════════════════════════
             # 🎯 PROJECTION ACCURACY REPORT
