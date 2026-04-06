@@ -3331,11 +3331,12 @@ with t_roi:
                                     f"You're getting in before the line moves against you — "
                                     f"this means you're identifying value before the broader market does."
                                 )
+                            
                             elif avg_timing <= -0.5:
                                 st.warning(
                                     f"🛑 **Chasing lines ({avg_timing:.2f} avg vs opener).** "
                                     f"You're consistently betting after the line has already moved against your side. "
-                                    f"Sync odds earlier and lock bets before sharp action hits."
+                                    f"Sync odds earlier and lock bets before sharp action hits." 
                                 )
                                     
             # ═══════════════════════════════════════════════
