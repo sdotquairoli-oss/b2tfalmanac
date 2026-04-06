@@ -230,17 +230,23 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
     if not gc: return
     try:
         ws = gc.open("B2TF_Database").worksheet(sheet_name)
-        dates = [d for d in ws.col_values(1) if str(d).strip() != '']
-        next_row = len(dates) + 1
+        
+        # Format the dictionary into a clean row array
         clean_row = []
         for col in expected_cols:
-            val = row_dict.get(col, f"")
-            if isinstance(val, bool): clean_row.append("TRUE" if val else "FALSE")
-            else: clean_row.append(val)
-        try: ws.update(values=[clean_row], range_name=f'A{next_row}', value_input_option="USER_ENTERED")
-        except TypeError: ws.update(f'A{next_row}', [clean_row], value_input_option="USER_ENTERED")
+            val = row_dict.get(col, "")
+            if isinstance(val, bool): 
+                clean_row.append("TRUE" if val else "FALSE")
+            else: 
+                clean_row.append(val)
+                
+        # Natively finds the true bottom of the sheet, ignoring blank gaps
+        ws.append_row(clean_row, value_input_option='USER_ENTERED')
+        
+        # Clear the cache so the dashboard updates instantly
         load_sheet_df.clear()
         load_ledger.clear()
+        
     except Exception as e:
         st.error(f"Failed to save to database: {e}")
 
