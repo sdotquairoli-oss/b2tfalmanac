@@ -2155,7 +2155,7 @@ def render_syndicate_board(league_key):
             user_side = st.radio("Your Position:", ["OVER", "UNDER", "TEAM"], index=0, horizontal=True, key=f"{lk}.user_side")
     
             if st.button(f"🔒 Lock {league_key} Pick"):
-                ssave_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50, float(line))
+                save_to_ledger(league_key, target_player, stat_type, line, odds, 0.0, user_side, 0.50, is_boosted, 0, 0.50, float(line))
                 st.success(f"Team Pick Locked: {user_side}")
         # ✅ SAME-GAME CORRELATION WARNING
             # Flags when you already have a pending pick in tonight's game
