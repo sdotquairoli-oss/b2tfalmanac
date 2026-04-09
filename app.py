@@ -2617,7 +2617,13 @@ def render_syndicate_board(league_key):
                             else:
                                 auto_user_p = win_prob
                                 user_edge_pct = edge_pct
-    
+
+                        # 🧠 Extract individual sub-model projections from the board UI payload
+                        min_max_proj = board[0]['proj'] if board else 0.0
+                        stat_proj = board[1]['proj'] if board else 0.0
+                        contrarian_proj = board[2]['proj'] if board else 0.0
+                        context_proj = board[4]['proj'] if board else 0.0
+            
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
                         opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
                         opening_line_val = float(st.session_state.get(opening_key, line))
