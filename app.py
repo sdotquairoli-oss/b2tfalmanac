@@ -1451,7 +1451,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ⚖️ Weight the final baseline: 50% pure meta-learner stats, 50% context-modified
     raw_consensus_base = (smart_base * 0.50) + (guru_proj * 0.50)
     raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
-    raw_consensus = raw_consensus * 0.92
+    raw_consensus = raw_consensus * 0.95
     raw_consensus = float(np.clip(raw_consensus, 0.0, 200.0)) * 0.92
 
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
