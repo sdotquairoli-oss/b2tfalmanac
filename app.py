@@ -260,12 +260,16 @@ def overwrite_sheet(sheet_name, df):
             if clean_df[col].dtype == bool:
                 clean_df[col] = clean_df[col].apply(lambda x: "TRUE" if x else "FALSE")
         new_values = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
+        
+        # ✅ Clear the entire sheet first to prevent stale rows
+        # persisting below the new data range
+        ws.clear()
+        
         try: ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
         except TypeError: ws.update('A1', new_values, value_input_option="USER_ENTERED")
         load_sheet_df.clear()
         load_ledger.clear()
     except Exception as e: st.error(f"Failed to update database: {e}")
-
 @st.cache_data(ttl=120)
 def load_ledger():
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls"]    
