@@ -306,7 +306,7 @@ def load_ledger():
 
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0):
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0, min_max=0.0, stat_proj=0.0, contrarian=0.0, context=0.0):
     row = {
         "Date": datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"),
         "League": league,
@@ -325,9 +325,15 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Opening_Line": float(opening_line),
         "Closing_Line": "",
         "Actual_Mins": "",
-        "Actual_Fouls": ""
+        "Actual_Fouls": "",
+        "MIN Max Proj": min_max,
+        "Stat Proj": stat_proj,
+        "Contrarian Proj": contrarian,
+        "Context Proj": context
     }
-    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls"]
+    
+    new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]
+    
     append_to_sheet("ROI_Ledger", row, new_cols)
 
 @st.cache_data(ttl=120)
@@ -2615,7 +2621,7 @@ def render_syndicate_board(league_key):
                         s_score = calculate_setup_score(auto_user_p, user_edge_pct, board, c_proj, line, stat_type)
                         opening_key = f"{lk}.opening_line.{target_player}.{stat_type}"
                         opening_line_val = float(st.session_state.get(opening_key, line))
-                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p, opening_line_val)
+                        save_to_ledger(league_key, target_player, stat_type, line, odds, c_proj, final_side, win_prob, is_boosted, s_score, auto_user_p, opening_line_val, min_max_proj, stat_proj, contrarian_proj, context_proj)
     
                         today_date = datetime.now().strftime("%Y-%m-%d")
                         is_override_bet = c_vote in ["PASS", "VETO"]
