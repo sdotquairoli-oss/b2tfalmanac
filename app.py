@@ -837,11 +837,12 @@ def get_nba_stats(player_label):
         seasons = ['2025-26', '2024-25', '2023-24']
         df_list = []
         for s in seasons:
-            try:
-                log = playergamelog.PlayerGameLog(player_id=pid, season=s)
-                df_list.append(log.get_data_frames()[0])
-                time.sleep(0.5)
-            except: pass
+            for s_type in ['Regular Season', 'Playoffs']:
+                try:
+                    log = playergamelog.PlayerGameLog(player_id=pid, season=s, season_type_all_star=s_type)
+                    df_list.append(log.get_data_frames()[0])
+                    time.sleep(0.5)
+                except: pass
             
         if not df_list: return pd.DataFrame(), 404, []
         df = pd.concat(df_list, ignore_index=True)
