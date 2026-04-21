@@ -1984,10 +1984,16 @@ Setup:
     
     try:
         r = requests.post(url, json=data, timeout=12)
+        
+        # 🟢 FIX: If Gemini rejects the request, show the exact reason
+        if r.status_code != 200:
+            error_data = r.json().get('error', {})
+            error_msg = error_data.get('message', 'Unknown API Error')
+            return f"⚠️ Gemini API Error ({r.status_code}): {error_msg}"
+            
         return r.json().get('candidates', [{'content': {'parts': [{'text': 'API Error'}]}}])[0]['content']['parts'][0]['text']
     except Exception as e:
         return f"COO Offline: {e}"
-
 def consult_the_board(bet_context_json):
     """Fires both APIs perfectly in parallel to prevent UI lag."""
     with ThreadPoolExecutor(max_workers=2) as executor:
