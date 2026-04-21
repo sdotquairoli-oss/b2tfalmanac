@@ -1361,197 +1361,197 @@ avg_games   = df_ml[
 
 MIN_TIER_GAMES = 3   # minimum games in a tier to trust the average
 
-    if raw_def_mod <= ELITE_THRESHOLD:
-        # Tonight is an elite defense — use only games vs elite defenses
-        if len(elite_games) >= MIN_TIER_GAMES and s_col in elite_games.columns:
-            tier_baseline = elite_games[s_col].mean()
-            tier_label    = f"🛡️ Elite Def Filter: {len(elite_games)}G avg = {tier_baseline:.1f}"
-        else:
-            # Not enough elite-defense games in log — fall back to full average
-            tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-            tier_label    = f"⚠️ Elite Def Filter: insufficient sample ({len(elite_games)}G), using full avg"
-
-    elif raw_def_mod >= WEAK_THRESHOLD:
-        # Tonight is a weak defense — use only games vs weak defenses
-        if len(weak_games) >= MIN_TIER_GAMES and s_col in weak_games.columns:
-            tier_baseline = weak_games[s_col].mean()
-            tier_label    = f"🔓 Weak Def Filter: {len(weak_games)}G avg = {tier_baseline:.1f}"
-        else:
-            tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-            tier_label    = f"⚠️ Weak Def Filter: insufficient sample ({len(weak_games)}G), using full avg"
-
+if raw_def_mod <= ELITE_THRESHOLD:
+    # Tonight is an elite defense — use only games vs elite defenses
+    if len(elite_games) >= MIN_TIER_GAMES and s_col in elite_games.columns:
+        tier_baseline = elite_games[s_col].mean()
+        tier_label    = f"🛡️ Elite Def Filter: {len(elite_games)}G avg = {tier_baseline:.1f}"
     else:
-        # Tonight is an average defense — use only games vs average defenses
-        if len(avg_games) >= MIN_TIER_GAMES and s_col in avg_games.columns:
-            tier_baseline = avg_games[s_col].mean()
-            tier_label    = f"⚖️ Avg Def Filter: {len(avg_games)}G avg = {tier_baseline:.1f}"
-        else:
-            tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-            tier_label    = f"⚠️ Avg Def Filter: insufficient sample ({len(avg_games)}G), using full avg"
+        # Not enough elite-defense games in log — fall back to full average
+        tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+        tier_label    = f"⚠️ Elite Def Filter: insufficient sample ({len(elite_games)}G), using full avg"
 
-    # Clip to a reasonable range — tier baseline should not be negative
-    tier_baseline = max(0.0, float(tier_baseline) if not pd.isna(tier_baseline) else 0.0)
+elif raw_def_mod >= WEAK_THRESHOLD:
+    # Tonight is a weak defense — use only games vs weak defenses
+    if len(weak_games) >= MIN_TIER_GAMES and s_col in weak_games.columns:
+        tier_baseline = weak_games[s_col].mean()
+        tier_label    = f"🔓 Weak Def Filter: {len(weak_games)}G avg = {tier_baseline:.1f}"
+    else:
+        tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+        tier_label    = f"⚠️ Weak Def Filter: insufficient sample ({len(weak_games)}G), using full avg"
+
+else:
+    # Tonight is an average defense — use only games vs average defenses
+    if len(avg_games) >= MIN_TIER_GAMES and s_col in avg_games.columns:
+        tier_baseline = avg_games[s_col].mean()
+        tier_label    = f"⚖️ Avg Def Filter: {len(avg_games)}G avg = {tier_baseline:.1f}"
+    else:
+        tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+        tier_label    = f"⚠️ Avg Def Filter: insufficient sample ({len(avg_games)}G), using full avg"
+
+# Clip to a reasonable range — tier baseline should not be negative
+tier_baseline = max(0.0, float(tier_baseline) if not pd.isna(tier_baseline) else 0.0)
+
+s_mean = df_ml[s_col].mean()
+if pd.isna(s_mean) or s_mean == 0:
+    home_mod, away_mod, current_split_mod = 1.0, 1.0, 1.0
+    split_text, split_desc = "Neutral", "Not enough data for venue splits."
+else:
+    home_mean = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
+    away_mean = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
+    h_mod = (home_mean / s_mean) if pd.notna(home_mean) and len(df_ml[df_ml['Is_Home'] == 1]) > 0 else 1.0
+    a_mod = (away_mean / s_mean) if pd.notna(away_mean) and len(df_ml[df_ml['Is_Home'] == 0]) > 0 else 1.0
+    home_mod = np.clip(1.0 + ((h_mod - 1.0) * 0.5), 0.8, 1.2)
+    away_mod = np.clip(1.0 + ((a_mod - 1.0) * 0.5), 0.8, 1.2)
+    current_split_mod = home_mod if is_home_current == 1 else away_mod
+    split_text = "Home" if is_home_current == 1 else "Away"
+    split_desc = f"{split_text} Split: {current_split_mod:.2f}x production."
+
+rest_str = str(rest)
+if "B2B" in rest_str: fatigue_val, fatigue_desc = 0.90, "⚠️ B2B: Heavy legs expected (-10%)."
+elif "3 in 4" in rest_str: fatigue_val, fatigue_desc = 0.95, "⚠️ 3 in 4 Nights: Slight fatigue (-5%)."
+elif "3+" in rest_str: fatigue_val, fatigue_desc = 1.05, "🔋 3+ Days Rest: Fully rested (+5%)."
+else: fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
+
+trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std, mins_floor_note = build_models(
+    df_ml, s_col, weights, league, is_home_current, rest, mod_val
+)
+
+is_blowout_risk = False
+if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25 and not ignore_blowout:
+    is_blowout_risk = True
+    expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
+    tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
+    s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+    trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+    rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]
+    if 'USG_PCT' in df_ml.columns:
+        rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
+    stat_proj = rf.predict([rf_pred_vec])[0]
+    con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
+    base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
     
-    s_mean = df_ml[s_col].mean()
-    if pd.isna(s_mean) or s_mean == 0:
-        home_mod, away_mod, current_split_mod = 1.0, 1.0, 1.0
-        split_text, split_desc = "Neutral", "Not enough data for venue splits."
-    else:
-        home_mean = df_ml[df_ml['Is_Home'] == 1][s_col].mean()
-        away_mean = df_ml[df_ml['Is_Home'] == 0][s_col].mean()
-        h_mod = (home_mean / s_mean) if pd.notna(home_mean) and len(df_ml[df_ml['Is_Home'] == 1]) > 0 else 1.0
-        a_mod = (away_mean / s_mean) if pd.notna(away_mean) and len(df_ml[df_ml['Is_Home'] == 0]) > 0 else 1.0
-        home_mod = np.clip(1.0 + ((h_mod - 1.0) * 0.5), 0.8, 1.2)
-        away_mod = np.clip(1.0 + ((a_mod - 1.0) * 0.5), 0.8, 1.2)
-        current_split_mod = home_mod if is_home_current == 1 else away_mod
-        split_text = "Home" if is_home_current == 1 else "Away"
-        split_desc = f"{split_text} Split: {current_split_mod:.2f}x production."
+# 🧠 META-LEARNER: Dynamic Accuracy Weighting
+# Backtest all 4 models against the player's actual game log to find their Mean Absolute Error (MAE)
+y_actual = df_ml[s_col].fillna(0).values
+poi_hist = poi.predict(X_poi_train.values)
+rf_hist = rf.predict(X_rf_train)
+xgb_hist = xgb.predict(X_xgb_train)
+hgbr_hist = hgbr.predict(X_hgbr_train)
 
-    rest_str = str(rest)
-    if "B2B" in rest_str: fatigue_val, fatigue_desc = 0.90, "⚠️ B2B: Heavy legs expected (-10%)."
-    elif "3 in 4" in rest_str: fatigue_val, fatigue_desc = 0.95, "⚠️ 3 in 4 Nights: Slight fatigue (-5%)."
-    elif "3+" in rest_str: fatigue_val, fatigue_desc = 1.05, "🔋 3+ Days Rest: Fully rested (+5%)."
-    else: fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
+# Floor of 0.1 prevents division-by-zero if a model somehow perfectly predicts everything
+mae_poi = max(np.mean(np.abs(poi_hist - y_actual)), 0.1)
+mae_rf = max(np.mean(np.abs(rf_hist - y_actual)), 0.1)
+mae_xgb = max(np.mean(np.abs(xgb_hist - y_actual)), 0.1)
+mae_hgbr = max(np.mean(np.abs(hgbr_hist - y_actual)), 0.1)
 
-    trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std, mins_floor_note = build_models(
-        df_ml, s_col, weights, league, is_home_current, rest, mod_val
-    )
+# Inverse Error Weighting: Lower error = Higher weight multiplier
+inv_poi, inv_rf, inv_xgb, inv_hgbr = 1.0/mae_poi, 1.0/mae_rf, 1.0/mae_xgb, 1.0/mae_hgbr
+total_inv = inv_poi + inv_rf + inv_xgb + inv_hgbr
 
-    is_blowout_risk = False
-    if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25 and not ignore_blowout:
-        is_blowout_risk = True
-        expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
-        tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
-        s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-        trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-        rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]
-        if 'USG_PCT' in df_ml.columns:
-            rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
-        stat_proj = rf.predict([rf_pred_vec])[0]
-        con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
-        base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
-        
-    # 🧠 META-LEARNER: Dynamic Accuracy Weighting
-    # Backtest all 4 models against the player's actual game log to find their Mean Absolute Error (MAE)
-    y_actual = df_ml[s_col].fillna(0).values
-    poi_hist = poi.predict(X_poi_train.values)
-    rf_hist = rf.predict(X_rf_train)
-    xgb_hist = xgb.predict(X_xgb_train)
-    hgbr_hist = hgbr.predict(X_hgbr_train)
+# Convert to clean percentages (e.g., 0.35, 0.25, etc.)
+w_poi, w_rf, w_xgb, w_hgbr = inv_poi/total_inv, inv_rf/total_inv, inv_xgb/total_inv, inv_hgbr/total_inv
 
-    # Floor of 0.1 prevents division-by-zero if a model somehow perfectly predicts everything
-    mae_poi = max(np.mean(np.abs(poi_hist - y_actual)), 0.1)
-    mae_rf = max(np.mean(np.abs(rf_hist - y_actual)), 0.1)
-    mae_xgb = max(np.mean(np.abs(xgb_hist - y_actual)), 0.1)
-    mae_hgbr = max(np.mean(np.abs(hgbr_hist - y_actual)), 0.1)
+# The "Smart Base" perfectly blends the 4 models using their proven historical accuracy
+smart_base = (trend_proj * w_poi) + (stat_proj * w_rf) + (con_proj * w_xgb) + (base_proj * w_hgbr)
 
-    # Inverse Error Weighting: Lower error = Higher weight multiplier
-    inv_poi, inv_rf, inv_xgb, inv_hgbr = 1.0/mae_poi, 1.0/mae_rf, 1.0/mae_xgb, 1.0/mae_hgbr
-    total_inv = inv_poi + inv_rf + inv_xgb + inv_hgbr
+# Context Guru applies the situational modifiers (defense, fatigue, home/away) to the Smart Base
+context_mod = mod_val * fatigue_val * current_split_mod
+guru_proj = smart_base * context_mod
 
-    # Convert to clean percentages (e.g., 0.35, 0.25, etc.)
-    w_poi, w_rf, w_xgb, w_hgbr = inv_poi/total_inv, inv_rf/total_inv, inv_xgb/total_inv, inv_hgbr/total_inv
+# ✅ TIER MISMATCH DECAY
+# When tonight's defense tier differs significantly from a historical
+# game's opponent tier, halve that game's weight contribution.
+# Prevents weak-defense outlier games from contaminating elite-defense projections.
+ELITE_MOD_THRESHOLD = 0.95
+WEAK_MOD_THRESHOLD  = 1.05
 
-    # The "Smart Base" perfectly blends the 4 models using their proven historical accuracy
-    smart_base = (trend_proj * w_poi) + (stat_proj * w_rf) + (con_proj * w_xgb) + (base_proj * w_hgbr)
+# ✅ TIER MISMATCH DECAY
+# When tonight's defense tier differs significantly from a historical
+# game's opponent tier, halve that game's weight contribution.
+# Prevents weak-defense outlier games from contaminating elite-defense projections.
+ELITE_MOD_THRESHOLD = 0.95
+WEAK_MOD_THRESHOLD  = 1.05
 
-    # Context Guru applies the situational modifiers (defense, fatigue, home/away) to the Smart Base
-    context_mod = mod_val * fatigue_val * current_split_mod
-    guru_proj = smart_base * context_mod
+def tier_mismatch_multiplier(hist_mod, tonight_mod):
+    tonight_elite = tonight_mod <= ELITE_MOD_THRESHOLD
+    tonight_weak  = tonight_mod >= WEAK_MOD_THRESHOLD
+    hist_elite    = hist_mod <= ELITE_MOD_THRESHOLD
+    hist_weak     = hist_mod >= WEAK_MOD_THRESHOLD
 
-    # ✅ TIER MISMATCH DECAY
-    # When tonight's defense tier differs significantly from a historical
-    # game's opponent tier, halve that game's weight contribution.
-    # Prevents weak-defense outlier games from contaminating elite-defense projections.
-    ELITE_MOD_THRESHOLD = 0.95
-    WEAK_MOD_THRESHOLD  = 1.05
+    # Mismatched tiers — opposite ends of the spectrum
+    if tonight_elite and hist_weak:   return 0.5
+    if tonight_weak  and hist_elite:  return 0.5
+    # Moderate mismatch — one average, one extreme
+    if tonight_elite and not hist_elite: return 0.75
+    if tonight_weak  and not hist_weak:  return 0.75
+    # Matched tiers — no adjustment
+    return 1.0
 
-    # ✅ TIER MISMATCH DECAY
-    # When tonight's defense tier differs significantly from a historical
-    # game's opponent tier, halve that game's weight contribution.
-    # Prevents weak-defense outlier games from contaminating elite-defense projections.
-    ELITE_MOD_THRESHOLD = 0.95
-    WEAK_MOD_THRESHOLD  = 1.05
+tier_multipliers = df_ml['Opp_Def_Mod'].apply(
+    lambda h: tier_mismatch_multiplier(h, mod_val)
+).values
 
-    def tier_mismatch_multiplier(hist_mod, tonight_mod):
-        tonight_elite = tonight_mod <= ELITE_MOD_THRESHOLD
-        tonight_weak  = tonight_mod >= WEAK_MOD_THRESHOLD
-        hist_elite    = hist_mod <= ELITE_MOD_THRESHOLD
-        hist_weak     = hist_mod >= WEAK_MOD_THRESHOLD
+# Apply tier mismatch on top of existing time-decay weights
+if 'Weight' in df_ml.columns:
+    df_ml['Weight'] = df_ml['Weight'] * tier_multipliers
+else:
+    df_ml['Weight'] = tier_multipliers
 
-        # Mismatched tiers — opposite ends of the spectrum
-        if tonight_elite and hist_weak:   return 0.5
-        if tonight_weak  and hist_elite:  return 0.5
-        # Moderate mismatch — one average, one extreme
-        if tonight_elite and not hist_elite: return 0.75
-        if tonight_weak  and not hist_weak:  return 0.75
-        # Matched tiers — no adjustment
-        return 1.0
+# ✅ TIER BLEND: Weight tier baseline at 20% of consensus
+# Pulls projection toward what this player actually does
+# against tonight's specific defensive quality tier
+# ⚖️ Weight the final baseline: 50% pure meta-learner stats, 50% context-modified
+raw_consensus_base = (smart_base * 0.50) + (guru_proj * 0.50)
+raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
+raw_consensus = raw_consensus * 0.95
+raw_consensus = float(np.clip(raw_consensus, 0.0, 200.0)) * 0.92
 
-    tier_multipliers = df_ml['Opp_Def_Mod'].apply(
-        lambda h: tier_mismatch_multiplier(h, mod_val)
-    ).values
+floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
+ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
 
-    # Apply tier mismatch on top of existing time-decay weights
-    if 'Weight' in df_ml.columns:
-        df_ml['Weight'] = df_ml['Weight'] * tier_multipliers
-    else:
-        df_ml['Weight'] = tier_multipliers
+SAMPLE_GATES = {"NBA": {"min_games": 15, "min_recent": 5}, "NHL": {"min_games": 10, "min_recent": 3}, "MLB": {"min_games": 10, "min_recent": 4}, "MLB_P": {"min_games": 3, "min_recent": 1}}
+gate = SAMPLE_GATES.get(league, {"min_games": 10, "min_recent": 3})
+recent_games = int((df_ml['Days_Ago'] <= 30).sum()) if 'Days_Ago' in df_ml.columns else len(df_ml)
+low_sample_warning = ""
 
-    # ✅ TIER BLEND: Weight tier baseline at 20% of consensus
-    # Pulls projection toward what this player actually does
-    # against tonight's specific defensive quality tier
-    # ⚖️ Weight the final baseline: 50% pure meta-learner stats, 50% context-modified
-    raw_consensus_base = (smart_base * 0.50) + (guru_proj * 0.50)
-    raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
-    raw_consensus = raw_consensus * 0.95
-    raw_consensus = float(np.clip(raw_consensus, 0.0, 200.0)) * 0.92
+if len(df_ml) < gate["min_games"]: low_sample_warning = f"⚠️ <b>THIN SAMPLE:</b> Only {len(df_ml)} career games found (need {gate['min_games']}). Confidence is reduced.<br>"
+elif recent_games < gate["min_recent"]: low_sample_warning = f"⚠️ <b>STALE DATA:</b> Only {recent_games} games in the last 30 days. Player may be returning from injury.<br>"
 
-    floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
-    ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
+vol_warning = ""
+if is_blowout_risk: vol_warning += f"🚨 BLOWOUT RISK: Matchup is highly lopsided. Slashed expected minutes.<br>"
+if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}.<br>"
+elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m).<br>"
+if mins_floor_note: vol_warning += f"{mins_floor_note}<br>"
 
-    SAMPLE_GATES = {"NBA": {"min_games": 15, "min_recent": 5}, "NHL": {"min_games": 10, "min_recent": 3}, "MLB": {"min_games": 10, "min_recent": 4}, "MLB_P": {"min_games": 3, "min_recent": 1}}
-    gate = SAMPLE_GATES.get(league, {"min_games": 10, "min_recent": 3})
-    recent_games = int((df_ml['Days_Ago'] <= 30).sum()) if 'Days_Ago' in df_ml.columns else len(df_ml)
-    low_sample_warning = ""
+mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
 
-    if len(df_ml) < gate["min_games"]: low_sample_warning = f"⚠️ <b>THIN SAMPLE:</b> Only {len(df_ml)} career games found (need {gate['min_games']}). Confidence is reduced.<br>"
-    elif recent_games < gate["min_recent"]: low_sample_warning = f"⚠️ <b>STALE DATA:</b> Only {recent_games} games in the last 30 days. Player may be returning from injury.<br>"
+COMBO_STATS = {"PRA", "PR", "PA", "RA"}
+threshold = PASS_THRESHOLDS.get(s_col, 0.5)
+if s_col in COMBO_STATS:
+    threshold = threshold * 1.30
 
-    vol_warning = ""
-    if is_blowout_risk: vol_warning += f"🚨 BLOWOUT RISK: Matchup is highly lopsided. Slashed expected minutes.<br>"
-    if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}.<br>"
-    elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m).<br>"
-    if mins_floor_note: vol_warning += f"{mins_floor_note}<br>"
-    
-    mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
+def get_raw_vote(p): return "OVER" if p >= line + threshold else ("UNDER" if p <= line - threshold else "PASS")
+raw_vote = get_raw_vote(raw_consensus)
+final_consensus = raw_consensus
+def get_final_vote(p): return ("OVER", "#00c853") if p >= line + threshold else (("UNDER", "#d50000") if p <= line - threshold else ("PASS", "#94a3b8"))
+f_vote, f_color = get_final_vote(final_consensus)
 
-    COMBO_STATS = {"PRA", "PR", "PA", "RA"}
-    threshold = PASS_THRESHOLDS.get(s_col, 0.5)
-    if s_col in COMBO_STATS:
-        threshold = threshold * 1.30
+hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
+mods = df_ml['Opp_Def_Mod'].values
+smart_base_hist = (poi_hist * w_poi) + (rf_hist * w_rf) + (xgb_hist * w_xgb) + (hgbr_hist * w_hgbr)
+guru_hist = smart_base_hist * mods * 1.0 * hist_split_mods
+df_ml['AI_Proj'] = (smart_base_hist * 0.50) + (guru_hist * 0.50)
 
-    def get_raw_vote(p): return "OVER" if p >= line + threshold else ("UNDER" if p <= line - threshold else "PASS")
-    raw_vote = get_raw_vote(raw_consensus)
-    final_consensus = raw_consensus
-    def get_final_vote(p): return ("OVER", "#00c853") if p >= line + threshold else (("UNDER", "#d50000") if p <= line - threshold else ("PASS", "#94a3b8"))
-    f_vote, f_color = get_final_vote(final_consensus)
+board = [
+    {"name": f"⏱️ MIN Maximizer ({w_poi*100:.0f}%)", "model": "Poisson Regressor", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"MAE: {mae_poi:.2f} | Weighted by recent mins."},
+    {"name": f"📊 Statistician ({w_rf*100:.0f}%)", "model": "Random Forest", "proj": stat_proj, "vote": get_raw_vote(stat_proj), "color": get_final_vote(stat_proj)[1], "quote": f"MAE: {mae_rf:.2f} | Deep Memory sets stable floor."},
+    {"name": f"🃏 Contrarian ({w_xgb*100:.0f}%)", "model": "XGBoost", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"MAE: {mae_xgb:.2f} | Flags variance from season norms."},
+    {"name": f"🛡️ Baseline ({w_hgbr*100:.0f}%)", "model": "Hist-Gradient Boosting", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": f"MAE: {mae_hgbr:.2f} | Weighted multi-year mapping."},
+    {"name": "🎯 Context Guru", "model": "Meta-Learner", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Applies Matchup Modifiers to Meta-Learner Base."}
+]
 
-    hist_split_mods = np.where(df_ml['Is_Home'] == 1, home_mod, away_mod)
-    mods = df_ml['Opp_Def_Mod'].values
-    smart_base_hist = (poi_hist * w_poi) + (rf_hist * w_rf) + (xgb_hist * w_xgb) + (hgbr_hist * w_hgbr)
-    guru_hist = smart_base_hist * mods * 1.0 * hist_split_mods
-    df_ml['AI_Proj'] = (smart_base_hist * 0.50) + (guru_hist * 0.50)
-
-    board = [
-        {"name": f"⏱️ MIN Maximizer ({w_poi*100:.0f}%)", "model": "Poisson Regressor", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"MAE: {mae_poi:.2f} | Weighted by recent mins."},
-        {"name": f"📊 Statistician ({w_rf*100:.0f}%)", "model": "Random Forest", "proj": stat_proj, "vote": get_raw_vote(stat_proj), "color": get_final_vote(stat_proj)[1], "quote": f"MAE: {mae_rf:.2f} | Deep Memory sets stable floor."},
-        {"name": f"🃏 Contrarian ({w_xgb*100:.0f}%)", "model": "XGBoost", "proj": con_proj, "vote": get_raw_vote(con_proj), "color": get_final_vote(con_proj)[1], "quote": f"MAE: {mae_xgb:.2f} | Flags variance from season norms."},
-        {"name": f"🛡️ Baseline ({w_hgbr*100:.0f}%)", "model": "Hist-Gradient Boosting", "proj": base_proj, "vote": get_raw_vote(base_proj), "color": get_final_vote(base_proj)[1], "quote": f"MAE: {mae_hgbr:.2f} | Weighted multi-year mapping."},
-        {"name": "🎯 Context Guru", "model": "Meta-Learner", "proj": guru_proj, "vote": get_raw_vote(guru_proj), "color": get_final_vote(guru_proj)[1], "quote": f"Applies Matchup Modifiers to Meta-Learner Base."}
-    ]
-
-    return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote
+return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote
 @st.cache_data(ttl=3600)
 def run_nba_heaters(stat_choice="Points"):
     try:
