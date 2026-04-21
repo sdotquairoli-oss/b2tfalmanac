@@ -2351,28 +2351,28 @@ def render_syndicate_board(league_key):
         blowout_penalty = 1.0
         final_consensus = raw_consensus
     
-                if abs(spread_val) >= 10.0:
-                    script_color    = "#ff0055"
-                    script_icon     = "🚨 SEVERE"
-                    blowout_penalty = 0.80
-                    role = "underdog (+)" if spread_val > 0 else "heavy favorite (-)"
-                    script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
-                                  f"Severe blowout risk — starters historically "
-                                  f"sit in the fourth quarter in games like this. "
-                                  f"Points, Assists, and Minutes props are highly "
-                                  f"unreliable. Strong recommendation to pass "
-                                  f"regardless of model signal."
-                    )
-                elif abs(spread_val) >= 6.5:
-                    script_color    = "#f59e0b"
-                    script_icon     = "⚠️ ELEVATED"
-                    blowout_penalty = 0.90
-                    role = "underdog (+)" if spread_val > 0 else "favorite (-)"
-                    script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
-                                  f"Elevated game script risk — if the game gets "
-                                  f"out of hand early, expect reduced minutes and "
-                                  f"fewer offensive opportunities. Consider passing."
-                    )
+        if abs(spread_val) >= 10.0:
+            script_color    = "#ff0055"
+            script_icon     = "🚨 SEVERE"
+            blowout_penalty = 0.80
+            role = "underdog (+)" if spread_val > 0 else "heavy favorite (-)"
+            script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
+                          f"Severe blowout risk — starters historically "
+                          f"sit in the fourth quarter in games like this. "
+                          f"Points, Assists, and Minutes props are highly "
+                          f"unreliable. Strong recommendation to pass "
+                          f"regardless of model signal."
+            )
+        elif abs(spread_val) >= 6.5:
+            script_color    = "#f59e0b"
+            script_icon     = "⚠️ ELEVATED"
+            blowout_penalty = 0.90
+            role = "underdog (+)" if spread_val > 0 else "favorite (-)"
+            script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
+                          f"Elevated game script risk — if the game gets "
+                          f"out of hand early, expect reduced minutes and "
+                          f"fewer offensive opportunities. Consider passing."
+            )
                 elif -6.0 <= spread_val < 0:
                     script_color    = None
                     script_msg      = None
