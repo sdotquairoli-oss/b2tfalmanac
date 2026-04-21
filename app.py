@@ -656,7 +656,7 @@ def get_nhl_schedule():
 def get_mlb_schedule():
     try:
         today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
-        r = requests.get(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}", timeout=5).json()
+        r = requests.get(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}&hydrate=probablePitcher", timeout=5).json()
         if not r.get('dates') or not r['dates'][0].get('games'): return None, "No games scheduled today."
         m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
         matchups = []
@@ -668,9 +668,34 @@ def get_mlb_schedule():
             sr = g['status']['detailedState']
             il = sr in ['In Progress', 'Final', 'Game Over', 'Completed Early']
             ds = pd.to_datetime(g['gameDate']).tz_convert('America/New_York').strftime("%I:%M %p").lstrip("0") if not il and sr in ['Scheduled', 'Pre-Game', 'Warmup'] else sr
-            matchups.append({"home": home, "away": away, "status": ds, "home_score": g['teams']['home'].get('score', 0), "away_score": g['teams']['away'].get('score', 0), "is_live_or_final": il})
-        return matchups, "Success"
+            home_p = g['teams']['home'].get('probablePitcher', {}).get('fullName', 'TBD')
+                home_p_id = g['teams']['home'].get('probablePitcher', {}).get('id', None)
+                away_p = g['teams']['away'].get('probablePitcher', {}).get('fullName', 'TBD')
+                away_p_id = g['teams']['away'].get('probablePitcher', {}).get('id', None)
+
+                matchups.append({"home": home, "away": away, "status": ds,
+                                 "home_score": g['teams']['home'].get('score', 0),
+                                 "away_score": g['teams']['away'].get('score', 0),
+                                 "is_live_or_final": il,
+                                 "home_pitcher": home_p, "home_pitcher_id": home_p_id,
+                                 "away_pitcher": away_p, "away_pitcher_id": away_p_id})
     except: return None, "Failed to connect to MLB API."
+
+@st.cache_data(ttl=3600)
+def get_pitcher_era(pitcher_id):
+    """Fetches the probable pitcher's current season ERA to build dynamic defense modifiers."""
+    if not pitcher_id: return None
+    try:
+        year = datetime.now().year
+        url = f"https://statsapi.mlb.com/api/v1/people/{pitcher_id}/stats?stats=season&group=pitching&season={year}"
+        r = requests.get(url, timeout=5).json()
+        if 'stats' in r and len(r['stats']) > 0 and 'splits' in r['stats'][0] and len(r['stats'][0]['splits']) > 0:
+            era_str = r['stats'][0]['splits'][0]['stat'].get('era', '0.00')
+            if era_str == '-.--': return None
+            return float(era_str)
+        return None
+    except:
+        return None
 
 @st.cache_data(ttl=600)
 def get_live_line(player_label, stat_type, api_key, sport_path):
@@ -1014,7 +1039,7 @@ def get_player_archetype(df, league):
             
     return "Unknown Profile"
 
-def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None):
+def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None, opp_pitcher_era=None, opp_pitcher_name=None):
     if league == "NBA":
         live_stats = get_live_nba_team_stats()
         if opp in live_stats:
@@ -1035,14 +1060,34 @@ def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None):
             
     elif league == "MLB":
         mod_val, mod_desc = 1.0, "Average Pitching (Neutral)"
-        if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]: 
-            mod_val = 0.90
-            mod_desc = "Elite Pitching (-10%). "
-            if "Slugger" in archetype: mod_desc += "🛑 Fade: Tough matchups for power."
-        elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
-            mod_val = 1.10
-            mod_desc = "Weak Pitching (+10%). "
-            if "Slugger" in archetype or "Strikeout" in archetype: mod_desc += "🚨 Exploit: Highly favorable matchup."
+        
+        # ✅ Dynamic Pitcher-Aware Modifier
+        if opp_pitcher_era is not None:
+            p_name = opp_pitcher_name or "Starter"
+            if opp_pitcher_era <= 3.30:
+                mod_val = 0.90
+                mod_desc = f"Elite Pitching ({p_name}, {opp_pitcher_era} ERA, -10%). "
+            elif opp_pitcher_era >= 4.50:
+                mod_val = 1.10
+                mod_desc = f"Weak Pitching ({p_name}, {opp_pitcher_era} ERA, +10%). "
+            else:
+                mod_val = 1.00
+                mod_desc = f"Average Pitching ({p_name}, {opp_pitcher_era} ERA, Neutral). "
+        else:
+            # Fallback to static tiers for historical games or missing data
+            if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
+                mod_val = 0.90
+                mod_desc = "Elite Pitching (-10%). "
+            elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
+                mod_val = 1.10
+                mod_desc = "Weak Pitching (+10%). "
+
+        # Archetype Matchups
+        if "Slugger" in archetype:
+            mod_desc += "🛑 Fade: Tough matchups for power." if mod_val == 0.90 else ("🚨 Exploit: Highly favorable matchup." if mod_val == 1.10 else "")
+        elif "Strikeout" in archetype and mod_val == 1.10:
+            mod_desc += "🚨 Exploit: Highly favorable matchup."
+
         return mod_val, mod_desc
         
     else: # NHL
@@ -1248,8 +1293,7 @@ def apply_skynet(raw_vote, stat_type, league):
     return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
 
 @st.cache_data(show_spinner=False, ttl=300)
-def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash=""):
-    df_ml = df.copy()
+def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash="", opp_pitcher_era=None, opp_pitcher_name=None):    df_ml = df.copy()
     archetype = get_player_archetype(df_ml, league)
 
     is_pitcher = s_col in ["K", "ER"]
@@ -1260,7 +1304,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
     bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
-    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs)
+    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs, opp_pitcher_era, opp_pitcher_name)
     unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
     df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
     # ✅ DEFENSIVE TIER SEGMENTATION
@@ -1293,12 +1337,20 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         defs = bad_defs if bad_defs is not None else {}
         raw_def_mod = 1.10 if opp in defs else (0.90 if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"] else 1.00)
     elif league == "MLB":
-        if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
-            raw_def_mod = 0.90
-        elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
-            raw_def_mod = 1.10
-        else:
-            raw_def_mod = 1.00
+            if opp_pitcher_era is not None:
+                if opp_pitcher_era <= 3.30:
+                    raw_def_mod = 0.90
+                elif opp_pitcher_era >= 4.50:
+                    raw_def_mod = 1.10
+                else:
+                    raw_def_mod = 1.00
+            else:
+                if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
+                    raw_def_mod = 0.90
+                elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
+                    raw_def_mod = 1.10
+                else:
+                    raw_def_mod = 1.00
     elite_games = df_ml[df_ml['Opp_Def_Mod'] <= ELITE_THRESHOLD]
     weak_games  = df_ml[df_ml['Opp_Def_Mod'] >= WEAK_THRESHOLD]
     avg_games   = df_ml[
@@ -2287,12 +2339,27 @@ def render_syndicate_board(league_key):
                 
                 df_hash = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.2f}" if s_col in df.columns else str(len(df))
                 current_ledger = load_ledger()
-                graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
-                ledger_hash = str(hash(str(sorted(graded_counts.items()))))
-    
-                df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote = run_ml_board(
-                    df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash
-                )
+        graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
+        ledger_hash = str(hash(str(sorted(graded_counts.items()))))
+
+        # ⚾ PITCHER-AWARE MLB MODIFIER
+        opp_pitcher_era = None
+        opp_pitcher_name = None
+        if league_key == "MLB" and sched:
+            for g in sched:
+                # If target player is home, opponent is away (so opposing pitcher is away_pitcher)
+                if g['home'] == opp and not is_home_current:
+                    opp_pitcher_name = g.get('home_pitcher')
+                    opp_pitcher_era = get_pitcher_era(g.get('home_pitcher_id'))
+                    break
+                elif g['away'] == opp and is_home_current:
+                    opp_pitcher_name = g.get('away_pitcher')
+                    opp_pitcher_era = get_pitcher_era(g.get('away_pitcher_id'))
+                    break
+
+        df_with_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote = run_ml_board(
+            df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash, opp_pitcher_era, opp_pitcher_name
+        )
                 
                 # ✅ COMBO PROP MODE BANNER — shown in UI (not in cached fn)
                 COMBO_STATS = {"PRA", "PR", "PA", "RA"}
