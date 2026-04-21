@@ -1293,7 +1293,7 @@ def apply_skynet(raw_vote, stat_type, league):
     return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
 
 @st.cache_data(show_spinner=False, ttl=300)
-    def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash="", opp_pitcher_era=None, opp_pitcher_name=None):    df_ml = df.copy()
+def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash="", opp_pitcher_era=None, opp_pitcher_name=None):
     df_ml = df.copy()
     archetype = get_player_archetype(df_ml, league)
     
@@ -1308,16 +1308,11 @@ def apply_skynet(raw_vote, stat_type, league):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs, opp_pitcher_era, opp_pitcher_name)
     unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
     df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
+    
     # ✅ DEFENSIVE TIER SEGMENTATION
-    # Splits game log by opponent quality so outlier games against
-    # weak defenses don't contaminate projections against elite ones
     ELITE_THRESHOLD = 0.93
     WEAK_THRESHOLD  = 1.07
     
-    # ✅ Use raw base defense modifier for tier classification
-    # mod_val includes pace + archetype stacking which can push
-    # elite defenses into the average bucket incorrectly.
-    # We isolate just the defense component for tier sorting.
     raw_def_mod = 1.0
     if league == "NBA":
         live_stats = get_live_nba_team_stats()
@@ -1338,20 +1333,21 @@ def apply_skynet(raw_vote, stat_type, league):
         defs = bad_defs if bad_defs is not None else {}
         raw_def_mod = 1.10 if opp in defs else (0.90 if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"] else 1.00)
     elif league == "MLB":
-            if opp_pitcher_era is not None:
-                if opp_pitcher_era <= 3.30:
-                    raw_def_mod = 0.90
-                elif opp_pitcher_era >= 4.50:
-                    raw_def_mod = 1.10
-                else:
-                    raw_def_mod = 1.00
+        if opp_pitcher_era is not None:
+            if opp_pitcher_era <= 3.30:
+                raw_def_mod = 0.90
+            elif opp_pitcher_era >= 4.50:
+                raw_def_mod = 1.10
             else:
-                if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
-                    raw_def_mod = 0.90
-                elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
-                    raw_def_mod = 1.10
-                else:
-                    raw_def_mod = 1.00
+                raw_def_mod = 1.00
+        else:
+            if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
+                raw_def_mod = 0.90
+            elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
+                raw_def_mod = 1.10
+            else:
+                raw_def_mod = 1.00
+                
     elite_games = df_ml[df_ml['Opp_Def_Mod'] <= ELITE_THRESHOLD]
     weak_games  = df_ml[df_ml['Opp_Def_Mod'] >= WEAK_THRESHOLD]
     avg_games   = df_ml[
@@ -1359,29 +1355,23 @@ def apply_skynet(raw_vote, stat_type, league):
         (df_ml['Opp_Def_Mod'] < WEAK_THRESHOLD)
     ]
     
-    MIN_TIER_GAMES = 3   # minimum games in a tier to trust the average
+    MIN_TIER_GAMES = 3 
     
     if raw_def_mod <= ELITE_THRESHOLD:
-        # Tonight is an elite defense — use only games vs elite defenses
         if len(elite_games) >= MIN_TIER_GAMES and s_col in elite_games.columns:
             tier_baseline = elite_games[s_col].mean()
             tier_label    = f"🛡️ Elite Def Filter: {len(elite_games)}G avg = {tier_baseline:.1f}"
         else:
-            # Not enough elite-defense games in log — fall back to full average
             tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
             tier_label    = f"⚠️ Elite Def Filter: insufficient sample ({len(elite_games)}G), using full avg"
-    
     elif raw_def_mod >= WEAK_THRESHOLD:
-        # Tonight is a weak defense — use only games vs weak defenses
         if len(weak_games) >= MIN_TIER_GAMES and s_col in weak_games.columns:
             tier_baseline = weak_games[s_col].mean()
             tier_label    = f"🔓 Weak Def Filter: {len(weak_games)}G avg = {tier_baseline:.1f}"
         else:
             tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
             tier_label    = f"⚠️ Weak Def Filter: insufficient sample ({len(weak_games)}G), using full avg"
-    
     else:
-        # Tonight is an average defense — use only games vs average defenses
         if len(avg_games) >= MIN_TIER_GAMES and s_col in avg_games.columns:
             tier_baseline = avg_games[s_col].mean()
             tier_label    = f"⚖️ Avg Def Filter: {len(avg_games)}G avg = {tier_baseline:.1f}"
@@ -1389,7 +1379,6 @@ def apply_skynet(raw_vote, stat_type, league):
             tier_baseline = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
             tier_label    = f"⚠️ Avg Def Filter: insufficient sample ({len(avg_games)}G), using full avg"
     
-    # Clip to a reasonable range — tier baseline should not be negative
     tier_baseline = max(0.0, float(tier_baseline) if not pd.isna(tier_baseline) else 0.0)
     
     s_mean = df_ml[s_col].mean()
@@ -1431,45 +1420,28 @@ def apply_skynet(raw_vote, stat_type, league):
         con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
         
-    # 🧠 META-LEARNER: Dynamic Accuracy Weighting
-    # Backtest all 4 models against the player's actual game log to find their Mean Absolute Error (MAE)
     y_actual = df_ml[s_col].fillna(0).values
     poi_hist = poi.predict(X_poi_train.values)
     rf_hist = rf.predict(X_rf_train)
     xgb_hist = xgb.predict(X_xgb_train)
     hgbr_hist = hgbr.predict(X_hgbr_train)
     
-    # Floor of 0.1 prevents division-by-zero if a model somehow perfectly predicts everything
     mae_poi = max(np.mean(np.abs(poi_hist - y_actual)), 0.1)
     mae_rf = max(np.mean(np.abs(rf_hist - y_actual)), 0.1)
     mae_xgb = max(np.mean(np.abs(xgb_hist - y_actual)), 0.1)
     mae_hgbr = max(np.mean(np.abs(hgbr_hist - y_actual)), 0.1)
     
-    # Inverse Error Weighting: Lower error = Higher weight multiplier
     inv_poi, inv_rf, inv_xgb, inv_hgbr = 1.0/mae_poi, 1.0/mae_rf, 1.0/mae_xgb, 1.0/mae_hgbr
     total_inv = inv_poi + inv_rf + inv_xgb + inv_hgbr
     
-    # Convert to clean percentages (e.g., 0.35, 0.25, etc.)
     w_poi, w_rf, w_xgb, w_hgbr = inv_poi/total_inv, inv_rf/total_inv, inv_xgb/total_inv, inv_hgbr/total_inv
     
-    # The "Smart Base" perfectly blends the 4 models using their proven historical accuracy
     smart_base = (trend_proj * w_poi) + (stat_proj * w_rf) + (con_proj * w_xgb) + (base_proj * w_hgbr)
     
-    # Context Guru applies the situational modifiers (defense, fatigue, home/away) to the Smart Base
     context_mod = mod_val * fatigue_val * current_split_mod
     guru_proj = smart_base * context_mod
     
     # ✅ TIER MISMATCH DECAY
-    # When tonight's defense tier differs significantly from a historical
-    # game's opponent tier, halve that game's weight contribution.
-    # Prevents weak-defense outlier games from contaminating elite-defense projections.
-    ELITE_MOD_THRESHOLD = 0.95
-    WEAK_MOD_THRESHOLD  = 1.05
-    
-    # ✅ TIER MISMATCH DECAY
-    # When tonight's defense tier differs significantly from a historical
-    # game's opponent tier, halve that game's weight contribution.
-    # Prevents weak-defense outlier games from contaminating elite-defense projections.
     ELITE_MOD_THRESHOLD = 0.95
     WEAK_MOD_THRESHOLD  = 1.05
     
@@ -1479,29 +1451,22 @@ def apply_skynet(raw_vote, stat_type, league):
         hist_elite    = hist_mod <= ELITE_MOD_THRESHOLD
         hist_weak     = hist_mod >= WEAK_MOD_THRESHOLD
     
-        # Mismatched tiers — opposite ends of the spectrum
         if tonight_elite and hist_weak:   return 0.5
         if tonight_weak  and hist_elite:  return 0.5
-        # Moderate mismatch — one average, one extreme
         if tonight_elite and not hist_elite: return 0.75
         if tonight_weak  and not hist_weak:  return 0.75
-        # Matched tiers — no adjustment
         return 1.0
     
     tier_multipliers = df_ml['Opp_Def_Mod'].apply(
         lambda h: tier_mismatch_multiplier(h, mod_val)
     ).values
     
-    # Apply tier mismatch on top of existing time-decay weights
     if 'Weight' in df_ml.columns:
         df_ml['Weight'] = df_ml['Weight'] * tier_multipliers
     else:
         df_ml['Weight'] = tier_multipliers
     
-    # ✅ TIER BLEND: Weight tier baseline at 20% of consensus
-    # Pulls projection toward what this player actually does
-    # against tonight's specific defensive quality tier
-    # ⚖️ Weight the final baseline: 50% pure meta-learner stats, 50% context-modified
+    # ✅ TIER BLEND
     raw_consensus_base = (smart_base * 0.50) + (guru_proj * 0.50)
     raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
     raw_consensus = raw_consensus * 0.95
@@ -1527,7 +1492,12 @@ def apply_skynet(raw_vote, stat_type, league):
     mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
     
     COMBO_STATS = {"PRA", "PR", "PA", "RA"}
-    threshold = PASS_THRESHOLDS.get(s_col, 0.5)
+    # Failsafe if PASS_THRESHOLDS isn't globally accessible here:
+    try:
+        threshold = PASS_THRESHOLDS.get(s_col, 0.5)
+    except NameError:
+        threshold = 0.5
+        
     if s_col in COMBO_STATS:
         threshold = threshold * 1.30
     
