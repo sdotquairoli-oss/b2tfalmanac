@@ -674,11 +674,11 @@ def get_mlb_schedule():
             away_p_id = g['teams']['away'].get('probablePitcher', {}).get('id', None)
 
             matchups.append({"home": home, "away": away, "status": ds,
-                                 "home_score": g['teams']['home'].get('score', 0),
-                                 "away_score": g['teams']['away'].get('score', 0),
-                                 "is_live_or_final": il,
-                                 "home_pitcher": home_p, "home_pitcher_id": home_p_id,
-                                 "away_pitcher": away_p, "away_pitcher_id": away_p_id})
+                             "home_score": g['teams']['home'].get('score', 0),
+                             "away_score": g['teams']['away'].get('score', 0),
+                             "is_live_or_final": il,
+                             "home_pitcher": home_p, "home_pitcher_id": home_p_id,
+                             "away_pitcher": away_p, "away_pitcher_id": away_p_id})
     except: return None, "Failed to connect to MLB API."
 
 @st.cache_data(ttl=3600)
@@ -1294,7 +1294,7 @@ def apply_skynet(raw_vote, stat_type, league):
 
 @st.cache_data(show_spinner=False, ttl=300)
 def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash="", opp_pitcher_era=None, opp_pitcher_name=None):    df_ml = df.copy()
-    archetype = get_player_archetype(df_ml, league)
+archetype = get_player_archetype(df_ml, league)
 
     is_pitcher = s_col in ["K", "ER"]
     min_games_required = 3 if (league == "MLB" and is_pitcher) else 5
