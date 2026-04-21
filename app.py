@@ -673,12 +673,12 @@ def get_mlb_schedule():
             away_p = g['teams']['away'].get('probablePitcher', {}).get('fullName', 'TBD')
             away_p_id = g['teams']['away'].get('probablePitcher', {}).get('id', None)
 
-                matchups.append({"home": home, "away": away, "status": ds,
-                                 "home_score": g['teams']['home'].get('score', 0),
-                                 "away_score": g['teams']['away'].get('score', 0),
-                                 "is_live_or_final": il,
-                                 "home_pitcher": home_p, "home_pitcher_id": home_p_id,
-                                 "away_pitcher": away_p, "away_pitcher_id": away_p_id})
+            matchups.append({"home": home, "away": away, "status": ds,
+                             "home_score": g['teams']['home'].get('score', 0),
+                             "away_score": g['teams']['away'].get('score', 0),
+                             "is_live_or_final": il,
+                             "home_pitcher": home_p, "home_pitcher_id": home_p_id,
+                             "away_pitcher": away_p, "away_pitcher_id": away_p_id})
     except: return None, "Failed to connect to MLB API."
 
 @st.cache_data(ttl=3600)
