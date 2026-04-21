@@ -2350,7 +2350,7 @@ def render_syndicate_board(league_key):
         spread_val = st.session_state.get(f"{lk}.spread", 0.0)
         blowout_penalty = 1.0
         final_consensus = raw_consensus
-    
+
         if abs(spread_val) >= 10.0:
             script_color    = "#ff0055"
             script_icon     = "🚨 SEVERE"
@@ -2361,8 +2361,7 @@ def render_syndicate_board(league_key):
                           f"sit in the fourth quarter in games like this. "
                           f"Points, Assists, and Minutes props are highly "
                           f"unreliable. Strong recommendation to pass "
-                          f"regardless of model signal."
-            )
+                          f"regardless of model signal.")
         elif abs(spread_val) >= 6.5:
             script_color    = "#f59e0b"
             script_icon     = "⚠️ ELEVATED"
@@ -2371,40 +2370,38 @@ def render_syndicate_board(league_key):
             script_msg = (f"Team is a {abs(spread_val):.1f} point {role}. "
                           f"Elevated game script risk — if the game gets "
                           f"out of hand early, expect reduced minutes and "
-                          f"fewer offensive opportunities. Consider passing."
-            )
-                elif -6.0 <= spread_val < 0:
-                    script_color    = None
-                    script_msg      = None
-                    st.caption(f"✅ Game Script Favorable: Team favored by "
-                               f"{abs(spread_val):.1f} — competitive game expected, "
-                               f"normal rotation."
-                    )
-                else:
-                    script_color    = None
-                    script_msg      = None
-        
-                if script_msg:
-                    final_consensus = raw_consensus * blowout_penalty
-                    df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
-                    st.markdown(f"""
-                    <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {script_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <span style="font-size:15px; font-weight:900; color:{script_color};">
-                                GAME SCRIPT RISK — {script_icon}
-                            </span>
-                            <span style="font-size:11px; color:#94a3b8;">
-                                Spread: {spread_val:+.1f}
-                            </span>
-                        </div>
-                        <div style="font-size:12px; color:#f8fafc; line-height:1.5;">{script_msg}</div>
-                        <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
-                            Projection adjusted: <span style="color:{script_color}; font-weight:bold;">
-                            ×{blowout_penalty:.2f} applied to consensus
-                            </span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                          f"fewer offensive opportunities. Consider passing.")
+        elif -6.0 <= spread_val < 0:
+            script_color    = None
+            script_msg      = None
+            st.caption(f"✅ Game Script Favorable: Team favored by "
+                       f"{abs(spread_val):.1f} — competitive game expected, "
+                       f"normal rotation.")
+        else:
+            script_color    = None
+            script_msg      = None
+
+        if script_msg:
+            final_consensus = raw_consensus * blowout_penalty
+            df_with_ml['AI_Proj'] = df_with_ml['AI_Proj'] * blowout_penalty
+            st.markdown(f"""
+            <div style="background-color: rgba(255,255,255,0.02); border: 1px solid {script_color}; border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size:15px; font-weight:900; color:{script_color};">
+                        GAME SCRIPT RISK — {script_icon}
+                    </span>
+                    <span style="font-size:11px; color:#94a3b8;">
+                        Spread: {spread_val:+.1f}
+                    </span>
+                </div>
+                <div style="font-size:12px; color:#f8fafc; line-height:1.5;">{script_msg}</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+                    Projection adjusted: <span style="color:{script_color}; font-weight:bold;">
+                    ×{blowout_penalty:.2f} applied to consensus
+                    </span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
                         
                 skynet_data = apply_skynet(raw_vote, stat_type, league_key)
                 if 'blowout_penalty' in locals() and blowout_penalty < 1.0:
