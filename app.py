@@ -679,6 +679,8 @@ def get_mlb_schedule():
                              "is_live_or_final": il,
                              "home_pitcher": home_p, "home_pitcher_id": home_p_id,
                              "away_pitcher": away_p, "away_pitcher_id": away_p_id})
+        return matchups, "Success"
+
     except: return None, "Failed to connect to MLB API."
 
 @st.cache_data(ttl=3600)
