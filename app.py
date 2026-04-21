@@ -669,9 +669,9 @@ def get_mlb_schedule():
             il = sr in ['In Progress', 'Final', 'Game Over', 'Completed Early']
             ds = pd.to_datetime(g['gameDate']).tz_convert('America/New_York').strftime("%I:%M %p").lstrip("0") if not il and sr in ['Scheduled', 'Pre-Game', 'Warmup'] else sr
             home_p = g['teams']['home'].get('probablePitcher', {}).get('fullName', 'TBD')
-                home_p_id = g['teams']['home'].get('probablePitcher', {}).get('id', None)
-                away_p = g['teams']['away'].get('probablePitcher', {}).get('fullName', 'TBD')
-                away_p_id = g['teams']['away'].get('probablePitcher', {}).get('id', None)
+            home_p_id = g['teams']['home'].get('probablePitcher', {}).get('id', None)
+            away_p = g['teams']['away'].get('probablePitcher', {}).get('fullName', 'TBD')
+            away_p_id = g['teams']['away'].get('probablePitcher', {}).get('id', None)
 
                 matchups.append({"home": home, "away": away, "status": ds,
                                  "home_score": g['teams']['home'].get('score', 0),
