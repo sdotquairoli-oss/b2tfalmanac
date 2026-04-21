@@ -2332,23 +2332,20 @@ def render_syndicate_board(league_key):
             df, s_col, line, opp, league_key, rest, is_home_current, stat_type, ignore_blowout, df_hash, ledger_hash, opp_pitcher_era, opp_pitcher_name
         )
                 
-                # ✅ COMBO PROP MODE BANNER — shown in UI (not in cached fn)
+                # ✅ COMBO PROP MODE BANNER - shown in UI (not in cached fn)
                 COMBO_STATS = {"PRA", "PR", "PA", "RA"}
                 if s_col in COMBO_STATS:
                     st.markdown("""
-                    <div style="background-color: rgba(245, 158, 11, 0.08);
-                         border: 1px solid #f59e0b; border-radius: 6px;
-                         padding: 8px 12px; margin-bottom: 10px;">
+                    <div style="background-color: rgba(245, 158, 11, 0.08); border: 1px solid #f59e0b; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;">
                         <span style="font-size:12px; font-weight:900; color:#f59e0b;">
                             ⚠️ COMBO PROP MODE
                         </span>
                         <span style="font-size:11px; color:#f8fafc; margin-left:8px;">
-                            Threshold raised 30% — stacked stats require wider gap
-                            to offset multiplicative variance.
+                            Threshold raised 30% — stacked stats require wider gap to offset multiplicative variance.
                         </span>
                     </div>
                     """, unsafe_allow_html=True)
-    
+
                 # ✅ GAME SCRIPT RISK FLAG (Unified Engine)
                 spread_val = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
