@@ -1307,57 +1307,57 @@ bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
 mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs, opp_pitcher_era, opp_pitcher_name)
 unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
-    df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
-    # ✅ DEFENSIVE TIER SEGMENTATION
-    # Splits game log by opponent quality so outlier games against
-    # weak defenses don't contaminate projections against elite ones
-    ELITE_THRESHOLD = 0.93
-    WEAK_THRESHOLD  = 1.07
+df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
+# ✅ DEFENSIVE TIER SEGMENTATION
+# Splits game log by opponent quality so outlier games against
+# weak defenses don't contaminate projections against elite ones
+ELITE_THRESHOLD = 0.93
+WEAK_THRESHOLD  = 1.07
 
-    # ✅ Use raw base defense modifier for tier classification
-    # mod_val includes pace + archetype stacking which can push
-    # elite defenses into the average bucket incorrectly.
-    # We isolate just the defense component for tier sorting.
-    raw_def_mod = 1.0
-    if league == "NBA":
-        live_stats = get_live_nba_team_stats()
-        if opp in live_stats:
-            def_rank = live_stats[opp]['DEF_RANK']
-            if def_rank <= 10:   raw_def_mod = 0.90
-            elif def_rank >= 21: raw_def_mod = 1.10
-            else:                raw_def_mod = 1.00
+# ✅ Use raw base defense modifier for tier classification
+# mod_val includes pace + archetype stacking which can push
+# elite defenses into the average bucket incorrectly.
+# We isolate just the defense component for tier sorting.
+raw_def_mod = 1.0
+if league == "NBA":
+    live_stats = get_live_nba_team_stats()
+    if opp in live_stats:
+        def_rank = live_stats[opp]['DEF_RANK']
+        if def_rank <= 10:   raw_def_mod = 0.90
+        elif def_rank >= 21: raw_def_mod = 1.10
+        else:                raw_def_mod = 1.00
+    else:
+        # Fall back to static list
+        if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
+            raw_def_mod = 0.90
+        elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
+            raw_def_mod = 1.10
         else:
-            # Fall back to static list
-            if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
+            raw_def_mod = 1.00
+elif league == "NHL":
+    defs = bad_defs if bad_defs is not None else {}
+    raw_def_mod = 1.10 if opp in defs else (0.90 if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"] else 1.00)
+elif league == "MLB":
+        if opp_pitcher_era is not None:
+            if opp_pitcher_era <= 3.30:
                 raw_def_mod = 0.90
-            elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
+            elif opp_pitcher_era >= 4.50:
                 raw_def_mod = 1.10
             else:
                 raw_def_mod = 1.00
-    elif league == "NHL":
-        defs = bad_defs if bad_defs is not None else {}
-        raw_def_mod = 1.10 if opp in defs else (0.90 if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"] else 1.00)
-    elif league == "MLB":
-            if opp_pitcher_era is not None:
-                if opp_pitcher_era <= 3.30:
-                    raw_def_mod = 0.90
-                elif opp_pitcher_era >= 4.50:
-                    raw_def_mod = 1.10
-                else:
-                    raw_def_mod = 1.00
+        else:
+            if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
+                raw_def_mod = 0.90
+            elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
+                raw_def_mod = 1.10
             else:
-                if opp in ["ATL", "HOU", "LAD", "BAL", "PHI", "NYY"]:
-                    raw_def_mod = 0.90
-                elif opp in ["COL", "ATH", "CHW", "KC", "WSH"]:
-                    raw_def_mod = 1.10
-                else:
-                    raw_def_mod = 1.00
-    elite_games = df_ml[df_ml['Opp_Def_Mod'] <= ELITE_THRESHOLD]
-    weak_games  = df_ml[df_ml['Opp_Def_Mod'] >= WEAK_THRESHOLD]
-    avg_games   = df_ml[
-        (df_ml['Opp_Def_Mod'] > ELITE_THRESHOLD) &
-        (df_ml['Opp_Def_Mod'] < WEAK_THRESHOLD)
-    ]
+                raw_def_mod = 1.00
+elite_games = df_ml[df_ml['Opp_Def_Mod'] <= ELITE_THRESHOLD]
+weak_games  = df_ml[df_ml['Opp_Def_Mod'] >= WEAK_THRESHOLD]
+avg_games   = df_ml[
+    (df_ml['Opp_Def_Mod'] > ELITE_THRESHOLD) &
+    (df_ml['Opp_Def_Mod'] < WEAK_THRESHOLD)
+]
 
     MIN_TIER_GAMES = 3   # minimum games in a tier to trust the average
 
