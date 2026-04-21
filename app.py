@@ -1294,18 +1294,19 @@ def apply_skynet(raw_vote, stat_type, league):
 
 @st.cache_data(show_spinner=False, ttl=300)
 def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash="", opp_pitcher_era=None, opp_pitcher_name=None):    df_ml = df.copy()
+df_ml = df.copy()
 archetype = get_player_archetype(df_ml, league)
 
-    is_pitcher = s_col in ["K", "ER"]
-    min_games_required = 3 if (league == "MLB" and is_pitcher) else 5
-    if len(df_ml) < min_games_required: 
-        return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data"
+is_pitcher = s_col in ["K", "ER"]
+min_games_required = 3 if (league == "MLB" and is_pitcher) else 5
+if len(df_ml) < min_games_required:
+    return df_ml, [], 0, "PASS", "#94a3b8", 1.0, "Not enough data", 1.0, "", "", 1.0, "", archetype, "Awaiting Data"
 
-    weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
-    bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
+weights = df_ml['Weight'].values if 'Weight' in df_ml.columns else np.ones(len(df_ml))
+bad_defs = get_nhl_bad_defenses() if league == "NHL" else None
 
-    mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs, opp_pitcher_era, opp_pitcher_name)
-    unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
+mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype, bad_defs, opp_pitcher_era, opp_pitcher_name)
+unique_mods = {team: get_archetype_defense_modifier(league, team, archetype, bad_defs)[0] for team in df_ml['MATCHUP'].unique()}
     df_ml['Opp_Def_Mod'] = df_ml['MATCHUP'].map(unique_mods).fillna(1.0)
     # ✅ DEFENSIVE TIER SEGMENTATION
     # Splits game log by opponent quality so outlier games against
