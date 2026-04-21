@@ -1359,7 +1359,7 @@ avg_games   = df_ml[
     (df_ml['Opp_Def_Mod'] < WEAK_THRESHOLD)
 ]
 
-    MIN_TIER_GAMES = 3   # minimum games in a tier to trust the average
+MIN_TIER_GAMES = 3   # minimum games in a tier to trust the average
 
     if raw_def_mod <= ELITE_THRESHOLD:
         # Tonight is an elite defense — use only games vs elite defenses
