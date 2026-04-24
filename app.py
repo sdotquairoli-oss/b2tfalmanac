@@ -853,7 +853,7 @@ def get_nba_stats(player_label):
         for s in [curr_season, prev_season]:
             for s_type in ['Playoffs', 'Regular Season']:
                 try:
-                    log = playergamelog.PlayerGameLog(player_id=pid, season=s, season_type_all_star=s_type, headers=custom_headers, timeout=10)
+                    log = playergamelog.PlayerGameLog(player_id=pid, season=s, season_type_all_star=s_type, headers=custom_headers, timeout=15)
                     new_df = log.get_data_frames()[0]
                     if not new_df.empty:
                         df_list.append(new_df)
@@ -920,10 +920,11 @@ def get_nhl_stats(player_label):
         seasons = ['20252026', '20242025', '20232024']
         logs = []
         for s in seasons:
-            try:
-                resp = requests.get(f"https://api-web.nhle.com/v1/player/{pid}/game-log/{s}/2", timeout=5).json()
-                if 'gameLog' in resp: logs.extend(resp['gameLog'])
-            except: pass
+            for match_type in ['2', '3']:  # 2 is Regular Season, 3 is Playoffs
+                try:
+                    resp = requests.get(f"https://api-web.nhle.com/v1/player/{pid}/game-log/{s}/{match_type}", timeout=5).json()
+                    if 'gameLog' in resp: logs.extend(resp['gameLog'])
+                except: pass
         if not logs: return pd.DataFrame(), 404, []
         df = pd.DataFrame(logs)
         df['PTS'] = pd.to_numeric(df.get('points', 0))
