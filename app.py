@@ -803,8 +803,6 @@ def get_nba_stats(player_label):
         "cj mccollum": "CJ McCollum",
         "jj redick": "JJ Redick",
         "bones hyland": "Nah'Shon Hyland",
-        "scoot henderson": "Sterling Henderson",
-        "jrue holiday": "Jrue Holiday"
     }
     
     if cn.lower() in ALIASES:
@@ -836,17 +834,31 @@ def get_nba_stats(player_label):
         if not player_dict: return pd.DataFrame(), 404, []
         
         pid = player_dict[0]['id']
-        seasons = ['2025-26', '2024-25', '2023-24']
+        
+        real_year = datetime.now().year
+        if datetime.now().month < 10:
+            curr_season = f"{real_year-1}-{str(real_year)[-2:]}"
+            prev_season = f"{real_year-2}-{str(real_year-1)[-2:]}"
+        else:
+            curr_season = f"{real_year}-{str(real_year+1)[-2:]}"
+            prev_season = f"{real_year-1}-{str(real_year)[-2:]}"
+            
         df_list = []
-        for s in seasons:
-            for s_type in ['Regular Season', 'Playoffs']:
+    
+        for s in [curr_season, prev_season]:
+            for s_type in ['Playoffs', 'Regular Season']:
                 try:
                     log = playergamelog.PlayerGameLog(player_id=pid, season=s, season_type_all_star=s_type)
                     df_list.append(log.get_data_frames()[0])
-                    time.sleep(0.5)
+                    time.sleep(0.7) 
                 except: pass
             
+            # 3. The Kill Switch: Stop hammering the API once we have enough recent games
+            if df_list and sum(len(d) for d in df_list) >= 15:
+                break
+                
         if not df_list: return pd.DataFrame(), 404, []
+        df = pd.concat(df_list, ignore_index=True)
         df = pd.concat(df_list, ignore_index=True)
         if df.empty: return pd.DataFrame(), 404, []
         
