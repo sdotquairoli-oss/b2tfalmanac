@@ -803,6 +803,8 @@ def get_nba_stats(player_label):
         "cj mccollum": "CJ McCollum",
         "jj redick": "JJ Redick",
         "bones hyland": "Nah'Shon Hyland",
+        "scoot henderson": "Sterling Henderson",
+        "jrue holiday": "Jrue Holiday"
     }
     
     if cn.lower() in ALIASES:
