@@ -782,26 +782,17 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
 def get_nba_stats(player_label):
     cn = player_label.split("(")[0].strip()
     
-    # 🟢 ALIAS OVERRIDE: Fix BallDontLie vs NBA.com naming nightmares
+    # 🟢 ALIAS OVERRIDE
     ALIASES = {
-        "nicholas claxton": "Nic Claxton",
-        "nicolas claxton": "Nic Claxton",
-        "cameron thomas": "Cam Thomas",
-        "patrick mills": "Patty Mills",
-        "marcus morris": "Marcus Morris Sr.",
-        "kelly oubre": "Kelly Oubre Jr.",
-        "timothy hardaway": "Tim Hardaway Jr.",
-        "robert williams": "Robert Williams III",
-        "karl-anthony towns": "Karl-Anthony Towns",
-        "bub carrington": "Bub Carrington",
-        "carlton carrington": "Bub Carrington",
-        "og anunoby": "O.G. Anunoby",
-        "gg jackson": "Gregory Jackson II",
-        "aj green": "AJ Green",
-        "pj washington": "P.J. Washington",
-        "tj mcconnell": "T.J. McConnell",
-        "cj mccollum": "CJ McCollum",
-        "jj redick": "JJ Redick",
+        "nicholas claxton": "Nic Claxton", "nicolas claxton": "Nic Claxton",
+        "cameron thomas": "Cam Thomas", "patrick mills": "Patty Mills",
+        "marcus morris": "Marcus Morris Sr.", "kelly oubre": "Kelly Oubre Jr.",
+        "timothy hardaway": "Tim Hardaway Jr.", "robert williams": "Robert Williams III",
+        "karl-anthony towns": "Karl-Anthony Towns", "bub carrington": "Bub Carrington",
+        "carlton carrington": "Bub Carrington", "og anunoby": "O.G. Anunoby",
+        "gg jackson": "Gregory Jackson II", "aj green": "AJ Green",
+        "pj washington": "P.J. Washington", "tj mcconnell": "T.J. McConnell",
+        "cj mccollum": "CJ McCollum", "jj redick": "JJ Redick",
         "bones hyland": "Nah'Shon Hyland",
     }
     
@@ -831,10 +822,11 @@ def get_nba_stats(player_label):
                         player_dict = [p]
                         break
 
-        if not player_dict: return pd.DataFrame(), 404, []
+        if not player_dict: return pd.DataFrame(), 404, ["Player not found in static NBA dict."]
         
         pid = player_dict[0]['id']
         
+        # 1. Dynamic Seasons
         real_year = datetime.now().year
         if datetime.now().month < 10:
             curr_season = f"{real_year-1}-{str(real_year)[-2:]}"
@@ -844,23 +836,38 @@ def get_nba_stats(player_label):
             prev_season = f"{real_year-1}-{str(real_year)[-2:]}"
             
         df_list = []
-    
+        fetch_errors = []
+        
+        # 🛡️ ANTI-BOT HEADERS: Bypasses Streamlit Cloud IP Bans on NBA.com
+        custom_headers = {
+            'Host': 'stats.nba.com',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'max-age=0',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+        
         for s in [curr_season, prev_season]:
             for s_type in ['Playoffs', 'Regular Season']:
                 try:
-                    log = playergamelog.PlayerGameLog(player_id=pid, season=s, season_type_all_star=s_type)
-                    df_list.append(log.get_data_frames()[0])
-                    time.sleep(0.7) 
-                except: pass
-            
-            # 3. The Kill Switch: Stop hammering the API once we have enough recent games
+                    log = playergamelog.PlayerGameLog(player_id=pid, season=s, season_type_all_star=s_type, headers=custom_headers, timeout=10)
+                    new_df = log.get_data_frames()[0]
+                    if not new_df.empty:
+                        df_list.append(new_df)
+                    time.sleep(0.7)
+                except Exception as e:
+                    fetch_errors.append(f"{s} {s_type}: {str(e)}")
+                    
             if df_list and sum(len(d) for d in df_list) >= 15:
                 break
                 
-        if not df_list: return pd.DataFrame(), 404, []
+        if not df_list: return pd.DataFrame(), 404, fetch_errors
+        
         df = pd.concat(df_list, ignore_index=True)
-        df = pd.concat(df_list, ignore_index=True)
-        if df.empty: return pd.DataFrame(), 404, []
+        if df.empty: return pd.DataFrame(), 404, fetch_errors
         
         df['Is_Home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in x else 0)
         df['MATCHUP'] = df['MATCHUP'].apply(lambda x: x.split(' ')[-1])
@@ -887,22 +894,23 @@ def get_nba_stats(player_label):
             dash = playerdashboardbygeneralsplits.PlayerDashboardByGeneralSplits(
                 player_id=pid,
                 season='2025-26',
-                per_mode_simple='PerGame'
+                per_mode_simple='PerGame',
+                headers=custom_headers,
+                timeout=5
             )
             dash_df = dash.get_data_frames()[0]
             if not dash_df.empty and 'USG_PCT' in dash_df.columns:
                 usage_rate = float(dash_df['USG_PCT'].iloc[0])
             time.sleep(0.3)
         except:
-            usage_rate = 0.25
+            pass
 
         df['USG_PCT'] = usage_rate
 
         final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'USG_PCT', 'Weight', 'PF'] if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
-    except:
-        return pd.DataFrame(), 500, []
-
+    except Exception as e:
+        return pd.DataFrame(), 500, [str(e)]
 @st.cache_data(ttl=300)
 def get_nhl_stats(player_label):
     cn = player_label.split("(")[0].strip()
@@ -2297,18 +2305,20 @@ def render_syndicate_board(league_key):
                 st.stop()
     
             with st.spinner(f"Scouting data for {target_player}..."):
-                if league_key == "NBA": df, status_code, _ = get_nba_stats(target_player)
-                elif league_key == "MLB": df, status_code, _ = get_mlb_stats(target_player)
-                else: df, status_code, _ = get_nhl_stats(target_player)
+                if league_key == "NBA": df, status_code, fetch_errors = get_nba_stats(target_player)
+                elif league_key == "MLB": df, status_code, fetch_errors = get_mlb_stats(target_player)
+                else: df, status_code, fetch_errors = get_nhl_stats(target_player)
     
             if status_code == 429:
                 st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
                 st.stop()
             elif status_code == 500:
-                st.warning("🟡 **Server Error.** Try again in a moment.")
+                err_msg = " | ".join([str(e) for e in fetch_errors]) if fetch_errors else "Unknown server error."
+                st.warning(f"🟡 **Server Error.** Try again in a moment. Debug: {err_msg}")
                 st.stop()
             elif df.empty:
-                st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}.")
+                err_msg = " | ".join([str(e) for e in fetch_errors]) if fetch_errors else "API returned empty dataset."
+                st.error(f"⚠️ **No Data Found:** Could not locate official game logs for {target_player}. Debug: {err_msg}")
                 st.stop()
             elif not df.empty:
                 s_col = S_MAP.get(stat_type, "PTS")
