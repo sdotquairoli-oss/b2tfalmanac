@@ -473,10 +473,10 @@ def auto_grade_ledger():
                     stats['TD'] = (tens >= 3).astype(int)
             stats['td'] = pd.to_datetime(stats[d_col]).dt.date
             bet_date = pd.to_datetime(r['Date']).date()
-            next_date = bet_date + pd.Timedelta(days=1)
-            g_row = stats[stats['td'].isin([bet_date, next_date])]
-            if len(g_row) > 1: g_row = g_row[g_row['td'] == bet_date]
-            if g_row.empty: g_row = stats[stats['td'] == next_date]
+            search_dates = [bet_date + pd.Timedelta(days=i) for i in range(4)]
+            g_row = stats[stats['td'].isin(search_dates)]
+            if not g_row.empty:
+                g_row = g_row.sort_values('td').head(1)
             if not g_row.empty:
                             val, line_val = g_row.iloc[0][s_col], float(r['Line'])
                             if r['Vote'] == "OVER":
