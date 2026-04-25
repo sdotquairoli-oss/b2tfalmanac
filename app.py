@@ -784,10 +784,10 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
     except Exception as e: return None, None, f"API Error", used, rem
 
 @st.cache_data(ttl=300)
+@st.cache_data(ttl=300)
 def get_nba_stats(player_label):
     cn = player_label.split("(")[0].strip()
-    
-    # 🟢 ALIAS OVERRIDE
+
     ALIASES = {
         "nicholas claxton": "Nic Claxton", "nicolas claxton": "Nic Claxton",
         "cameron thomas": "Cam Thomas", "patrick mills": "Patty Mills",
@@ -798,127 +798,149 @@ def get_nba_stats(player_label):
         "gg jackson": "Gregory Jackson II", "aj green": "AJ Green",
         "pj washington": "P.J. Washington", "tj mcconnell": "T.J. McConnell",
         "cj mccollum": "CJ McCollum", "jj redick": "JJ Redick",
-        "bones hyland": "Nah'Shon Hyland",
+        "bones hyland": "Nah'Shon Hyland", "scoot henderson": "Scoot Henderson",
+        "jrue holiday": "Jrue Holiday",
     }
-    
     if cn.lower() in ALIASES:
         cn = ALIASES[cn.lower()]
-        
-    try:
-        from nba_api.stats.static import players
-        from nba_api.stats.endpoints import playergamelog
-        import unicodedata
-        
-        def clean_name(name):
-            base = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
-            return base.replace(".", "").replace("'", "").replace("-", "").replace(" ", "")
-            
-        nba_players = players.get_players()
-        player_dict = [p for p in nba_players if clean_name(p['full_name']) == clean_name(cn)]
-        
-        if not player_dict:
-            raw_parts = cn.replace(" Jr.", "").replace(" Sr.", "").replace(" III", "").replace(".", "").split()
-            if len(raw_parts) >= 2:
-                f_name_sub = raw_parts[0][:3].lower()
-                l_name = raw_parts[-1].lower()
-                for p in nba_players:
-                    p_clean = p['full_name'].replace(".", "").replace("-", " ").lower()
-                    if l_name in p_clean and f_name_sub in p_clean:
-                        player_dict = [p]
-                        break
 
-        if not player_dict: return pd.DataFrame(), 404, ["Player not found in static NBA dict."]
-        
-        pid = player_dict[0]['id']
-        
-        # 1. Dynamic Seasons
-        real_year = datetime.now().year
-        if datetime.now().month < 10:
-            curr_season = f"{real_year-1}-{str(real_year)[-2:]}"
-            prev_season = f"{real_year-2}-{str(real_year-1)[-2:]}"
-        else:
-            curr_season = f"{real_year}-{str(real_year+1)[-2:]}"
-            prev_season = f"{real_year-1}-{str(real_year)[-2:]}"
-            
-        df_list = []
-        fetch_errors = []
-        
-        # 🛡️ ANTI-BOT HEADERS: Bypasses Streamlit Cloud IP Bans on NBA.com
-        custom_headers = {
-            'Host': 'stats.nba.com',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Referer': 'https://www.nba.com/',
-            'Origin': 'https://www.nba.com',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-        }
-        
-        for s in [curr_season, prev_season]:
-            for s_type in ['Playoffs', 'Regular Season']:
-                try:
-                    log = playergamelog.PlayerGameLog(
-                        player_id=pid,
-                        season=s,
-                        season_type_all_star=s_type,
-                        headers=custom_headers,
-                        timeout=30
-                    )
-                    new_df = log.get_data_frames()[0]
-                    if not new_df.empty:
-                        df_list.append(new_df)
-                    time.sleep(0.7)
-                except Exception as e:
-                    fetch_errors.append(f"{s} {s_type}: {str(e)}")
-                    
-            if df_list and sum(len(d) for d in df_list) >= 15:
+    # ESPN abbreviation fixes — same map used in get_nba_schedule
+    ESPN_FIX = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA"}
+
+    fetch_errors = []
+
+    try:
+        # ── Step 1: Find ESPN athlete ID ──────────────────────────────────
+        search_term = cn.split()[-1]  # last name most reliable
+        r = requests.get(
+            "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes",
+            params={"search": search_term, "limit": 20},
+            timeout=10
+        )
+        if r.status_code != 200:
+            return pd.DataFrame(), 404, [f"ESPN search error: {r.status_code}"]
+
+        athletes = r.json().get('athletes', [])
+        if not athletes:
+            return pd.DataFrame(), 404, [f"No ESPN results for '{cn}'"]
+
+        cn_clean = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
+        athlete_id = None
+        for a in athletes:
+            full = a.get('fullName', a.get('displayName', '')).lower()
+            full_clean = full.replace('.', '').replace("'", '').replace('-', ' ')
+            if full_clean == cn_clean or cn_clean in full_clean:
+                athlete_id = a.get('id')
                 break
-                
-        if not df_list: return pd.DataFrame(), 404, fetch_errors
-        
-        df = pd.concat(df_list, ignore_index=True)
-        if df.empty: return pd.DataFrame(), 404, fetch_errors
-        
-        df['Is_Home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in x else 0)
-        df['MATCHUP'] = df['MATCHUP'].apply(lambda x: x.split(' ')[-1])
-        df['ValidDate'] = pd.to_datetime(df['GAME_DATE'])
-        df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        
-        def parse_mins(x):
+        if not athlete_id:
+            athlete_id = athletes[0].get('id')  # fallback to first result
+
+        # ── Step 2: Fetch game logs — current + previous season ───────────
+        curr_year = datetime.now().year
+        if datetime.now().month < 10:
+            seasons = [curr_year, curr_year - 1]    # e.g. 2025, 2024
+        else:
+            seasons = [curr_year + 1, curr_year]    # e.g. 2026, 2025
+
+        all_rows = []
+
+        for season_year in seasons:
             try:
-                s = str(x)
-                return float(s.split(':')[0]) + float(s.split(':')[1])/60.0 if ':' in s else float(s)
-            except: return 0.0
-            
-        df['MINS'] = df['MIN'].apply(parse_mins)
-        df = df.rename(columns={'REB': 'TRB'})
+                gl_r = requests.get(
+                    f"https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/{athlete_id}/gamelog",
+                    params={"season": season_year},
+                    timeout=10
+                )
+                if gl_r.status_code != 200:
+                    fetch_errors.append(f"Season {season_year}: HTTP {gl_r.status_code}")
+                    continue
+
+                gl_data   = gl_r.json()
+                events_meta   = gl_data.get('events', {})
+                season_types  = gl_data.get('seasonTypes', [])
+
+                # Build per-event stat map across all categories
+                game_stats = {}  # eventId -> {label: value}
+                for stype in season_types:
+                    for cat in stype.get('categories', []):
+                        labels = cat.get('labels', [])
+                        for ev in cat.get('events', []):
+                            eid  = str(ev.get('eventId', ''))
+                            vals = ev.get('stats', [])
+                            if eid not in game_stats:
+                                game_stats[eid] = {}
+                            for label, val in zip(labels, vals):
+                                game_stats[eid][label] = val
+
+                def safe_float(val, default=0.0):
+                    try:
+                        return float(str(val).replace('--', '0').strip() or default)
+                    except:
+                        return default
+
+                for eid, stats in game_stats.items():
+                    meta = events_meta.get(eid, {})
+                    if not meta:
+                        continue
+
+                    # Date
+                    date_str = meta.get('gameDate', meta.get('date', ''))
+                    try:
+                        game_date = pd.to_datetime(date_str)
+                    except:
+                        continue
+
+                    # Home/Away
+                    is_home = 1 if meta.get('homeAway', 'away') == 'home' else 0
+
+                    # Opponent abbreviation with ESPN normalization
+                    raw_opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
+                    opp = ESPN_FIX.get(raw_opp, raw_opp)
+
+                    # Minutes
+                    min_raw = stats.get('MIN', stats.get('M', '0'))
+                    try:
+                        parts = str(min_raw).split(':')
+                        mins = float(parts[0]) + float(parts[1])/60.0 if len(parts) == 2 else float(parts[0])
+                    except:
+                        mins = 0.0
+
+                    if mins < 1.0:
+                        continue  # skip DNP
+
+                    all_rows.append({
+                        'ValidDate': game_date,
+                        'MATCHUP':   opp,
+                        'Is_Home':   is_home,
+                        'MINS':      mins,
+                        'PTS':  safe_float(stats.get('PTS',  0)),
+                        'TRB':  safe_float(stats.get('REB',  stats.get('DREB', 0))),
+                        'AST':  safe_float(stats.get('AST',  0)),
+                        'STL':  safe_float(stats.get('STL',  0)),
+                        'BLK':  safe_float(stats.get('BLK',  0)),
+                        'FG3M': safe_float(stats.get('3PM',  stats.get('FG3M', 0))),
+                        'PF':   safe_float(stats.get('PF',   0)),
+                    })
+
+            except Exception as e:
+                fetch_errors.append(f"Season {season_year}: {str(e)}")
+
+        if not all_rows:
+            return pd.DataFrame(), 404, fetch_errors or ["No ESPN game data found"]
+
+        df = pd.DataFrame(all_rows)
+        df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
-        df['Weight'] = np.exp(-0.003465 * df['Days_Ago'])
-        
-        # ✅ USAGE RATE FETCH
-        usage_rate = 0.25
-        try:
-            from nba_api.stats.endpoints import playerdashboardbygeneralsplits
-            dash = playerdashboardbygeneralsplits.PlayerDashboardByGeneralSplits(
-                player_id=pid,
-                season='2025-26',
-                per_mode_simple='PerGame',
-                timeout=30
-            )
-            dash_df = dash.get_data_frames()[0]
-            if not dash_df.empty and 'USG_PCT' in dash_df.columns:
-                usage_rate = float(dash_df['USG_PCT'].iloc[0])
-            time.sleep(0.3)
-        except:
-            pass
+        df['Weight']  = np.exp(-0.003465 * df['Days_Ago'])
+        df['USG_PCT'] = 0.25  # ESPN gamelog doesn't expose USG% — league avg default
 
-        df['USG_PCT'] = usage_rate
-
-        final_cols = [c for c in ['ValidDate', 'ShortDate', 'MATCHUP', 'Is_Home', 'MINS', 'PTS', 'TRB', 'AST', 'STL', 'BLK', 'FG3M', 'USG_PCT', 'Weight', 'PF'] if c in df.columns]
+        final_cols = [c for c in ['ValidDate','ShortDate','MATCHUP','Is_Home','MINS',
+                                   'PTS','TRB','AST','STL','BLK','FG3M','USG_PCT','Weight','PF']
+                      if c in df.columns]
         return df[final_cols].sort_values('ValidDate').reset_index(drop=True), 200, []
+
     except Exception as e:
         return pd.DataFrame(), 500, [str(e)]
 @st.cache_data(ttl=300)
@@ -986,47 +1008,6 @@ def get_mlb_stats(player_label):
     except: return pd.DataFrame(), 500, []
 
 @st.cache_data(ttl=43200)
-def get_live_nba_team_stats():
-    try:
-        from nba_api.stats.endpoints import leaguedashteamstats
-        
-        season_stats = leaguedashteamstats.LeagueDashTeamStats(
-            measure_type_detailed_defense='Advanced'
-        )
-        df_season = season_stats.get_data_frames()[0]
-        df_season['TEAM_ABBREV'] = df_season['TEAM_NAME'].map(NBA_FULL_TO_ABBREV)
-        df_season = df_season[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
-        df_season['DEF_RANK'] = df_season['DEF_RATING'].rank(ascending=True)
-        df_season['PACE_RANK'] = df_season['PACE'].rank(ascending=False)
-
-        recent_stats = leaguedashteamstats.LeagueDashTeamStats(
-            measure_type_detailed_defense='Advanced',
-            last_n_games=20
-        )
-        df_recent = recent_stats.get_data_frames()[0]
-        df_recent['TEAM_ABBREV'] = df_recent['TEAM_NAME'].map(NBA_FULL_TO_ABBREV)
-        df_recent = df_recent[['TEAM_ABBREV', 'DEF_RATING', 'PACE']].set_index('TEAM_ABBREV')
-        df_recent['DEF_RANK_RECENT'] = df_recent['DEF_RATING'].rank(ascending=True)
-        df_recent['PACE_RANK_RECENT'] = df_recent['PACE'].rank(ascending=False)
-
-        combined = df_season.join(df_recent, rsuffix='_recent', how='left')
-        combined['DEF_RANK_BLENDED'] = (
-            combined['DEF_RANK'] * 0.40 +
-            combined['DEF_RANK_RECENT'] * 0.60
-        ).fillna(combined['DEF_RANK'])
-        combined['PACE_RANK_BLENDED'] = (
-            combined['PACE_RANK'] * 0.40 +
-            combined['PACE_RANK_RECENT'] * 0.60
-        ).fillna(combined['PACE_RANK'])
-
-        combined['DEF_RANK']  = combined['DEF_RANK_BLENDED']
-        combined['PACE_RANK'] = combined['PACE_RANK_BLENDED']
-
-        result = combined[['DEF_RATING', 'PACE', 'DEF_RANK', 'PACE_RANK']].to_dict('index')
-        return result
-    except:
-        return {}
-
 def get_player_archetype(df, league):
     if df.empty: return "Unknown Profile"
     
@@ -1558,56 +1539,6 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     ]
     
     return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote
-@st.cache_data(ttl=3600)
-def run_nba_heaters(stat_choice="Points"):
-    try:
-        from nba_api.stats.endpoints import leagueleaders
-        sched, _ = get_nba_schedule()
-        if not sched: return None, "No NBA games scheduled today."
-        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
-        s_col = S_MAP.get(stat_choice, "PTS")
-        if s_col == "A": s_col = "AST"
-        leaders = leagueleaders.LeagueLeaders(stat_category_abbreviation="PTS", per_mode48='PerGame').get_data_frames()[0]
-        leaders['TRB'] = leaders['REB']
-        leaders['PRA'] = leaders['PTS'] + leaders['REB'] + leaders['AST']
-        leaders['PR'] = leaders['PTS'] + leaders['REB']
-        leaders['PA'] = leaders['PTS'] + leaders['AST']
-        leaders['RA'] = leaders['REB'] + leaders['AST']
-        sort_col = s_col if s_col in leaders.columns else 'PTS'
-        leaders = leaders.sort_values(by=sort_col, ascending=False).reset_index(drop=True)
-        heaters = []
-        for _, r in leaders.head(50).iterrows():
-            team_abbrev = r['TEAM']
-            if team_abbrev in teams_today:
-                player_name = r['PLAYER']
-                season_val = round(r[sort_col], 1)
-                opp, is_home = "OPP", True
-                for g in sched:
-                    if g['home'] == team_abbrev: opp = g['away']; is_home = True; break
-                    elif g['away'] == team_abbrev: opp = g['home']; is_home = False; break
-                ai_proj = 0.0
-                matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
-                df, status, _ = get_nba_stats(player_name)
-                if status != 429 and not df.empty and len(df) >= 5:
-                    last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
-                    today_est = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
-                    days_out = (today_est - last_played).days
-                    if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
-                    if s_col == "PRA": df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
-                    if s_col == "PR": df['PR'] = df['PTS'] + df['TRB']
-                    if s_col == "PA": df['PA'] = df['PTS'] + df['AST']
-                    if s_col == "RA": df['RA'] = df['TRB'] + df['AST']
-                    dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
-                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
-                        df, s_col, float(season_val), opp, "NBA", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
-                    )
-                    ai_proj = round(c_proj, 1)
-                time.sleep(0.5)
-                heaters.append({"Player": player_name, "Team": team_abbrev, "Season Stat": season_val, "AI Proj": ai_proj, "Status": matchup_status})
-        if not heaters: return None, f"No top 50 {stat_choice} leaders playing tonight."
-        return pd.DataFrame(heaters), f"✅ Deep Scan Complete: {stat_choice} Projections loaded."
-    except Exception as e: return None, f"API Error: {str(e)}"
-
 @st.cache_data(ttl=3600)
 def run_nhl_heaters(stat_choice="Points"):
     try:
