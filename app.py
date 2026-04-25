@@ -272,7 +272,10 @@ def overwrite_sheet(sheet_name, df):
         
         # Wipes the entire Streamlit memory so it doesn't duplicate bets
         st.cache_data.clear()
-        
+
+    except Exception as e:
+        st.error(f"Failed to update database: {e}")
+
 @st.cache_data(ttl=120)
 def load_ledger():
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]    
