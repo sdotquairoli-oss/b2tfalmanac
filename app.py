@@ -461,20 +461,24 @@ def auto_grade_ledger():
             stats, d_col = stats_cache[cache_key]
             if stats.empty: continue
             s_col = S_MAP.get(r['Stat'], "PTS")
-            if league == "NBA":
-                if s_col == "A": s_col = "AST"
-                if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
-                if s_col == "PR" and 'PTS' in stats: stats['PR'] = stats['PTS'] + stats['TRB']
-                if s_col == "PA" and 'PTS' in stats: stats['PA'] = stats['PTS'] + stats['AST']
-                if s_col == "RA" and 'TRB' in stats: stats['RA'] = stats['TRB'] + stats['AST']
-                if s_col in ["DD", "TD"]:
-                    tens = (stats['PTS'] >= 10).astype(int) + (stats['TRB'] >= 10).astype(int) + (stats['AST'] >= 10).astype(int) + (stats.get('STL', 0) >= 10).astype(int) + (stats.get('BLK', 0) >= 10).astype(int)
-                    stats['DD'] = (tens >= 2).astype(int)
-                    stats['TD'] = (tens >= 3).astype(int)
+                if league == "NBA":
+                    if s_col == "A": s_col = "AST"
+                    if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
+                    if s_col == "PR" and 'PTS' in stats: stats['PR'] = stats['PTS'] + stats['TRB']
+                    if s_col == "PA" and 'PTS' in stats: stats['PA'] = stats['PTS'] + stats['AST']
+                    if s_col == "RA" and 'TRB' in stats: stats['RA'] = stats['TRB'] + stats['AST']
+                    if s_col in ["DD", "TD"]:
+                        tens = (stats['PTS'] >= 10).astype(int) + (stats['TRB'] >= 10).astype(int) + (stats['AST'] >= 10).astype(int) + (stats.get('STL', 0) >= 10).astype(int) + (stats.get('BLK', 0) >= 10).astype(int)
+                        stats['DD'] = (tens >= 2).astype(int)
+                        stats['TD'] = (tens >= 3).astype(int)
+
             stats['td'] = pd.to_datetime(stats[d_col]).dt.date
             bet_date = pd.to_datetime(r['Date']).date()
-            search_dates = [bet_date + pd.Timedelta(days=i) for i in range(4)]
+            
+            # 🟢 WIDE NET: Expand window backward 1 day and forward 4 days to catch any UTC midnight shifts
+            search_dates = [bet_date + pd.Timedelta(days=i) for i in range(-1, 5)]
             g_row = stats[stats['td'].isin(search_dates)]
+            
             if not g_row.empty:
                 g_row = g_row.sort_values('td').head(1)
             if not g_row.empty:
