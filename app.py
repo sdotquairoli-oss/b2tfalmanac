@@ -780,6 +780,32 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         return None, None, "Props not posted yet.", used, rem
     except Exception as e: return None, None, f"API Error", used, rem
 
+ESPN_NBA_TEAM_IDS = {
+    "ATL": 1, "BOS": 2, "BKN": 17, "CHA": 30, "CHI": 4,
+    "CLE": 5, "DAL": 6, "DEN": 7, "DET": 8, "GSW": 9,
+    "HOU": 10, "IND": 11, "LAC": 12, "LAL": 13, "MEM": 29,
+    "MIA": 14, "MIL": 15, "MIN": 16, "NOP": 3, "NYK": 18,
+    "OKC": 25, "ORL": 19, "PHI": 20, "PHX": 21, "POR": 22,
+    "SAC": 23, "SAS": 24, "TOR": 28, "UTA": 26, "WAS": 27
+}
+
+@st.cache_data(ttl=3600)
+def get_espn_roster(team_abbr):
+    team_id = ESPN_NBA_TEAM_IDS.get(str(team_abbr).upper())
+    if not team_id: return {}
+    try:
+        r = requests.get(
+            f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{team_id}/roster",
+            timeout=10
+        )
+        if r.status_code != 200: return {}
+        roster = {}
+        for athlete in r.json().get('athletes', []):
+            full = athlete.get('fullName', athlete.get('displayName', '')).lower()
+            roster[full] = str(athlete.get('id', ''))
+        return roster
+    except: return {}
+
 @st.cache_data(ttl=300)
 def get_nba_stats(player_label):
     cn = player_label.split("(")[0].strip()
@@ -806,30 +832,34 @@ def get_nba_stats(player_label):
     fetch_errors = []
 
     try:
-        # ── Step 1: Find ESPN athlete ID ──────────────────────────────────
-        search_term = cn.split()[-1]  # last name most reliable
-        r = requests.get(
-            "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes",
-            params={"search": search_term, "limit": 20},
-            timeout=10
-        )
-        if r.status_code != 200:
-            return pd.DataFrame(), 404, [f"ESPN search error: {r.status_code}"]
-
-        athletes = r.json().get('athletes', [])
-        if not athletes:
-            return pd.DataFrame(), 404, [f"No ESPN results for '{cn}'"]
-
+        # ── Step 1: Find ESPN athlete ID via team roster ───────────────────
+        team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
         cn_clean = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
         athlete_id = None
-        for a in athletes:
-            full = a.get('fullName', a.get('displayName', '')).lower()
-            full_clean = full.replace('.', '').replace("'", '').replace('-', ' ')
-            if full_clean == cn_clean or cn_clean in full_clean:
-                athlete_id = a.get('id')
-                break
+
+        # Primary: look up from team roster
+        if team_abbr in ESPN_NBA_TEAM_IDS:
+            roster = get_espn_roster(team_abbr)
+            for name, aid in roster.items():
+                name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
+                if name_clean == cn_clean or cn_clean in name_clean:
+                    athlete_id = aid
+                    break
+
+        # Fallback: scan common rosters if team not found or player not on roster
         if not athlete_id:
-            athlete_id = athletes[0].get('id')  # fallback to first result
+            for fallback_abbr in ["LAL", "GSW", "BOS", "MIA", "DEN", "PHX", "MIL", "PHI", "OKC", "NYK", "POR", "MIN", "CLE", "ATL", "DAL"]:
+                roster = get_espn_roster(fallback_abbr)
+                for name, aid in roster.items():
+                    name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
+                    if name_clean == cn_clean or cn_clean in name_clean:
+                        athlete_id = aid
+                        break
+                if athlete_id:
+                    break
+
+        if not athlete_id:
+            return pd.DataFrame(), 404, [f"'{cn}' not found in any ESPN roster"]
 
         # ── Step 2: Fetch game logs — current + previous season ───────────
         curr_year = datetime.now().year
