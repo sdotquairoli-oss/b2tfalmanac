@@ -976,8 +976,8 @@ def get_nba_stats(player_label):
 
         df = pd.DataFrame(all_rows)
         
-        # 🟢 TIMEZONE STRIP: Normalizes ESPN dates so they can be subtracted from 'today'
-        df['ValidDate'] = pd.to_datetime(df['ValidDate'], utc=True).dt.tz_localize(None)
+        # 🟢 EXACT CALENDAR SYNC: Convert UTC to Eastern Time before stripping, so late games land on the correct day
+        df['ValidDate'] = pd.to_datetime(df['ValidDate'], utc=True).dt.tz_convert('America/New_York').dt.normalize().dt.tz_localize(None)
         
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
