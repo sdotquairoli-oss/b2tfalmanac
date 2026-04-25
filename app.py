@@ -804,20 +804,6 @@ def get_nba_stats(player_label):
         from nba_api.stats.endpoints import playergamelog
         import unicodedata
         
-        from nba_api.library.http import NBAStatsHTTP
-        NBAStatsHTTP.nba_response.headers = {
-            "Host": "stats.nba.com",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Referer": "https://www.nba.com/",
-            "Origin": "https://www.nba.com",
-            "x-nba-stats-origin": "stats",
-            "x-nba-stats-token": "true"
-        }
-        
         def clean_name(name):
             base = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
             return base.replace(".", "").replace("'", "").replace("-", "").replace(" ", "")
@@ -906,10 +892,11 @@ def get_nba_stats(player_label):
         try:
             from nba_api.stats.endpoints import playerdashboardbygeneralsplits
             dash = playerdashboardbygeneralsplits.PlayerDashboardByGeneralSplits(
-                player_id=pid,
-                season='2025-26',
-                per_mode_simple='PerGame',
-                timeout=30
+                player_id=pid, 
+                season='2025-26', 
+                per_mode_simple='PerGame', 
+                headers=custom_headers, 
+                timeout=30 
             )
             dash_df = dash.get_data_frames()[0]
             if not dash_df.empty and 'USG_PCT' in dash_df.columns:
