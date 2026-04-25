@@ -461,7 +461,7 @@ def auto_grade_ledger():
             stats, d_col = stats_cache[cache_key]
             if stats.empty: continue
             s_col = S_MAP.get(r['Stat'], "PTS")
-                if league == "NBA":
+            if league == "NBA":
                     if s_col == "A": s_col = "AST"
                     if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
                     if s_col == "PR" and 'PTS' in stats: stats['PR'] = stats['PTS'] + stats['TRB']
