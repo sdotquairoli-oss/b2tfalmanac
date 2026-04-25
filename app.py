@@ -968,6 +968,10 @@ def get_nba_stats(player_label):
             return pd.DataFrame(), 404, fetch_errors or ["No ESPN game data found"]
 
         df = pd.DataFrame(all_rows)
+        
+        # 🟢 TIMEZONE STRIP: Normalizes ESPN dates so they can be subtracted from 'today'
+        df['ValidDate'] = pd.to_datetime(df['ValidDate'], utc=True).dt.tz_localize(None)
+        
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
