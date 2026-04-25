@@ -876,9 +876,9 @@ def get_nba_stats(player_label):
         # ── Step 2: Fetch game logs — current + previous season ───────────
         curr_year = datetime.now().year
         if datetime.now().month < 10:
-            seasons = [curr_year - 1, curr_year - 2]   # April 2026 → [2025, 2024]
+            seasons = [curr_year, curr_year - 1]    # April 2026 → [2026, 2025] ✅
         else:
-            seasons = [curr_year, curr_year - 1]        # Oct 2026 → [2026, 2025]
+            seasons = [curr_year + 1, curr_year]    # Oct 2026 → [2027, 2026]
 
         all_rows = []
 
