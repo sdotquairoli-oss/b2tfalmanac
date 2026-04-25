@@ -538,7 +538,9 @@ def search_nba_players(query):
         "cam": "cameron",
         "cam thomas": "cameron thomas",
         "nic": "nicolas",
-        "nic claxton": "nicolas claxton"
+        "nic claxton": "nicolas claxton",
+        "scoot": "scooter",
+        "scoot henderson": "scooter henderson",
     }
     api_query = NICKNAMES.get(q_lower, query)
     
@@ -734,6 +736,9 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "nah'shon hyland": "bones hyland",
         "tj mcconnell": "t.j. mcconnell",
         "cj mccollum": "c.j. mccollum",
+        "scoot henderson": "Scoot Henderson",
+        "scooter henderson": "Scoot Henderson",
+        "jrue holiday": "Jrue Holiday",
     }
     
     clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
@@ -803,19 +808,6 @@ def get_nba_stats(player_label):
         from nba_api.stats.static import players
         from nba_api.stats.endpoints import playergamelog
         import unicodedata
-
-        NBAStatsHTTP.nba_response.headers = {
-            "Host": "stats.nba.com",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Referer": "https://www.nba.com/",
-            "Origin": "https://www.nba.com",
-            "x-nba-stats-origin": "stats",
-            "x-nba-stats-token": "true"
-        }
         
         def clean_name(name):
             base = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
@@ -866,7 +858,13 @@ def get_nba_stats(player_label):
         for s in [curr_season, prev_season]:
             for s_type in ['Playoffs', 'Regular Season']:
                 try:
-                    log = playergamelog.PlayerGameLog(player_id=pid, season=s, timeout=30)
+                    log = playergamelog.PlayerGameLog(
+                        player_id=pid,
+                        season=s,
+                        season_type_all_star=s_type,
+                        headers=custom_headers,
+                        timeout=30
+                    )
                     new_df = log.get_data_frames()[0]
                     if not new_df.empty:
                         df_list.append(new_df)
