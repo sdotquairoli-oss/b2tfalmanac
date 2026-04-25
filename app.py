@@ -894,30 +894,15 @@ def get_nba_stats(player_label):
                     continue
 
                 gl_data = gl_r.json()
-                top_keys = list(gl_data.keys())
-                events_raw = gl_data.get('events', {})
+                
+                events_meta = gl_data.get('events', {})
                 season_types = gl_data.get('seasonTypes', [])
 
-                # Debug: log what we actually received
-                fetch_errors.append(
-                    f"Season {season_year}: top keys={top_keys}, "
-                    f"events type={type(events_raw).__name__}, "
-                    f"events len={len(events_raw)}, "
-                    f"seasonTypes len={len(season_types)}, "
-                    f"athlete_id={athlete_id}"
-                )
+                labels = gl_data.get('labels', [])
 
-                # Handle events as either dict or list
-                if isinstance(events_raw, list):
-                    events_meta = {str(e.get('id', e.get('eventId', ''))): e for e in events_raw}
-                else:
-                    events_meta = events_raw
-
-                # Build per-event stat map across all categories
                 game_stats = {}  # eventId -> {label: value}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        labels = cat.get('labels', [])
                         for ev in cat.get('events', []):
                             eid  = str(ev.get('eventId', ''))
                             vals = ev.get('stats', [])
