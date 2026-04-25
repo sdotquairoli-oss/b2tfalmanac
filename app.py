@@ -831,9 +831,9 @@ def get_nba_stats(player_label):
         # ── Step 2: Fetch game logs — current + previous season ───────────
         curr_year = datetime.now().year
         if datetime.now().month < 10:
-            seasons = [curr_year, curr_year - 1]    # e.g. 2025, 2024
+            seasons = [curr_year - 1, curr_year - 2]   # April 2026 → [2025, 2024]
         else:
-            seasons = [curr_year + 1, curr_year]    # e.g. 2026, 2025
+            seasons = [curr_year, curr_year - 1]        # Oct 2026 → [2026, 2025]
 
         all_rows = []
 
@@ -1319,20 +1319,12 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     
     raw_def_mod = 1.0
     if league == "NBA":
-        live_stats = get_live_nba_team_stats()
-        if opp in live_stats:
-            def_rank = live_stats[opp]['DEF_RANK']
-            if def_rank <= 10:   raw_def_mod = 0.90
-            elif def_rank >= 21: raw_def_mod = 1.10
-            else:                raw_def_mod = 1.00
+        if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
+            raw_def_mod = 0.90
+        elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
+            raw_def_mod = 1.10
         else:
-            # Fall back to static list
-            if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
-                raw_def_mod = 0.90
-            elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
-                raw_def_mod = 1.10
-            else:
-                raw_def_mod = 1.00
+            raw_def_mod = 1.00
     elif league == "NHL":
         defs = bad_defs if bad_defs is not None else {}
         raw_def_mod = 1.10 if opp in defs else (0.90 if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"] else 1.00)
@@ -1726,10 +1718,7 @@ def render_league_scanners(league_name):
             with c2:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
-                    with st.spinner(f"Scanning {scan_stat} Leaders..."):
-                        df, msg = run_nba_heaters(scan_stat)
-                        if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
-                        st.info(msg)
+                    st.info("🚧 NBA Radar temporarily offline — migrating from nba_api to ESPN. Coming back soon.")
         elif league_name == "NHL":
             c1, c2, c3 = st.columns([1.2, 1, 1])
             with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Goals", "Assists", "Shots on Goal"], key=f"{lk}.scan_stat")
