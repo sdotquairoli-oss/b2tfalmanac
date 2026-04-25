@@ -800,9 +800,21 @@ def get_espn_roster(team_abbr):
         )
         if r.status_code != 200: return {}
         roster = {}
-        for athlete in r.json().get('athletes', []):
-            full = athlete.get('fullName', athlete.get('displayName', '')).lower()
-            roster[full] = str(athlete.get('id', ''))
+        raw = r.json().get('athletes', [])
+
+        for item in raw:
+            if 'items' in item:
+                for athlete in item.get('items', []):
+                    full = athlete.get('fullName', athlete.get('displayName', '')).lower()
+                    aid = str(athlete.get('id', ''))
+                    if full and aid:
+                        roster[full] = aid
+            else:
+                full = item.get('fullName', item.get('displayName', '')).lower()
+                aid = str(item.get('id', ''))
+                if full and aid:
+                    roster[full] = aid
+
         return roster
     except: return {}
 
