@@ -273,12 +273,6 @@ def overwrite_sheet(sheet_name, df):
         # Wipes the entire Streamlit memory so it doesn't duplicate bets
         st.cache_data.clear()
         
-        try: ws.update(values=new_values, range_name='A1', value_input_option="USER_ENTERED")
-        except TypeError: ws.update('A1', new_values, value_input_option="USER_ENTERED")
-        # Wipes the entire Streamlit memory so it doesn't duplicate bets
-        st.cache_data.clear()
-    except Exception as e: st.error(f"Failed to update database: {e}")
-        
 @st.cache_data(ttl=120)
 def load_ledger():
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]    
@@ -457,7 +451,7 @@ def auto_grade_ledger():
             cache_key = (league, player)
             if cache_key not in stats_cache:
                 time.sleep(1)
-                if league == "NBA": stats, _, _ = get_nba_stats(player); d_col = 'ValidDate'
+                if league == "NBA": stats, _, _ = get_nba_stats(f"{player} (NBA)"); d_col = 'ValidDate'
                 elif league == "NHL": stats, _, _ = get_nhl_stats(player); d_col = 'ValidDate'
                 else: stats, _, _ = get_mlb_stats(player); d_col = 'ValidDate'
                 stats_cache[cache_key] = (stats, d_col)
@@ -784,7 +778,6 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
     except Exception as e: return None, None, f"API Error", used, rem
 
 @st.cache_data(ttl=300)
-@st.cache_data(ttl=300)
 def get_nba_stats(player_label):
     cn = player_label.split("(")[0].strip()
 
@@ -1007,7 +1000,6 @@ def get_mlb_stats(player_label):
         return df.sort_values('ValidDate').reset_index(drop=True), 200, []
     except: return pd.DataFrame(), 500, []
 
-@st.cache_data(ttl=43200)
 def get_player_archetype(df, league):
     if df.empty: return "Unknown Profile"
     
@@ -1058,22 +1050,17 @@ def get_player_archetype(df, league):
 
 def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None, opp_pitcher_era=None, opp_pitcher_name=None):
     if league == "NBA":
-        live_stats = get_live_nba_team_stats()
-        if opp in live_stats:
-            def_rank, pace_rank = live_stats[opp]['DEF_RANK'], live_stats[opp]['PACE_RANK']
-            mod_val, mod_desc = 1.0, f"🛡️ Def Rank: #{int(def_rank)} | 🏃 Pace: #{int(pace_rank)} -> "
-            if def_rank <= 10: mod_val *= 0.90; mod_desc += "Elite Def (-10%). "
-            elif def_rank >= 21: mod_val *= 1.10; mod_desc += "Weak Def (+10%). "
-            else: mod_desc += "Avg Def (Neutral). "
-            if pace_rank <= 10: mod_val *= 1.05; mod_desc += "Fast Pace (+5%). "
-            elif pace_rank >= 21: mod_val *= 0.95; mod_desc += "Slow Pace (-5%). "
-            if "Point-Forward" in archetype and def_rank >= 15: mod_val *= 1.05; mod_desc += "🚨 Exploit: Weak vs Forwards."
-            elif "Primary Playmaker" in archetype and def_rank <= 10: mod_val *= 0.95; mod_desc += "🛑 Fade: Elite Perimeter Def."
-            return mod_val, mod_desc
+        if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
+            mod_val, mod_desc = 0.90, "Elite Defense (-10%)"
+        elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
+            mod_val, mod_desc = 1.10, "Weak Defense (+10%)"
         else:
-            if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]: return 0.90, "Elite Defense (-10%)"
-            elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]: return 1.10, "Weak Defense (+10%)"
-            return 1.00, "Average Def (Neutral)"
+            mod_val, mod_desc = 1.00, "Average Def (Neutral)"
+        if "Point-Forward" in archetype and mod_val >= 1.10:
+            mod_val *= 1.05; mod_desc += " 🚨 Exploit: Weak vs Forwards."
+        elif "Primary Playmaker" in archetype and mod_val <= 0.90:
+            mod_val *= 0.95; mod_desc += " 🛑 Fade: Elite Perimeter Def."
+        return mod_val, mod_desc
             
     elif league == "MLB":
         mod_val, mod_desc = 1.0, "Average Pitching (Neutral)"
@@ -1486,8 +1473,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ✅ TIER BLEND
     raw_consensus_base = (smart_base * 0.50) + (guru_proj * 0.50)
     raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
-    raw_consensus = raw_consensus * 0.95
-    raw_consensus = float(np.clip(raw_consensus, 0.0, 200.0)) * 0.92
+    raw_consensus = float(np.clip(raw_consensus * 0.95, 0.0, 200.0))
     
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
     ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
