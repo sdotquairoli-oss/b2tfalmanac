@@ -462,12 +462,12 @@ def auto_grade_ledger():
             if stats.empty: continue
             s_col = S_MAP.get(r['Stat'], "PTS")
             if league == "NBA":
-                    if s_col == "A": s_col = "AST"
-                    if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
-                    if s_col == "PR" and 'PTS' in stats: stats['PR'] = stats['PTS'] + stats['TRB']
-                    if s_col == "PA" and 'PTS' in stats: stats['PA'] = stats['PTS'] + stats['AST']
-                    if s_col == "RA" and 'TRB' in stats: stats['RA'] = stats['TRB'] + stats['AST']
-                    if s_col in ["DD", "TD"]:
+                if s_col == "A": s_col = "AST"
+                if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
+                if s_col == "PR" and 'PTS' in stats: stats['PR'] = stats['PTS'] + stats['TRB']
+                if s_col == "PA" and 'PTS' in stats: stats['PA'] = stats['PTS'] + stats['AST']
+                if s_col == "RA" and 'TRB' in stats: stats['RA'] = stats['TRB'] + stats['AST']
+                if s_col in ["DD", "TD"]:
                     tens = (stats['PTS'] >= 10).astype(int) + (stats['TRB'] >= 10).astype(int) + (stats['AST'] >= 10).astype(int) + (stats.get('STL', 0) >= 10).astype(int) + (stats.get('BLK', 0) >= 10).astype(int)
                     stats['DD'] = (tens >= 2).astype(int)
                     stats['TD'] = (tens >= 3).astype(int)
