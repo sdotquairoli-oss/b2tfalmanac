@@ -432,9 +432,14 @@ def get_wallet_breakdown():
             elif bk:
                 book_balances[bk] = prof
                 
-        book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
-        total_liquid = sum(max(bal, 0.0) for bal in book_balances.values())
-        return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
+        b_df, p_df = load_bankroll(), load_parlay_ledger()
+    book_balances = {book: 0.0 for book in SPORTSBOOKS}
+    tot_dep, tot_wit, tot_cas, tot_sports = 0.0, 0.0, 0.0, 0.0
+
+    if b_df.empty and p_df.empty:
+        return 0.0, {}, 0.0, 0.0, 0.0, 0.0
+    
+    if not b_df.empty:
 
 def get_liquid_balance():
     return get_wallet_breakdown()[0]
