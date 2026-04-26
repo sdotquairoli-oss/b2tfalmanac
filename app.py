@@ -386,7 +386,10 @@ def get_wallet_breakdown():
     b_df, p_df = load_bankroll(), load_parlay_ledger()
     book_balances = {book: 0.0 for book in SPORTSBOOKS}
     tot_dep, tot_wit, tot_cas, tot_sports = 0.0, 0.0, 0.0, 0.0
-    
+
+    if b_df.empty and p_df.empty:
+        return 0.0, {}, 0.0, 0.0, 0.0, 0.0
+
     if not b_df.empty:
         b_df['Amount'] = pd.to_numeric(b_df['Amount'], errors='coerce').fillna(0)
         b_df['Sportsbook'] = b_df['Sportsbook'].astype(str).str.strip()
@@ -400,30 +403,24 @@ def get_wallet_breakdown():
         tot_dep = b_df[b_df['Type'].str.contains('Deposit', na=False)]['Amount'].sum()
         tot_wit = b_df[b_df['Type'].str.contains('Withdrawal', na=False)]['Amount'].abs().sum()
         tot_cas = b_df[b_df['Type'].str.contains('Casino', na=False)]['Amount'].sum()
-        
+
     if not p_df.empty:
-        # ✅ BUG-7 FIX: Fully vectorized — no iterrows() over parlay history
         o   = pd.to_numeric(p_df['Odds'],   errors='coerce').fillna(0)
         r   = pd.to_numeric(p_df['Risk'],   errors='coerce').fillna(0)
         ret = pd.to_numeric(p_df.get('Return', pd.Series(0.0, index=p_df.index)), errors='coerce').fillna(0.0)
         is_f = p_df['Is_Free_Bet'].apply(lambda x: str(x).strip().upper() == 'TRUE' or x is True)
         res  = p_df['Result'].astype(str)
         bks  = p_df['Sportsbook'].astype(str).str.strip()
-
         profit = pd.Series(0.0, index=p_df.index)
-
         win_pos  = (res == 'Win') & (o > 0)
         win_neg  = (res == 'Win') & (o <= 0)
         loss     = res.isin(['Loss', 'Pending'])
         cashout  = res == 'Cash Out'
-
         profit[win_pos]  = r[win_pos]  * (o[win_pos] / 100)
         profit[win_neg]  = r[win_neg]  / (o[win_neg].abs() / 100)
         profit[loss]     = -(r * ~is_f)[loss]
         profit[cashout]  = (ret - r)[cashout]
-
         tot_sports = profit.sum()
-
         p_df['Profit'] = profit
         p_df['Sportsbook'] = bks
         for bk, prof in p_df.groupby('Sportsbook')['Profit'].sum().items():
@@ -431,15 +428,10 @@ def get_wallet_breakdown():
                 book_balances[bk] += prof
             elif bk:
                 book_balances[bk] = prof
-                
-        b_df, p_df = load_bankroll(), load_parlay_ledger()
-        book_balances = {book: 0.0 for book in SPORTSBOOKS}
-        tot_dep, tot_wit, tot_cas, tot_sports = 0.0, 0.0, 0.0, 0.0
-    
-        if b_df.empty and p_df.empty:
-            return 0.0, {}, 0.0, 0.0, 0.0, 0.0
-        
-        if not b_df.empty:
+
+    book_balances = {k: v for k, v in book_balances.items() if v != 0.0}
+    total_liquid = sum(max(bal, 0.0) for bal in book_balances.values())
+    return max(total_liquid, 0.0), book_balances, tot_dep, tot_wit, tot_cas, tot_sports
 
 def get_liquid_balance():
     return get_wallet_breakdown()[0]
