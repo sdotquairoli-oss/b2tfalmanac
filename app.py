@@ -475,8 +475,8 @@ def auto_grade_ledger():
             stats['td'] = pd.to_datetime(stats[d_col]).dt.date
             bet_date = pd.to_datetime(r['Date']).date()
             
-            # 🟢 WIDE NET: Expand window backward 1 day and forward 4 days to catch any UTC midnight shifts
-            search_dates = [bet_date + pd.Timedelta(days=i) for i in range(-1, 5)]
+            # 🟢 FORWARD WINDOW ONLY: Never look backwards, preventing yesterday's stats from grading today's bets
+            search_dates = [bet_date + pd.Timedelta(days=i) for i in range(4)]
             g_row = stats[stats['td'].isin(search_dates)]
             
             if not g_row.empty:
