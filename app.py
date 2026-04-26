@@ -3101,6 +3101,7 @@ with t_parlay:
                 with header_c1:
                     st.markdown("#### 🎫 Your Live / Parlay Slips")
                 with header_c2:
+                    with header_c2:
                     if st.button("💾 Save All Grades", type="primary", use_container_width=True, key="parlay_save_all_grades"):
                         updated_count = 0
                         for orig_idx in parlay_df.index:
@@ -3109,7 +3110,27 @@ with t_parlay:
                                 new_val = st.session_state[k]
                                 if parlay_df.at[orig_idx, 'Result'] != new_val:
                                     parlay_df.at[orig_idx, 'Result'] = new_val
+                                
+                                    if new_val == "Win":
+                                        o_val = pd.to_numeric(parlay_df.at[orig_idx, 'Odds'], errors='coerce')
+                                        r_val = pd.to_numeric(parlay_df.at[orig_idx, 'Risk'], errors='coerce')
+                                        o = int(o_val) if pd.notna(o_val) else 0
+                                        r = float(r_val) if pd.notna(r_val) else 0.0
+                                        is_f = parlay_df.at[orig_idx].get('Is_Free_Bet', False)
+                                        
+                                        if o > 0:
+                                            payout = (r * (o / 100)) if is_f else r + (r * (o / 100))
+                                        elif o < 0:
+                                            payout = (r / (abs(o) / 100)) if is_f else r + (r / (abs(o) / 100))
+                                        else:
+                                            payout = r
+                                            
+                                        parlay_df.at[orig_idx, 'Return'] = round(float(payout), 2)
+                                    elif new_val in ["Loss", "Void"]:
+                                        parlay_df.at[orig_idx, 'Return'] = 0.0
+                                        
                                     updated_count += 1
+                                    
                         if updated_count > 0:
                             overwrite_sheet("Parlay_Ledger", parlay_df)
                             st.success(f"Successfully locked {updated_count} new grades!")
