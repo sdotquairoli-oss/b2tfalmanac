@@ -954,6 +954,10 @@ def get_nba_stats(player_label):
                     if mins < 1.0:
                         continue  # skip DNP
 
+                    # 🟢 ESPN 3PT FORMAT FIX: Extract 'Made' from 'Made-Attempted' (e.g., "4-10")
+                    threes_raw = str(stats.get('3PT', stats.get('3PM', stats.get('FG3M', '0'))))
+                    threes_made = threes_raw.split('-')[0] if '-' in threes_raw else threes_raw
+
                     all_rows.append({
                         'ValidDate': game_date,
                         'MATCHUP':   opp,
@@ -964,7 +968,7 @@ def get_nba_stats(player_label):
                         'AST':  safe_float(stats.get('AST',  0)),
                         'STL':  safe_float(stats.get('STL',  0)),
                         'BLK':  safe_float(stats.get('BLK',  0)),
-                        'FG3M': safe_float(stats.get('3PM',  stats.get('FG3M', 0))),
+                        'FG3M': safe_float(threes_made),
                         'PF':   safe_float(stats.get('PF',   0)),
                     })
 
