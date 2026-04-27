@@ -590,6 +590,7 @@ def search_nba_players(query):
         "nic claxton": "nicolas claxton",
         "scoot": "scooter",
         "scoot henderson": "scooter henderson",
+        "de'aaron fox": "De'Aaron Fox",
     }
     api_query = NICKNAMES.get(q_lower, query)
     
