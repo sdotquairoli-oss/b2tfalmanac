@@ -788,6 +788,8 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "scoot henderson": "Scoot Henderson",
         "scooter henderson": "Scoot Henderson",
         "jrue holiday": "Jrue Holiday",
+        "de'aaron fox": "deaaron fox",
+        "deaaron fox": "de'aaron fox",
     }
     
     clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
