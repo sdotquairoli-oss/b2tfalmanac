@@ -3731,7 +3731,7 @@ with t_roi:
                                 continue
                             avg_miss = (valid_vals - valid['Actual']).abs().mean()
                             times_closest = win_counts[name]
-                            pct = (times_closest / len(model_eligible)) * 100
+                            pct = (times_closest / len(valid)) * 100 if len(valid) > 0 else 0.0
                             leaderboard.append({
                                 'Model': name,
                                 'Times Closest': times_closest,
