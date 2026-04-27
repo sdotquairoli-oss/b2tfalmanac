@@ -1450,7 +1450,63 @@ def get_player_archetype(df, league):
             if hr_rate >= 0.20: return "💥 Power Slugger"
             elif h_rate >= 1.0: return "🏃 Contact Specialist"
             else: return "⚖️ Utility Hitter"
-            
+
+    elif league == "NFL":
+        # ── Auto-detect position from which stats are populated ──
+        avg_pass_att = df.get('PASS_ATT', pd.Series([0])).mean()
+        avg_carries  = df.get('CARRIES',  pd.Series([0])).mean()
+        avg_targets  = df.get('TARGETS',  pd.Series([0])).mean()
+        avg_pass_yds = df.get('PASS_YDS', pd.Series([0])).mean()
+        avg_rec_yds  = df.get('REC_YDS',  pd.Series([0])).mean()
+        avg_rush_yds = df.get('RUSH_YDS', pd.Series([0])).mean()
+        avg_touches  = df.get('TOUCHES',  pd.Series([0])).mean()
+
+        # ── QB Detection ──────────────────────────────
+        if avg_pass_att >= 15:
+            comp_pct = (df.get('COMP', pd.Series([0])).mean() /
+                       max(avg_pass_att, 1)) * 100
+            avg_tds  = df.get('PASS_TDS', pd.Series([0])).mean()
+            avg_int  = df.get('INT',      pd.Series([0])).mean()
+
+            if avg_pass_yds >= 280 and avg_tds >= 2.0:
+                return "🏈 QB | Elite Passer (High Volume)"
+            elif avg_pass_yds >= 230 and comp_pct >= 65:
+                return "🎯 QB | Efficient Distributor"
+            elif avg_carries >= 5:
+                return "⚡ QB | Dual-Threat Scrambler"
+            else:
+                return "🛡️ QB | Game Manager"
+
+        # ── RB Detection ──────────────────────────────
+        elif avg_carries >= 8 or (avg_carries >= 5 and avg_targets <= 3):
+            if avg_carries >= 15:
+                return "🦍 RB | Workhorse Back (High Carry Load)"
+            elif avg_targets >= 5:
+                return "🧬 RB | Receiving Back (Pass Catcher)"
+            elif avg_rush_yds / max(avg_carries, 1) >= 5.0:
+                return "💨 RB | Explosive Cutter (High YPC)"
+            else:
+                return "⚙️ RB | Short Yardage / Committee Back"
+
+        # ── WR/TE Detection ───────────────────────────
+        elif avg_targets >= 4:
+            avg_rec  = df.get('REC', pd.Series([0])).mean()
+            catch_pct = (avg_rec / max(avg_targets, 1)) * 100
+
+            if avg_targets >= 8:
+                return "🌟 WR | Alpha Receiver (Volume Target)"
+            elif avg_rec_yds / max(avg_rec, 1) >= 15.0:
+                return "🚀 WR | Deep Threat / Vertical Route"
+            elif catch_pct >= 75 and avg_rec_yds / max(avg_rec, 1) < 10.0:
+                return "🎯 TE | Possession Receiver (Short Routes)"
+            elif avg_touches >= 2:
+                return "🧬 WR | Hybrid Weapon (Routes + Rushes)"
+            else:
+                return "🛡️ WR | Complementary / Situational"
+
+        else:
+            return "⚖️ NFL | Utility / Role Player"
+
     return "Unknown Profile"
 
 def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None, opp_pitcher_era=None, opp_pitcher_name=None):
@@ -1499,6 +1555,48 @@ def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None, opp_pi
 
         return mod_val, mod_desc
         
+    elif league == "NFL":
+        # ── Static defensive tier ratings ─────────────
+        # Based on points allowed per game and yards allowed
+        # Updated for 2024-25 season — refresh each off-season
+        NFL_ELITE_DEF = ["BAL", "SF", "CLE", "MIA", "DAL", "BUF", "PIT", "DEN"]
+        NFL_WEAK_DEF  = ["ARI", "CAR", "NE",  "NYG", "LAR", "TEN", "ATL", "LV"]
+
+        if opp in NFL_ELITE_DEF:
+            mod_val  = 0.88
+            mod_desc = f"🛡️ Elite NFL Defense (-12%) — {opp} among league's best units."
+        elif opp in NFL_WEAK_DEF:
+            mod_val  = 1.12
+            mod_desc = f"🔓 Weak NFL Defense (+12%) — {opp} allowing above-average production."
+        else:
+            mod_val  = 1.00
+            mod_desc = f"⚖️ Average NFL Defense (Neutral)"
+
+        # ── Archetype overlays ─────────────────────────
+        if "QB" in archetype:
+            if opp in NFL_ELITE_DEF:
+                mod_val *= 0.95
+                mod_desc += " 🛑 Fade: Elite secondary coverage."
+            elif opp in NFL_WEAK_DEF:
+                mod_val *= 1.05
+                mod_desc += " 🚨 Exploit: Secondary allowing big passing games."
+        elif "RB" in archetype:
+            if opp in NFL_ELITE_DEF:
+                mod_val *= 0.96
+                mod_desc += " 🛑 Fade: Elite run-stopping front seven."
+            elif opp in NFL_WEAK_DEF:
+                mod_val *= 1.04
+                mod_desc += " 🚨 Exploit: Weak run defense."
+        elif "WR" in archetype or "TE" in archetype:
+            if opp in NFL_ELITE_DEF:
+                mod_val *= 0.97
+                mod_desc += " 🛑 Fade: Elite coverage unit."
+            elif opp in NFL_WEAK_DEF:
+                mod_val *= 1.03
+                mod_desc += " 🚨 Exploit: Porous pass coverage."
+
+        return mod_val, mod_desc
+
     else: # NHL
         defs = bad_defs if bad_defs is not None else get_nhl_bad_defenses()
         mod_val, mod_desc = 1.0, "Average Def (Neutral)"
@@ -1516,6 +1614,8 @@ def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None, opp_pi
 def get_fatigue_modifier(rest_status):
     if "B2B" in rest_status: return 0.95, "Tired Legs (-5%)"
     if "3 in 4" in rest_status: return 0.90, "Exhausted (-10%)"
+    if "Short" in rest_status: return 0.94, "⚡ Short Week (-6%)"
+    if "Bye" in rest_status: return 1.06, "🔋 Post-Bye Boost (+6%)"
     return 1.00, "Fully Rested"
 
 def calculate_implied_prob(odds_str):
@@ -2330,6 +2430,13 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
             raw_def_mod = 0.90
         elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
             raw_def_mod = 1.10
+        else:
+            raw_def_mod = 1.00
+    elif league == "NFL":
+        if opp in ["BAL", "SF", "CLE", "MIA", "DAL", "BUF", "PIT", "DEN"]:
+            raw_def_mod = 0.88
+        elif opp in ["ARI", "CAR", "NE", "NYG", "LAR", "TEN", "ATL", "LV"]:
+            raw_def_mod = 1.12
         else:
             raw_def_mod = 1.00
     elif league == "NHL":
@@ -3153,7 +3260,18 @@ def render_syndicate_board(league_key):
 
         with c4:
             opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
-            rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
+            if league_key == "NFL":
+                rest = st.selectbox("Fatigue", [
+                    "Standard Rest (7 Days)",
+                    "Short Week (TNF ~4 Days)",
+                    "Post-Bye Week (~14 Days)"
+                ], key=f"{lk}.rest")
+            else:
+                rest = st.selectbox("Fatigue", [
+                    "Rested (1+ Days)",
+                    "Tired (B2B)",
+                    "Exhausted (3 in 4)"
+                ], key=f"{lk}.rest")
             
             # ✅ GAME SCRIPT RISK: Manual spread input from sportsbook
             spread_input = st.number_input(
@@ -3849,8 +3967,8 @@ def render_syndicate_board(league_key):
                             opp_logo_html = f"<img src='{get_team_logo(league_key, opp)}' width='28' style='vertical-align:middle; margin-left: 8px;'>"
                             st.markdown(f"<div style='display: flex; justify-content: center; align-items: center; font-weight:900; font-size:18px; color:#00E5FF;'>{team_logo_html} {player_team} vs {opp} {opp_logo_html}</div><hr style='margin: 10px 0px; border-color: #334155;'>", unsafe_allow_html=True)
         
-                            if league_key == "NBA":
-                                st.caption("**🧬 AI Player Archetype & Rotation**")
+                            if league_key in ["NBA", "NFL"]:
+                                st.caption("**🧬 AI Player Archetype**")
                                 st.markdown(f"<div style='font-size:14px; font-weight:bold; color:#00E676;'>{archetype}</div>", unsafe_allow_html=True)
                                 st.markdown(f"<div style='font-size:12px; color:#FFD700; margin-top:6px; line-height:1.4; font-weight:500;'>{mod_desc}</div>", unsafe_allow_html=True)
                                 if 'USG_PCT' in df_with_ml.columns:
