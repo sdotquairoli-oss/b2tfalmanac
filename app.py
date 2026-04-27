@@ -2882,6 +2882,36 @@ def render_syndicate_board(league_key):
                                         f"📊 USG%: {usg:.1f}% — {usg_label}</div>",
                                         unsafe_allow_html=True
                                     )
+                                    # 🌟 SIGNATURE STATS BADGES
+                                    NBA_BENCHMARKS = {
+                                        'PTS': 15.0, 'TRB': 5.0, 'AST': 3.5,
+                                        'FG3M': 1.5, 'STL': 0.8, 'BLK': 0.5
+                                    }
+                                    STAT_LABELS = {
+                                        'PTS': '🔥 Scorer', 'TRB': '💪 Rebounder',
+                                        'AST': '🎯 Playmaker', 'FG3M': '🌐 3PT Threat',
+                                        'STL': '🛡️ Steals', 'BLK': '🚫 Shot Blocker'
+                                    }
+                                    badges = []
+                                    for stat, benchmark in NBA_BENCHMARKS.items():
+                                        if stat in df_with_ml.columns:
+                                            avg = df_with_ml[stat].mean()
+                                            if avg >= benchmark * 1.25:
+                                                badges.append(STAT_LABELS[stat])
+
+                                    if badges:
+                                        badge_html = "".join([
+                                            f"<span style='background-color: rgba(0,229,255,0.1); "
+                                            f"border: 1px solid #00E5FF; border-radius: 4px; "
+                                            f"padding: 2px 8px; margin: 2px; font-size: 11px; "
+                                            f"color: #00E5FF; font-weight: bold; "
+                                            f"display: inline-block;'>{b}</span>"
+                                            for b in badges
+                                        ])
+                                        st.markdown(
+                                            f"<div style='margin-top:8px; line-height:2;'>{badge_html}</div>",
+                                            unsafe_allow_html=True
+                                        )
                             else:
                                 st.caption(f"**🛡️ {opp} Defense Difficulty**")
                                 import re
@@ -3756,7 +3786,25 @@ with t_roi:
                     proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>Pending</span>"
                 else:
                     proj_html += f"<br> Actual: <span style='color: #94a3b8; font-style: italic;'>N/A (Manual)</span>"
-    
+
+                if actual_raw not in ['', 'nan', 'None']:
+                    try:
+                        actual_val = float(actual_raw)
+                        model_projs = {
+                            "⏱️ MIN Max":      row.get('MIN Max Proj', ''),
+                            "📊 Statistician": row.get('Stat Proj', ''),
+                            "🃏 Contrarian":   row.get('Contrarian Proj', ''),
+                            "🎯 Guru":         row.get('Context Proj', ''),
+                        }
+                        model_projs = {k: float(v) for k, v in model_projs.items()
+                                      if str(v).strip() not in ['', 'nan', 'None', '0.0', '0']}
+                        if model_projs:
+                            closest = min(model_projs, key=lambda k: abs(model_projs[k] - actual_val))
+                            closest_val = model_projs[closest]
+                            proj_html += f"<br>🏆 <span style='color:#00E676; font-weight:bold;'>{closest} closest ({closest_val:.1f})</span>"
+                    except:
+                        pass
+
                 has_autopsy = (status == 'Loss' and actual_raw not in ['', 'nan', 'None'])
                 
                 if has_autopsy: sc1, sc2 = st.columns([2.4, 1.6]) 
