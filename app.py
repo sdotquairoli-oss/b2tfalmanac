@@ -3445,7 +3445,7 @@ def render_syndicate_board(league_key):
                         tens = (df['PTS'] >= 10).astype(int) + (df['TRB'] >= 10).astype(int) + (df['AST'] >= 10).astype(int) + (df.get('STL', pd.Series(0, index=df.index)) >= 10).astype(int) + (df.get('BLK', pd.Series(0, index=df.index)) >= 10).astype(int)
                         df['DD'] = (tens >= 2).astype(int)
                         df['TD'] = (tens >= 3).astype(int)
-                    if league_key == "MLB" and s_col == "HRR":
+                if league_key == "MLB" and s_col == "HRR":
                     if 'H' in df.columns and 'R' in df.columns and 'RBI' in df.columns:
                         df['HRR'] = df['H'] + df['R'] + df['RBI']
                     elif 'H' in df.columns:
