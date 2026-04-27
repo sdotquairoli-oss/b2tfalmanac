@@ -3674,6 +3674,102 @@ with t_roi:
     
                 # 🚀 Execute the function using your actual dataframe!
                 render_syndicate_hall_of_fame(graded_df)
+
+            # ═══════════════════════════════════════════════
+                # 🏆 MODEL ACCURACY LEADERBOARD
+                # ═══════════════════════════════════════════════
+                model_eligible = ledger_df[
+                    (ledger_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False) &
+                    (ledger_df['Result'].isin(['Win', 'Loss']))
+                ].copy()
+
+                model_eligible['Actual'] = pd.to_numeric(model_eligible['Actual'], errors='coerce')
+                model_eligible = model_eligible.dropna(subset=['Actual'])
+
+                MODEL_COLS = {
+                    "⏱️ MIN Max":      "MIN Max Proj",
+                    "📊 Statistician": "Stat Proj",
+                    "🃏 Contrarian":   "Contrarian Proj",
+                    "🎯 Guru":         "Context Proj",
+                }
+
+                # Only proceed if we have saved model projections
+                has_model_data = any(
+                    col in model_eligible.columns and
+                    pd.to_numeric(model_eligible[col], errors='coerce').fillna(0).gt(0).any()
+                    for col in MODEL_COLS.values()
+                )
+
+                if has_model_data and len(model_eligible) >= 3:
+                    with st.expander(f"🏆 Model Accuracy Leaderboard ({len(model_eligible)} graded bets)", expanded=False):
+
+                        leaderboard = []
+                        win_counts = {name: 0 for name in MODEL_COLS}
+
+                        for _, row in model_eligible.iterrows():
+                            actual_val = row['Actual']
+                            candidates = {}
+                            for name, col in MODEL_COLS.items():
+                                if col in model_eligible.columns:
+                                    try:
+                                        val = float(row.get(col, 0))
+                                        if val > 0:
+                                            candidates[name] = val
+                                    except:
+                                        pass
+                            if candidates:
+                                closest = min(candidates, key=lambda k: abs(candidates[k] - actual_val))
+                                win_counts[closest] += 1
+
+                        for name, col in MODEL_COLS.items():
+                            if col not in model_eligible.columns:
+                                continue
+                            vals = pd.to_numeric(model_eligible[col], errors='coerce')
+                            valid = model_eligible[vals.gt(0)].copy()
+                            valid_vals = vals[vals.gt(0)]
+                            if len(valid) == 0:
+                                continue
+                            avg_miss = (valid_vals - valid['Actual']).abs().mean()
+                            times_closest = win_counts[name]
+                            pct = (times_closest / len(model_eligible)) * 100
+                            leaderboard.append({
+                                'Model': name,
+                                'Times Closest': times_closest,
+                                'Win %': pct,
+                                'Avg Miss': round(avg_miss, 2),
+                                'Bets Tracked': len(valid)
+                            })
+
+                        leaderboard = sorted(leaderboard, key=lambda x: x['Times Closest'], reverse=True)
+
+                        # Render medals
+                        medals = ["🥇", "🥈", "🥉", "4️⃣"]
+                        medal_cols = st.columns(len(leaderboard))
+                        for i, (col, entry) in enumerate(zip(medal_cols, leaderboard)):
+                            medal = medals[i] if i < len(medals) else "•"
+                            color = "#FFD700" if i == 0 else ("#94a3b8" if i == 1 else ("#cd7f32" if i == 2 else "#475569"))
+                            col.markdown(f"""
+                            <div style="background-color: #1e293b; border: 1px solid #334155;
+                                 border-top: 3px solid {color}; border-radius: 8px;
+                                 padding: 14px; text-align: center;">
+                                <div style="font-size: 24px;">{medal}</div>
+                                <div style="font-size: 13px; font-weight: 900; color: #f8fafc;
+                                     margin: 6px 0px;">{entry['Model']}</div>
+                                <div style="font-size: 22px; font-weight: 900;
+                                     color: {color};">{entry['Times Closest']}</div>
+                                <div style="font-size: 10px; color: #94a3b8;">times closest</div>
+                                <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;
+                                     border-top: 1px dashed #334155; padding-top: 8px;">
+                                    Win %: <span style="color:#fff; font-weight:bold;">{entry['Win %']:.0f}%</span><br>
+                                    Avg Miss: <span style="color:#fff; font-weight:bold;">{entry['Avg Miss']}</span><br>
+                                    Tracked: <span style="color:#fff; font-weight:bold;">{entry['Bets Tracked']}</span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                        st.markdown("---")
+                        st.caption("🏆 'Times Closest' = how often this model's projection was nearest to the actual result across all graded bets. Use this to identify which model to trust most on high-conviction plays.")
+                        
             # ═══════════════════════════════════════════════
             # 🔬 LOSS PATTERN REPORT
             # ═══════════════════════════════════════════════
