@@ -829,12 +829,7 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
                         def scrub_name(name):
                             return str(name).lower().replace("'", "").replace("-", "").replace(".", "").replace(" ", "")
 
-                        desc = o.get('description', '')
-                        # TEMP DEBUG — remove after diagnosing
-                        if last_name.lower() in desc.lower():
-                            st.write(f"DEBUG → clean_name: `{clean_name}` | scrubbed: `{scrub_name(clean_name)}` | api_desc: `{desc}` | api_scrubbed: `{scrub_name(desc)}`")
-
-                        desc = o.get('description', '')
+                        desc = o.get('name', '') or o.get('description', '')
                         # SMART MATCH — scrubbed comparison handles apostrophes, hyphens, casing
                         if (scrub_name(clean_name) in scrub_name(desc) or
                             scrub_name(desc) in scrub_name(clean_name) or
@@ -3422,9 +3417,10 @@ def render_syndicate_board(league_key):
                 st.stop()
     
             with st.spinner(f"Scouting data for {target_player}..."):
-                if league_key == "NBA": df, status_code, fetch_errors = get_nba_stats(target_player)
+                if league_key == "NBA":   df, status_code, fetch_errors = get_nba_stats(target_player)
                 elif league_key == "MLB": df, status_code, fetch_errors = get_mlb_stats(target_player)
-                else: df, status_code, fetch_errors = get_nhl_stats(target_player)
+                elif league_key == "NFL": df, status_code, fetch_errors = get_nfl_stats(target_player)
+                else:                     df, status_code, fetch_errors = get_nhl_stats(target_player)
     
             if status_code == 429:
                 st.error("🚨 **Error 429: Rate Limited.** Please wait 60 seconds.")
