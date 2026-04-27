@@ -67,7 +67,7 @@ S_MAP = {
     "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H",
     "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K",
     "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD",
-    "Blocks": "BLK", "Steals": "STL"
+    "Blocks": "BLK", "Steals": "STL", "Hits + Runs + RBIs": "HRR"
 }
 
 PASS_THRESHOLDS = {
@@ -1400,7 +1400,7 @@ def get_mlb_stats(player_label):
                     for stat_group in log['stats']: splits.extend(stat_group.get('splits', []))
             except: pass
         if not splits: return pd.DataFrame(), 404, []
-        data = [{'ValidDate': pd.to_datetime(s.get('date', '2025-01-01')), 'MATCHUP': s.get('opponent', {}).get('name', 'OPP').split(' ')[-1][:3].upper(), 'Is_Home': 1 if s.get('isHome', True) else 0, 'H': s.get('stat', {}).get('hits', 0), 'HR': s.get('stat', {}).get('homeRuns', 0), 'TB': s.get('stat', {}).get('totalBases', 0), 'K': s.get('stat', {}).get('strikeOuts', 0), 'ER': s.get('stat', {}).get('earnedRuns', 0), 'MINS': float(s.get('stat', {}).get('plateAppearances', s.get('stat', {}).get('battersFaced', 1)))} for s in splits]
+        data = [{'ValidDate': pd.to_datetime(s.get('date', '2025-01-01')), 'MATCHUP': s.get('opponent', {}).get('name', 'OPP').split(' ')[-1][:3].upper(), 'Is_Home': 1 if s.get('isHome', True) else 0, 'H': s.get('stat', {}).get('hits', 0), 'HR': s.get('stat', {}).get('homeRuns', 0), 'TB': s.get('stat', {}).get('totalBases', 0), 'K': s.get('stat', {}).get('strikeOuts', 0), 'ER': s.get('stat', {}).get('earnedRuns', 0), 'R': s.get('stat', {}).get('runs', 0), 'RBI': s.get('stat', {}).get('rbi', 0), 'MINS': float(s.get('stat', {}).get('plateAppearances', s.get('stat', {}).get('battersFaced', 1)))} for s in splits]
         df = pd.DataFrame(data)
         
         # Merges hitting and pitching logs for two-way players like Ohtani
@@ -2639,7 +2639,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     
     mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
     
-    COMBO_STATS = {"PRA", "PR", "PA", "RA"}
+    COMBO_STATS = {"PRA", "PR", "PA", "RA", "HRR"}
     # Failsafe if PASS_THRESHOLDS isn't globally accessible here:
     try:
         threshold = PASS_THRESHOLDS.get(s_col, 0.5)
@@ -3225,7 +3225,7 @@ def render_syndicate_board(league_key):
                  "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists",
                  "Rebounds + Assists", "Double Double", "Triple Double", "Minutes Played"]
                 if league_key == "NBA" else
-                ["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"]
+                ["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs", "Hits + Runs + RBIs"]
                 if league_key == "MLB" else
                 ["Passing Yards", "Passing TDs", "Completions", "Interceptions",
                  "Rushing Yards", "Receiving Yards", "Receptions", "Carries"]
@@ -3445,6 +3445,11 @@ def render_syndicate_board(league_key):
                         tens = (df['PTS'] >= 10).astype(int) + (df['TRB'] >= 10).astype(int) + (df['AST'] >= 10).astype(int) + (df.get('STL', pd.Series(0, index=df.index)) >= 10).astype(int) + (df.get('BLK', pd.Series(0, index=df.index)) >= 10).astype(int)
                         df['DD'] = (tens >= 2).astype(int)
                         df['TD'] = (tens >= 3).astype(int)
+                    if league_key == "MLB" and s_col == "HRR":
+                    if 'H' in df.columns and 'R' in df.columns and 'RBI' in df.columns:
+                        df['HRR'] = df['H'] + df['R'] + df['RBI']
+                    elif 'H' in df.columns:
+                        df['HRR'] = df['H']    
     
                 st.session_state.pop(f"{lk}.stake_modifier", None)
                 
@@ -3473,7 +3478,7 @@ def render_syndicate_board(league_key):
                 )
                         
                 # ✅ COMBO PROP MODE BANNER - shown in UI (not in cached fn)
-                COMBO_STATS = {"PRA", "PR", "PA", "RA"}
+                COMBO_STATS = {"PRA", "PR", "PA", "RA", "HRR"}
                 if s_col in COMBO_STATS:
                     st.markdown("""
                     <div style="background-color: rgba(245, 158, 11, 0.08); border: 1px solid #f59e0b; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;">
