@@ -826,11 +826,15 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
             for b in odds_data.get('bookmakers', []):
                 for m in b.get('markets', []):
                     for o in m.get('outcomes', []):
-                        desc = o.get('description', '').lower()
-                        # SMART MATCH
-                        desc_clean = desc.replace("'", "").replace(".", "")
-                        name_clean = clean_name.replace("'", "").replace(".", "")
-                        if name_clean in desc_clean or (last_name in desc_clean and first_name[:3] in desc_clean):
+                        def scrub_name(name):
+                            return str(name).lower().replace("'", "").replace("-", "").replace(".", "").replace(" ", "")
+
+                        desc = o.get('description', '')
+                        # SMART MATCH — scrubbed comparison handles apostrophes, hyphens, casing
+                        if (scrub_name(clean_name) in scrub_name(desc) or
+                            scrub_name(desc) in scrub_name(clean_name) or
+                            (scrub_name(last_name) in scrub_name(desc) and
+                             scrub_name(first_name)[:3] in scrub_name(desc))):
                             if 'point' in o and 'price' in o: return float(o['point']), int(o['price']), f"Synced: {b.get('title')}", used, rem
                             elif 'price' in o: return None, int(o['price']), f"Synced Odds: {b.get('title')}", used, rem
                             
