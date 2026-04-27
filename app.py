@@ -34,6 +34,7 @@ except: ODDS_API_KEY = None
 NBA_TEAMS = sorted(["ATL", "BOS", "BKN", "CHA", "CHI", "CLE", "DAL", "DEN", "DET", "GSW", "HOU", "IND", "LAC", "LAL", "MEM", "MIA", "MIL", "MIN", "NOP", "NYK", "OKC", "ORL", "PHI", "PHX", "POR", "SAC", "SAS", "TOR", "UTA", "WAS"])
 NHL_TEAMS = sorted(["ANA", "BOS", "BUF", "CGY", "CAR", "CHI", "COL", "CBJ", "DAL", "DET", "EDM", "FLA", "LAK", "MIN", "MTL", "NSH", "NJD", "NYI", "NYR", "OTT", "PHI", "PIT", "SJS", "SEA", "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WSH", "WPG"])
 MLB_TEAMS = sorted(["ARI", "ATH", "ATL", "BAL", "BOS", "CHC", "CHW", "CIN", "CLE", "COL", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"])
+NFL_TEAMS = sorted(["ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE","DAL", "DEN", "DET", "GB", "HOU", "IND", "JAX", "KC","LAC", "LAR", "LV", "MIA", "MIN", "NE", "NO", "NYG", "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WSH"])
 SPORTSBOOKS = ["FanDuel", "Fanatics", "DraftKings", "BetMGM", "Caesars", "ESPN Bet", "Hard Rock", "bet365", "Other"]
 BOOK_LOGOS = {
     "FanDuel": "https://www.google.com/s2/favicons?domain=fanduel.com&sz=128",
@@ -480,9 +481,10 @@ def auto_grade_ledger():
             cache_key = (league, player)
             if cache_key not in stats_cache:
                 time.sleep(1)
-                if league == "NBA": stats, _, _ = get_nba_stats(f"{player} (NBA)"); d_col = 'ValidDate'
+                if league == "NBA":   stats, _, _ = get_nba_stats(f"{player} (NBA)"); d_col = 'ValidDate'
                 elif league == "NHL": stats, _, _ = get_nhl_stats(player); d_col = 'ValidDate'
-                else: stats, _, _ = get_mlb_stats(player); d_col = 'ValidDate'
+                elif league == "NFL": stats, _, _ = get_nfl_stats(player); d_col = 'ValidDate'
+                else:                 stats, _, _ = get_mlb_stats(player); d_col = 'ValidDate'
                 stats_cache[cache_key] = (stats, d_col)
             stats, d_col = stats_cache[cache_key]
             if stats.empty: continue
@@ -839,6 +841,55 @@ ESPN_NBA_TEAM_IDS = {
     "SAC": 23, "SAS": 24, "TOR": 28, "UTA": 26, "WAS": 27
 }
 
+ESPN_NFL_TEAM_IDS = {
+    "ARI": 22, "ATL": 1,  "BAL": 33, "BUF": 2,
+    "CAR": 29, "CHI": 3,  "CIN": 4,  "CLE": 5,
+    "DAL": 6,  "DEN": 7,  "DET": 8,  "GB": 9,
+    "HOU": 34, "IND": 11, "JAX": 30, "KC": 12,
+    "LAC": 24, "LAR": 14, "LV": 13,  "MIA": 15,
+    "MIN": 16, "NE": 17,  "NO": 18,  "NYG": 19,
+    "NYJ": 20, "PHI": 21, "PIT": 23, "SEA": 26,
+    "SF": 25,  "TB": 27,  "TEN": 10, "WSH": 28
+}
+
+# Dome/Environment factor — impacts passing volume and kicking props
+# 1.05 = dome boost (no weather suppression)
+# 0.92 = known bad weather venues in cold climates
+NFL_STADIUM_FACTORS = {
+    "DAL": 1.05,  # AT&T Stadium — dome
+    "DET": 1.05,  # Ford Field — dome
+    "ATL": 1.05,  # Mercedes-Benz Stadium — dome
+    "NO":  1.05,  # Caesars Superdome — dome
+    "LV":  1.05,  # Allegiant Stadium — dome
+    "IND": 1.05,  # Lucas Oil Stadium — dome
+    "MIN": 1.05,  # U.S. Bank Stadium — dome
+    "ARI": 1.04,  # State Farm Stadium — retractable
+    "HOU": 1.04,  # NRG Stadium — retractable
+    "LAR": 1.03,  # SoFi Stadium — partially open
+    "LAC": 1.03,  # SoFi Stadium — partially open
+    "SF":  1.02,  # Levi's Stadium — mild climate
+    "MIA": 1.02,  # Hard Rock Stadium — mild climate
+    "TB":  1.02,  # Raymond James — mild climate
+    "JAX": 1.01,  # EverBank Stadium — mild climate
+    "CAR": 1.00,  # Bank of America — neutral
+    "NYG": 1.00,  # MetLife — open air, variable
+    "NYJ": 1.00,  # MetLife — open air, variable
+    "PHI": 0.98,  # Lincoln Financial — cold/wind
+    "PIT": 0.97,  # Acrisure — cold/wind
+    "CLE": 0.96,  # Huntington Bank — lakeside cold
+    "NE":  0.96,  # Gillette — cold/wind
+    "BAL": 0.96,  # M&T Bank — cold
+    "CIN": 0.96,  # Paycor — cold
+    "BUF": 0.93,  # Highmark — extreme cold/snow
+    "GB":  0.92,  # Lambeau — extreme cold/wind
+    "CHI": 0.92,  # Soldier Field — extreme cold/wind
+    "DEN": 0.95,  # Empower — altitude/cold
+    "KC":  0.95,  # Arrowhead — cold/wind
+    "SEA": 0.97,  # Lumen Field — rain/wind
+    "TEN": 0.97,  # Nissan Stadium — variable
+    "WSH": 0.97,  # Northwest Stadium — variable
+}
+
 @st.cache_data(ttl=3600)
 def get_espn_roster(team_abbr):
     team_id = ESPN_NBA_TEAM_IDS.get(str(team_abbr).upper())
@@ -867,6 +918,256 @@ def get_espn_roster(team_abbr):
 
         return roster
     except: return {}
+
+@st.cache_data(ttl=3600)
+def get_espn_nfl_roster(team_abbr):
+    team_id = ESPN_NFL_TEAM_IDS.get(str(team_abbr).upper())
+    if not team_id: return {}
+    try:
+        r = requests.get(
+            f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{team_id}/roster",
+            timeout=10
+        )
+        if r.status_code != 200: return {}
+        roster = {}
+        raw = r.json().get('athletes', [])
+        for item in raw:
+            if 'items' in item:
+                for athlete in item.get('items', []):
+                    full = athlete.get('fullName', athlete.get('displayName', '')).lower()
+                    aid  = str(athlete.get('id', ''))
+                    if full and aid:
+                        roster[full] = aid
+            else:
+                full = item.get('fullName', item.get('displayName', '')).lower()
+                aid  = str(item.get('id', ''))
+                if full and aid:
+                    roster[full] = aid
+        return roster
+    except: return {}
+
+@st.cache_data(ttl=3600)
+def search_nfl_players(query):
+    if not query: return []
+    q_lower = query.lower().strip()
+    try:
+        # Search via last name across common rosters
+        matches = []
+        search_term = query.split()[-1]
+        for abbr, team_id in ESPN_NFL_TEAM_IDS.items():
+            roster = get_espn_nfl_roster(abbr)
+            for name in roster:
+                if search_term.lower() in name:
+                    # Format to match existing player label convention
+                    display = name.title()
+                    matches.append(f"{display} ({abbr})")
+            if len(matches) >= 10:
+                break
+        return matches[:10]
+    except: return []
+
+@st.cache_data(ttl=60)
+def get_nfl_schedule():
+    try:
+        today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y%m%d")
+        url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={today_str}"
+        r = requests.get(url, timeout=10).json()
+        events = r.get('events', [])
+        if not events: return None, "No NFL games today."
+        matchups = []
+        for e in events:
+            c = e['competitions'][0]
+            status_dict = e['status']
+            status_name = status_dict['type']['name']
+            is_live_or_final = status_name in ['STATUS_IN_PROGRESS', 'STATUS_FINAL', 'STATUS_HALFTIME']
+            home_team = next(t for t in c['competitors'] if t['homeAway'] == 'home')
+            away_team = next(t for t in c['competitors'] if t['homeAway'] == 'away')
+            home_abbrev = home_team['team']['abbreviation'].upper()
+            away_abbrev = away_team['team']['abbreviation'].upper()
+            home_score = int(home_team.get('score', 0)) if home_team.get('score') else 0
+            away_score = int(away_team.get('score', 0)) if away_team.get('score') else 0
+            if status_name == 'STATUS_SCHEDULED':
+                dt = pd.to_datetime(e['date']).tz_convert('America/New_York')
+                ds = f"Today - {dt.strftime('%I:%M %p').lstrip('0')}"
+            elif status_name == 'STATUS_FINAL':
+                ds = "Final"
+            else:
+                ds = f"LIVE Q{status_dict.get('period', '')} ({status_dict.get('displayClock', '')})"
+            matchups.append({
+                "home": home_abbrev, "away": away_abbrev,
+                "status": ds, "home_score": home_score,
+                "away_score": away_score, "is_live_or_final": is_live_or_final
+            })
+        return matchups, "Success"
+    except Exception as e:
+        return None, f"Failed to connect to NFL API: {str(e)}"
+
+@st.cache_data(ttl=300)
+def get_nfl_stats(player_label):
+    cn = player_label.split("(")[0].strip()
+    ESPN_FIX = {}  # NFL abbrevs are already standard
+
+    fetch_errors = []
+
+    try:
+        team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
+        cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
+        athlete_id = None
+
+        # Primary: team roster lookup
+        if team_abbr in ESPN_NFL_TEAM_IDS:
+            roster = get_espn_nfl_roster(team_abbr)
+            for name, aid in roster.items():
+                name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
+                if name_clean == cn_clean or cn_clean in name_clean:
+                    athlete_id = aid
+                    break
+
+        # Fallback: scan common rosters
+        if not athlete_id:
+            for fallback_abbr in ["KC", "SF", "PHI", "DAL", "BUF", "MIA", "BAL", "CIN", "DET", "GB"]:
+                roster = get_espn_nfl_roster(fallback_abbr)
+                for name, aid in roster.items():
+                    name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
+                    if name_clean == cn_clean or cn_clean in name_clean:
+                        athlete_id = aid
+                        break
+                if athlete_id:
+                    break
+
+        if not athlete_id:
+            return pd.DataFrame(), 404, [f"'{cn}' not found in any NFL roster"]
+
+        # NFL season year — ESPN uses the year the season started
+        curr_year = datetime.now().year
+        if datetime.now().month < 3:
+            seasons = [curr_year - 1, curr_year - 2]  # Post-SB, current season ended
+        else:
+            seasons = [curr_year, curr_year - 1]
+
+        all_rows = []
+
+        for season_year in seasons:
+            try:
+                gl_r = requests.get(
+                    f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
+                    params={"season": season_year},
+                    timeout=10
+                )
+                if gl_r.status_code != 200:
+                    fetch_errors.append(f"Season {season_year}: HTTP {gl_r.status_code}")
+                    continue
+
+                gl_data      = gl_r.json()
+                events_meta  = gl_data.get('events', {})
+                season_types = gl_data.get('seasonTypes', [])
+                labels       = gl_data.get('labels', [])
+
+                game_stats = {}
+                for stype in season_types:
+                    for cat in stype.get('categories', []):
+                        for ev in cat.get('events', []):
+                            eid  = str(ev.get('eventId', ''))
+                            vals = ev.get('stats', [])
+                            if eid not in game_stats:
+                                game_stats[eid] = {}
+                            for label, val in zip(labels, vals):
+                                game_stats[eid][label] = val
+
+                def safe_float(val, default=0.0):
+                    try:
+                        return float(str(val).replace('--', '0').strip() or default)
+                    except:
+                        return default
+
+                for eid, stats in game_stats.items():
+                    meta = events_meta.get(eid, {})
+                    if not meta: continue
+
+                    date_str = meta.get('gameDate', meta.get('date', ''))
+                    try:
+                        game_date = pd.to_datetime(date_str)
+                    except:
+                        continue
+
+                    is_home = 1 if meta.get('homeAway', 'away') == 'home' else 0
+                    raw_opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
+                    opp     = raw_opp
+
+                    # Passing stats
+                    pass_att  = safe_float(stats.get('PASSATT',  stats.get('ATT',  0)))
+                    pass_yds  = safe_float(stats.get('PASSYDS',  stats.get('YDS',  0)))
+                    pass_tds  = safe_float(stats.get('PASSTD',   stats.get('TD',   0)))
+                    pass_int  = safe_float(stats.get('INT',      0))
+                    comp      = safe_float(stats.get('COMP',     stats.get('CMP',  0)))
+
+                    # Rushing stats
+                    carries   = safe_float(stats.get('CAR',      stats.get('RUSHATT', 0)))
+                    rush_yds  = safe_float(stats.get('RUSHYDS',  stats.get('RYDS',   0)))
+                    rush_tds  = safe_float(stats.get('RUSHTD',   0))
+
+                    # Receiving stats
+                    targets   = safe_float(stats.get('TGT',      stats.get('TGTS',   0)))
+                    rec       = safe_float(stats.get('REC',      0))
+                    rec_yds   = safe_float(stats.get('RECYDS',   stats.get('RYDS',   0)))
+                    rec_tds   = safe_float(stats.get('RECTD',    0))
+
+                    # Skip games with no meaningful activity
+                    total_activity = pass_att + carries + targets
+                    if total_activity < 1:
+                        continue
+
+                    all_rows.append({
+                        'ValidDate': game_date,
+                        'MATCHUP':   opp,
+                        'Is_Home':   is_home,
+                        # Opportunity metrics
+                        'PASS_ATT':  pass_att,
+                        'CARRIES':   carries,
+                        'TARGETS':   targets,
+                        'TOUCHES':   carries + targets,
+                        # Passing
+                        'PASS_YDS':  pass_yds,
+                        'PASS_TDS':  pass_tds,
+                        'COMP':      comp,
+                        'INT':       pass_int,
+                        # Rushing
+                        'RUSH_YDS':  rush_yds,
+                        'RUSH_TDS':  rush_tds,
+                        # Receiving
+                        'REC':       rec,
+                        'REC_YDS':   rec_yds,
+                        'REC_TDS':   rec_tds,
+                        # MINS maps to primary opportunity metric
+                        # set downstream based on stat type
+                        'MINS':      max(pass_att, carries + targets),
+                    })
+
+            except Exception as e:
+                fetch_errors.append(f"Season {season_year}: {str(e)}")
+
+        if not all_rows:
+            return pd.DataFrame(), 404, fetch_errors or ["No NFL game data found"]
+
+        df = pd.DataFrame(all_rows)
+
+        df['ValidDate'] = pd.to_datetime(df['ValidDate'], utc=True).dt.tz_convert(
+            'America/New_York').dt.normalize().dt.tz_localize(None)
+
+        df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
+        today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
+        df['Days_Ago'] = (today - df['ValidDate']).dt.days
+
+        # NFL-specific decay — 7 days between games means standard decay
+        # would kill early season data. Use 0.001155 (same as MLB pitchers)
+        # so a game 60 days ago (~9 weeks) still carries ~0.93 weight
+        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 600)]  # ~1.5 seasons
+        df['Weight'] = np.exp(-0.001155 * df['Days_Ago'])
+
+        return df.sort_values('ValidDate').reset_index(drop=True), 200, []
+
+    except Exception as e:
+        return pd.DataFrame(), 500, [str(e)]
 
 @st.cache_data(ttl=300)
 def get_nba_stats(player_label):
@@ -1393,43 +1694,301 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins, ewma_mins, mins_slope]])[0]
 
     # ══════════════════════════════════════════════════
-    # 🏒⚾ LEGACY PIPELINE (NHL + MLB)
+    # ⚾ MLB DEDICATED PIPELINE
     # ══════════════════════════════════════════════════
-    else:
-        X_poi_train = df_ml[['MINS']].copy()
-        X_poi_train['Trend'] = np.arange(len(df_ml))
+    elif league == "MLB":
 
+        # ── Park Factor Dictionary ─────────────────────
+        # Scale: >1.0 = hitter friendly, <1.0 = pitcher friendly
+        PARK_FACTORS = {
+            "COL": 1.35,  # Coors Field — extreme hitter park
+            "CIN": 1.18,  # Great American Ball Park
+            "TEX": 1.12,  # Globe Life Field
+            "BOS": 1.10,  # Fenway Park
+            "CHC": 1.08,  # Wrigley Field
+            "PHI": 1.06,  # Citizens Bank Park
+            "MIL": 1.04,  # American Family Field
+            "ATL": 1.03,  # Truist Park
+            "NYY": 1.02,  # Yankee Stadium
+            "BAL": 1.01,  # Camden Yards
+            "STL": 1.00,  # Busch Stadium — neutral
+            "HOU": 1.00,  # Minute Maid Park — neutral
+            "LAD": 0.98,  # Dodger Stadium
+            "TOR": 0.97,  # Rogers Centre
+            "MIN": 0.96,  # Target Field
+            "MIA": 0.95,  # loanDepot Park
+            "NYM": 0.95,  # Citi Field
+            "SF":  0.94,  # Oracle Park
+            "OAK": 0.93,  # Oakland Coliseum
+            "ATH": 0.93,  # Athletics
+            "CLE": 0.93,  # Progressive Field
+            "DET": 0.93,  # Comerica Park
+            "TB":  0.92,  # Tropicana Field
+            "LAA": 0.92,  # Angel Stadium
+            "WSH": 0.92,  # Nationals Park
+            "KC":  0.91,  # Kauffman Stadium
+            "CHW": 0.91,  # Guaranteed Rate Field
+            "PIT": 0.90,  # PNC Park
+            "SEA": 0.89,  # T-Mobile Park
+            "SD":  0.88,  # Petco Park — extreme pitcher park
+            "ARI": 0.95,  # Chase Field
+        }
+
+        # ── Determine park factor for each game ───────
+        # Home team's park = home game matchup
+        # For away games we use the opponent (home team) park
+        def get_park_factor(row):
+            if row['Is_Home'] == 1:
+                # We don't store player's own team abbr in gamelog
+                # Use neutral as fallback — home park factor
+                # applied via tonight's modifier separately
+                return 1.0
+            else:
+                return PARK_FACTORS.get(str(row['MATCHUP']).upper(), 1.0)
+
+        df_ml['Park_Factor'] = df_ml.apply(get_park_factor, axis=1)
+
+        # Tonight's park factor
+        if is_home_current == 1:
+            # Player is home — need their own park
+            # MATCHUP col has opponent so we can't look it up directly
+            # Use neutral — the defense modifier already captures this
+            tonight_park = 1.0
+        else:
+            tonight_park = PARK_FACTORS.get(str(tonight_def_mod), 1.0)
+
+        # ── Detect pitcher vs hitter ───────────────────
+        is_pitcher = s_col in ["K", "ER"]
+
+        # ── Rolling averages ──────────────────────────
         df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
         df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
         df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
 
-        rf_feature_cols = ['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']
-        if 'USG_PCT' in df_ml.columns:
-            rf_feature_cols.append('USG_PCT')
-        X_rf_train = df_ml[rf_feature_cols].fillna(0).values
+        s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+
+        if is_pitcher:
+            # ── PITCHER PIPELINE ───────────────────────
+            # Slower decay: exp(-0.001155 * days) so a game
+            # 60 days ago (12th start) still gets weight ~0.93
+            # vs the standard 0.003465 which would give ~0.12
+            pitcher_weights = np.exp(-0.001155 * df_ml['Days_Ago'].values)
+            pitcher_weights = np.where(pitcher_weights < 0.1, 0.1, pitcher_weights)
+
+            X_poi_train = df_ml[['MINS']].copy()
+            X_poi_train['Trend'] = np.arange(len(df_ml))
+
+            pitcher_rf_cols = [
+                'Roll3', 'Roll5', 'Roll10',
+                'MINS', 'Is_Home', 'Opp_Def_Mod', 'Park_Factor'
+            ]
+            X_rf_train = df_ml[pitcher_rf_cols].fillna(0).values
+
+            df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
+            X_xgb_train = df_ml[['MINS', 'Dev', 'Roll5']].fillna(0).values
+
+            df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
+            X_hgbr_train = df_ml[['EWMA', 'MINS', 'Park_Factor']].fillna(0).values
+
+            # Use slower pitcher weights for training
+            train_weights = pitcher_weights
+
+            tonight_rest_val = 3.0  # Pitchers always rested on rotation
+
+            def train_poisson():
+                return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
+                    X_poi_train.values, y, sample_weight=train_weights)
+            def train_rf():
+                return RandomForestRegressor(n_estimators=100, max_depth=5,
+                    min_samples_leaf=2, random_state=42).fit(
+                    X_rf_train, y, sample_weight=train_weights)
+            def train_xgb():
+                return XGBRegressor(n_estimators=100, learning_rate=0.03,
+                    max_depth=4, subsample=0.8, random_state=42,
+                    objective='reg:squarederror').fit(
+                    X_xgb_train, y, sample_weight=train_weights)
+            def train_hgbr():
+                return HistGradientBoostingRegressor(
+                    max_iter=100, max_depth=4, random_state=42).fit(
+                    X_hgbr_train, y, sample_weight=train_weights)
+
+            try:
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    f_poi, f_rf, f_xgb, f_hgbr = (
+                        executor.submit(train_poisson), executor.submit(train_rf),
+                        executor.submit(train_xgb), executor.submit(train_hgbr)
+                    )
+                    poi, rf, xgb, hgbr = (
+                        f_poi.result(), f_rf.result(),
+                        f_xgb.result(), f_hgbr.result()
+                    )
+            except Exception:
+                poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
+
+            trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+            rf_pred_vec = [
+                df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1],
+                df_ml['Roll10'].iloc[-1], expected_mins,
+                is_home_current, tonight_def_mod, tonight_park
+            ]
+            stat_proj = rf.predict([rf_pred_vec])[0]
+            con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean,
+                                      df_ml['Roll5'].iloc[-1]]])[0]
+            base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1],
+                                       expected_mins, tonight_park]])[0]
+
+        else:
+            # ── HITTER PIPELINE ────────────────────────
+            # Hot/Cold flag: L5 avg vs season avg
+            l5_avg = df_ml[s_col].tail(5).mean()
+            hot_cold = float(np.clip((l5_avg / s_mean) if s_mean > 0 else 1.0, 0.5, 2.0))
+            df_ml['Hot_Cold'] = df_ml[s_col].rolling(5).mean().fillna(s_mean) / s_mean.clip(0.01)
+            df_ml['Hot_Cold'] = df_ml['Hot_Cold'].clip(0.5, 2.0).fillna(1.0)
+
+            X_poi_train = df_ml[['MINS']].copy()
+            X_poi_train['Trend'] = np.arange(len(df_ml))
+
+            hitter_rf_cols = [
+                'Roll3', 'Roll5', 'Roll10',
+                'MINS', 'Is_Home', 'Opp_Def_Mod',
+                'Park_Factor', 'Hot_Cold'
+            ]
+            X_rf_train = df_ml[hitter_rf_cols].fillna(0).values
+
+            df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
+            X_xgb_train = df_ml[['MINS', 'Dev', 'Hot_Cold', 'Park_Factor']].fillna(0).values
+
+            df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
+            X_hgbr_train = df_ml[['EWMA', 'MINS', 'Park_Factor', 'Hot_Cold']].fillna(0).values
+
+            train_weights = weights
+            tonight_rest_val = 3.0
+
+            def train_poisson():
+                return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
+                    X_poi_train.values, y, sample_weight=train_weights)
+            def train_rf():
+                return RandomForestRegressor(n_estimators=100, max_depth=6,
+                    min_samples_leaf=2, random_state=42).fit(
+                    X_rf_train, y, sample_weight=train_weights)
+            def train_xgb():
+                return XGBRegressor(n_estimators=100, learning_rate=0.03,
+                    max_depth=4, subsample=0.8, random_state=42,
+                    objective='reg:squarederror').fit(
+                    X_xgb_train, y, sample_weight=train_weights)
+            def train_hgbr():
+                return HistGradientBoostingRegressor(
+                    max_iter=100, max_depth=4, random_state=42).fit(
+                    X_hgbr_train, y, sample_weight=train_weights)
+
+            try:
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    f_poi, f_rf, f_xgb, f_hgbr = (
+                        executor.submit(train_poisson), executor.submit(train_rf),
+                        executor.submit(train_xgb), executor.submit(train_hgbr)
+                    )
+                    poi, rf, xgb, hgbr = (
+                        f_poi.result(), f_rf.result(),
+                        f_xgb.result(), f_hgbr.result()
+                    )
+            except Exception:
+                poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
+
+            trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+            rf_pred_vec = [
+                df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1],
+                df_ml['Roll10'].iloc[-1], expected_mins,
+                is_home_current, tonight_def_mod,
+                tonight_park, hot_cold
+            ]
+            stat_proj = rf.predict([rf_pred_vec])[0]
+            con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean,
+                                      hot_cold, tonight_park]])[0]
+            base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1],
+                                       expected_mins, tonight_park, hot_cold]])[0]
+
+    # ══════════════════════════════════════════════════
+    # 🏒 NHL DEDICATED PIPELINE
+    # ══════════════════════════════════════════════════
+    elif league == "NHL":
+
+        # ── Rolling averages ──────────────────────────
+        df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
 
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-        df_ml['Dev']  = df_ml[s_col].fillna(0) - s_mean
-        X_xgb_train  = df_ml[['MINS', 'Dev']].fillna(0).values
 
-        df_ml['EWMA']  = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
-        X_hgbr_train  = df_ml[['EWMA', 'MINS']].fillna(0).values
+        # ── Back-to-back binary flag ──────────────────
+        df_ml['Is_B2B'] = (df_ml['Rest_Days'] <= 1).astype(float)
+        tonight_b2b = 1.0 if "B2B" in str(rest_status) else 0.0
 
-        tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
+        # ── TOI trend: L5 slope ───────────────────────
+        recent_toi = df_ml['MINS'].tail(5).values
+        if len(recent_toi) >= 3:
+            x = np.arange(len(recent_toi))
+            toi_slope = float(np.polyfit(x, recent_toi, 1)[0])
+        else:
+            toi_slope = 0.0
+        df_ml['TOI_Trend'] = toi_slope
+
+        # ── PPP rate: rolling power play contribution ─
+        if 'PPP' in df_ml.columns:
+            df_ml['PPP_Rate'] = df_ml['PPP'].rolling(5).mean().fillna(
+                df_ml['PPP'].mean()).fillna(0)
+        else:
+            df_ml['PPP_Rate'] = 0.0
+
+        # ── SOG rate: shots per 60 minutes ───────────
+        if 'SOG' in df_ml.columns:
+            df_ml['SOG_Rate'] = (df_ml['SOG'] / df_ml['MINS'].clip(1.0)) * 60
+            df_ml['SOG_Rate'] = df_ml['SOG_Rate'].fillna(0).clip(0, 20)
+            tonight_sog_rate = float(df_ml['SOG_Rate'].tail(5).mean())
+        else:
+            df_ml['SOG_Rate'] = 0.0
+            tonight_sog_rate = 0.0
+
+        tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (
+            0.0 if "3 in 4" in str(rest_status) else 3.0)
+
+        # ── Poisson: TOI-driven volume model ──────────
+        X_poi_train = df_ml[['MINS']].copy()
+        X_poi_train['Trend'] = np.arange(len(df_ml))
+
+        # ── Random Forest: pure NHL feature set ───────
+        nhl_rf_cols = [
+            'Roll3', 'Roll5', 'Roll10',
+            'MINS', 'Is_Home', 'Rest_Days',
+            'Opp_Def_Mod', 'Is_B2B', 'TOI_Trend',
+            'PPP_Rate', 'SOG_Rate'
+        ]
+        X_rf_train = df_ml[nhl_rf_cols].fillna(0).values
+
+        # ── XGBoost: deviation + TOI context ──────────
+        df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
+        df_ml['Roll3_Dev'] = df_ml['Roll3'] - s_mean
+        X_xgb_train = df_ml[['MINS', 'Dev', 'Roll3_Dev', 'Is_B2B', 'PPP_Rate']].fillna(0).values
+
+        # ── HGBR: exponential weighted trend ──────────
+        df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
+        df_ml['EWMA_TOI'] = df_ml['MINS'].ewm(span=5, adjust=False).mean().fillna(expected_mins)
+        X_hgbr_train = df_ml[['EWMA', 'MINS', 'EWMA_TOI', 'TOI_Trend', 'SOG_Rate']].fillna(0).values
 
         def train_poisson():
             return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
                 X_poi_train.values, y, sample_weight=weights)
         def train_rf():
-            return RandomForestRegressor(n_estimators=50, random_state=42).fit(
+            return RandomForestRegressor(n_estimators=100, max_depth=6,
+                min_samples_leaf=2, random_state=42).fit(
                 X_rf_train, y, sample_weight=weights)
         def train_xgb():
-            return XGBRegressor(n_estimators=50, learning_rate=0.05,
-                random_state=42, objective='reg:squarederror').fit(
+            return XGBRegressor(n_estimators=100, learning_rate=0.03,
+                max_depth=4, subsample=0.8, random_state=42,
+                objective='reg:squarederror').fit(
                 X_xgb_train, y, sample_weight=weights)
         def train_hgbr():
             return HistGradientBoostingRegressor(
-                max_iter=50, random_state=42).fit(
+                max_iter=100, max_depth=4, random_state=42).fit(
                 X_hgbr_train, y, sample_weight=weights)
 
         try:
@@ -1445,16 +2004,246 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         except Exception:
             poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
 
-        trend_proj  = poi.predict([[expected_mins, len(df_ml)]])[0]
+        trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+
         rf_pred_vec = [
-            df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1],
-            expected_mins, is_home_current, tonight_rest_val, tonight_def_mod
+            df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1],
+            df_ml['Roll10'].iloc[-1], expected_mins,
+            is_home_current, tonight_rest_val,
+            tonight_def_mod, tonight_b2b, toi_slope,
+            float(df_ml['PPP_Rate'].iloc[-1]),
+            tonight_sog_rate
         ]
-        if 'USG_PCT' in df_ml.columns:
-            rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
         stat_proj = rf.predict([rf_pred_vec])[0]
-        con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
-        base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
+
+        roll3_dev = float(df_ml['Roll3'].iloc[-1]) - s_mean
+        con_proj = xgb.predict([[
+            expected_mins, trend_proj - s_mean,
+            roll3_dev, tonight_b2b,
+            float(df_ml['PPP_Rate'].iloc[-1])
+        ]])[0]
+
+        ewma_toi = float(df_ml['EWMA_TOI'].iloc[-1])
+        base_proj = hgbr.predict([[
+            df_ml['EWMA'].iloc[-1], expected_mins,
+            ewma_toi, toi_slope, tonight_sog_rate
+        ]])[0]
+
+    # ══════════════════════════════════════════════════
+    # 🏈 NFL DEDICATED PIPELINE
+    # ══════════════════════════════════════════════════
+    elif league == "NFL":
+
+        # ── Stat-type auto-detection ───────────────────
+        is_qb_stat = s_col in ["PASS_YDS", "PASS_TDS", "COMP", "INT"]
+
+        # ── NFL rolling windows — shorter than other sports ──
+        # Roll2 = last 2 games, Roll4 = ~1 month, Roll8 = ~half season
+        df_ml['Roll2']  = df_ml[s_col].rolling(2).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll4']  = df_ml[s_col].rolling(4).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll8']  = df_ml[s_col].rolling(8).mean().fillna(df_ml[s_col].mean()).fillna(0)
+
+        s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+
+        # ── Slower decay already applied in get_nfl_stats ──
+        # Use as-is from Weight column
+
+        # ── Rest flags ─────────────────────────────────
+        df_ml['Rest_Days'] = df_ml['ValidDate'].diff().dt.days.fillna(7.0).clip(0, 21)
+        df_ml['Is_Short_Week'] = (df_ml['Rest_Days'] <= 5).astype(float)   # TNF
+        df_ml['Is_Post_Bye']   = (df_ml['Rest_Days'] >= 12).astype(float)  # Post-bye boost
+
+        tonight_short_week = 1.0 if "Short" in str(rest_status) else 0.0
+        tonight_post_bye   = 1.0 if "Bye"   in str(rest_status) else 0.0
+        tonight_rest_val   = 4.0 if tonight_post_bye else (5.0 if not tonight_short_week else 3.0)
+
+        # ── Stadium/environment factor ─────────────────
+        def get_nfl_stadium_factor(row):
+            if row['Is_Home'] == 1:
+                return 1.0  # Home park handled via opponent matchup key
+            return NFL_STADIUM_FACTORS.get(str(row['MATCHUP']).upper(), 1.0)
+
+        df_ml['Stadium_Factor'] = df_ml.apply(get_nfl_stadium_factor, axis=1)
+        tonight_stadium = NFL_STADIUM_FACTORS.get(str(opp).upper(), 1.0) if is_home_current == 0 else 1.0
+
+        # ── Hot/Cold flag ──────────────────────────────
+        l4_avg   = df_ml[s_col].tail(4).mean()
+        hot_cold = float(np.clip((l4_avg / s_mean) if s_mean > 0 else 1.0, 0.4, 2.5))
+
+        # ── Opportunity metric trend ───────────────────
+        if is_qb_stat:
+            opp_col = 'PASS_ATT'
+        elif s_col in ["RUSH_YDS", "CARRIES"]:
+            opp_col = 'CARRIES'
+        else:
+            opp_col = 'TARGETS'
+
+        if opp_col in df_ml.columns:
+            df_ml['Opp_Roll4'] = df_ml[opp_col].rolling(4).mean().fillna(
+                df_ml[opp_col].mean()).fillna(0)
+            tonight_opp = float(df_ml['Opp_Roll4'].iloc[-1])
+            # Reset MINS to correct opportunity metric
+            expected_mins = float(np.clip(df_ml[opp_col].tail(4).mean(), 1.0, 100.0))
+        else:
+            df_ml['Opp_Roll4'] = 0.0
+            tonight_opp = 0.0
+
+        # ── Poisson ────────────────────────────────────
+        X_poi_train = df_ml[['MINS']].copy()
+        X_poi_train['Trend'] = np.arange(len(df_ml))
+
+        if is_qb_stat:
+            # ── QB PIPELINE ────────────────────────────
+            qb_rf_cols = [
+                'Roll2', 'Roll4', 'Roll8',
+                'MINS', 'Is_Home', 'Opp_Def_Mod',
+                'Stadium_Factor', 'Is_Short_Week',
+                'Is_Post_Bye', 'Opp_Roll4'
+            ]
+            X_rf_train = df_ml[qb_rf_cols].fillna(0).values
+
+            df_ml['Dev']      = df_ml[s_col].fillna(0) - s_mean
+            df_ml['Roll2_Dev'] = df_ml['Roll2'] - s_mean
+            X_xgb_train = df_ml[[
+                'MINS', 'Dev', 'Roll2_Dev',
+                'Is_Short_Week', 'Stadium_Factor', 'Opp_Roll4'
+            ]].fillna(0).values
+
+            df_ml['EWMA']     = df_ml[s_col].ewm(span=4, adjust=False).mean().fillna(s_mean)
+            df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(
+                tonight_opp) if opp_col in df_ml.columns else 0.0
+            X_hgbr_train = df_ml[[
+                'EWMA', 'MINS', 'EWMA_OPP', 'Stadium_Factor', 'Is_Post_Bye'
+            ]].fillna(0).values
+
+            def train_rf():
+                return RandomForestRegressor(n_estimators=100, max_depth=5,
+                    min_samples_leaf=2, random_state=42).fit(
+                    X_rf_train, y, sample_weight=weights)
+
+            rf_pred_vec = [
+                df_ml['Roll2'].iloc[-1], df_ml['Roll4'].iloc[-1],
+                df_ml['Roll8'].iloc[-1], expected_mins,
+                is_home_current, tonight_def_mod,
+                tonight_stadium, tonight_short_week,
+                tonight_post_bye, tonight_opp
+            ]
+            xgb_pred_vec = [
+                expected_mins, 0.0,
+                float(df_ml['Roll2'].iloc[-1]) - s_mean,
+                tonight_short_week, tonight_stadium, tonight_opp
+            ]
+            ewma_opp = float(df_ml['EWMA_OPP'].iloc[-1]) if 'EWMA_OPP' in df_ml.columns else tonight_opp
+            hgbr_pred_vec = [
+                df_ml['EWMA'].iloc[-1], expected_mins,
+                ewma_opp, tonight_stadium, tonight_post_bye
+            ]
+
+        else:
+            # ── SKILL POSITION PIPELINE (RB/WR/TE) ────
+            skill_rf_cols = [
+                'Roll2', 'Roll4', 'Roll8',
+                'MINS', 'Is_Home', 'Opp_Def_Mod',
+                'Stadium_Factor', 'Is_Short_Week',
+                'Is_Post_Bye', 'Opp_Roll4', 'Hot_Cold'
+            ]
+            df_ml['Hot_Cold'] = hot_cold
+            X_rf_train = df_ml[skill_rf_cols].fillna(0).values
+
+            df_ml['Dev']       = df_ml[s_col].fillna(0) - s_mean
+            df_ml['Roll2_Dev'] = df_ml['Roll2'] - s_mean
+            X_xgb_train = df_ml[[
+                'MINS', 'Dev', 'Roll2_Dev',
+                'Hot_Cold', 'Is_Short_Week', 'Opp_Roll4'
+            ]].fillna(0).values
+
+            df_ml['EWMA']     = df_ml[s_col].ewm(span=4, adjust=False).mean().fillna(s_mean)
+            df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(
+                tonight_opp) if opp_col in df_ml.columns else 0.0
+            X_hgbr_train = df_ml[[
+                'EWMA', 'MINS', 'EWMA_OPP', 'Hot_Cold', 'Stadium_Factor'
+            ]].fillna(0).values
+
+            def train_rf():
+                return RandomForestRegressor(n_estimators=100, max_depth=5,
+                    min_samples_leaf=2, random_state=42).fit(
+                    X_rf_train, y, sample_weight=weights)
+
+            rf_pred_vec = [
+                df_ml['Roll2'].iloc[-1], df_ml['Roll4'].iloc[-1],
+                df_ml['Roll8'].iloc[-1], expected_mins,
+                is_home_current, tonight_def_mod,
+                tonight_stadium, tonight_short_week,
+                tonight_post_bye, tonight_opp, hot_cold
+            ]
+            xgb_pred_vec = [
+                expected_mins, 0.0,
+                float(df_ml['Roll2'].iloc[-1]) - s_mean,
+                hot_cold, tonight_short_week, tonight_opp
+            ]
+            ewma_opp = float(df_ml['EWMA_OPP'].iloc[-1]) if 'EWMA_OPP' in df_ml.columns else tonight_opp
+            hgbr_pred_vec = [
+                df_ml['EWMA'].iloc[-1], expected_mins,
+                ewma_opp, hot_cold, tonight_stadium
+            ]
+
+        # ── Shared trainers ────────────────────────────
+        def train_poisson():
+            return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
+                X_poi_train.values, y, sample_weight=weights)
+        def train_xgb():
+            return XGBRegressor(n_estimators=100, learning_rate=0.03,
+                max_depth=4, subsample=0.8, random_state=42,
+                objective='reg:squarederror').fit(
+                X_xgb_train, y, sample_weight=weights)
+        def train_hgbr():
+            return HistGradientBoostingRegressor(
+                max_iter=100, max_depth=4, random_state=42).fit(
+                X_hgbr_train, y, sample_weight=weights)
+
+        try:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                f_poi, f_rf, f_xgb, f_hgbr = (
+                    executor.submit(train_poisson), executor.submit(train_rf),
+                    executor.submit(train_xgb), executor.submit(train_hgbr)
+                )
+                poi, rf, xgb, hgbr = (
+                    f_poi.result(), f_rf.result(),
+                    f_xgb.result(), f_hgbr.result()
+                )
+        except Exception:
+            poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
+
+        trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+        stat_proj  = rf.predict([rf_pred_vec])[0]
+        con_proj   = xgb.predict([xgb_pred_vec])[0]
+        base_proj  = hgbr.predict([hgbr_pred_vec])[0]
+    # ══════════════════════════════════════════════════
+    # PURE FALLBACK (should never hit this)
+    # ══════════════════════════════════════════════════
+    else:
+        X_poi_train = df_ml[['MINS']].copy()
+        X_poi_train['Trend'] = np.arange(len(df_ml))
+        df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        rf_feature_cols = ['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']
+        X_rf_train   = df_ml[rf_feature_cols].fillna(0).values
+        s_mean       = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+        df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
+        X_xgb_train  = df_ml[['MINS', 'Dev']].fillna(0).values
+        df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
+        X_hgbr_train  = df_ml[['EWMA', 'MINS']].fillna(0).values
+        tonight_rest_val = 3.0
+        poi  = PoissonRegressor(alpha=1e-3, max_iter=500).fit(X_poi_train.values, y, sample_weight=weights)
+        rf   = RandomForestRegressor(n_estimators=50, random_state=42).fit(X_rf_train, y, sample_weight=weights)
+        xgb  = XGBRegressor(n_estimators=50, learning_rate=0.05, random_state=42, objective='reg:squarederror').fit(X_xgb_train, y, sample_weight=weights)
+        hgbr = HistGradientBoostingRegressor(max_iter=50, random_state=42).fit(X_hgbr_train, y, sample_weight=weights)
+        trend_proj  = poi.predict([[expected_mins, len(df_ml)]])[0]
+        rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest_val, tonight_def_mod]
+        stat_proj   = rf.predict([rf_pred_vec])[0]
+        con_proj    = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
+        base_proj   = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
     return (trend_proj, stat_proj, con_proj, base_proj,
             poi, rf, xgb, hgbr,
@@ -1756,7 +2545,7 @@ def run_nhl_heaters(stat_choice="Points"):
         curr_season = f"{y-1}{y}" if datetime.now().month < 9 else f"{y}{y+1}"
         sort_map = {"Points": "points", "Goals": "goals", "Assists": "assists", "Shots on Goal": "shots"}
         api_stat = sort_map.get(stat_choice, "points")
-        s_col = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG"}.get(stat_choice, "PTS")
+        s_col = {"Points": "PTS", "Goals": "G", "Assists": "A", "Shots on Goal": "SOG", "Passing Yards": "PASS_YDS", "Passing TDs": "PASS_TDS","Completions": "COMP", "Interceptions": "INT","Rushing Yards": "RUSH_YDS", "Receiving Yards": "REC_YDS", "Receptions": "REC", "Carries": "CARRIES",}.get(stat_choice, "PTS")
         r = requests.get(f"https://api.nhle.com/stats/rest/en/skater/summary?isAggregate=false&isGame=false&sort=[{{\"property\":\"{api_stat}\",\"direction\":\"DESC\"}}]&start=0&limit=50&cayenneExp=seasonId={curr_season}", timeout=5).json()
         heaters = []
         for p in r.get('data', []):
@@ -2230,9 +3019,24 @@ def run_dual_autopsy(context):
         
 def render_syndicate_board(league_key):
     lk = league_key.lower()
-    sport_path = "basketball_nba" if league_key == "NBA" else ("baseball_mlb" if league_key == "MLB" else "icehockey_nhl")
-    teams = NBA_TEAMS if league_key == "NBA" else (MLB_TEAMS if league_key == "MLB" else NHL_TEAMS)
-    sched_func = get_nba_schedule if league_key == "NBA" else (get_mlb_schedule if league_key == "MLB" else get_nhl_schedule)
+    sport_path = (
+        "basketball_nba" if league_key == "NBA" else
+        "baseball_mlb"   if league_key == "MLB" else
+        "americanfootball_nfl" if league_key == "NFL" else
+        "icehockey_nhl"
+    )
+    teams = (
+        NBA_TEAMS if league_key == "NBA" else
+        MLB_TEAMS if league_key == "MLB" else
+        NFL_TEAMS if league_key == "NFL" else
+        NHL_TEAMS
+    )
+    sched_func = (
+        get_nba_schedule if league_key == "NBA" else
+        get_mlb_schedule if league_key == "MLB" else
+        get_nfl_schedule if league_key == "NFL" else
+        get_nhl_schedule
+    )
     sched, _ = sched_func()
 
     top_c1, top_c2, _ = st.columns([1, 1, 2])
@@ -2249,7 +3053,12 @@ def render_syndicate_board(league_key):
                     player_name = search_query.upper()
                     st.info(f"Team {player_name} detected.")
                 else:
-                    matches = search_nba_players(search_query) if league_key == "NBA" else (search_mlb_players(search_query) if league_key == "MLB" else search_nhl_players(search_query))
+                    matches = (
+                        search_nba_players(search_query) if league_key == "NBA" else
+                        search_mlb_players(search_query) if league_key == "MLB" else
+                        search_nfl_players(search_query) if league_key == "NFL" else
+                        search_nhl_players(search_query)
+                    )
                     if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"{lk}.dropdown")
                     else: st.caption("No matches found.")
 
@@ -2276,7 +3085,18 @@ def render_syndicate_board(league_key):
 
         with c2:
             game_lines = ["Moneyline", "Spread", "Total (O/U)"]
-            player_props = ["Points", "Rebounds", "Assists", "Threes Made", "Blocks", "Steals", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists", "Double Double", "Triple Double", "Minutes Played"] if league_key == "NBA" else (["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"] if league_key == "MLB" else ["Points", "Goals", "Assists", "Shots on Goal"])
+            player_props = (
+                ["Points", "Rebounds", "Assists", "Threes Made", "Blocks", "Steals",
+                 "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists",
+                 "Rebounds + Assists", "Double Double", "Triple Double", "Minutes Played"]
+                if league_key == "NBA" else
+                ["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs"]
+                if league_key == "MLB" else
+                ["Passing Yards", "Passing TDs", "Completions", "Interceptions",
+                 "Rushing Yards", "Receiving Yards", "Receptions", "Carries"]
+                if league_key == "NFL" else
+                ["Points", "Goals", "Assists", "Shots on Goal"]
+            )
             stat_type = st.selectbox("Stat / Market", game_lines + player_props, key=f"{lk}.stat")
             live_odds_display = st.empty()
 
@@ -3188,15 +4008,7 @@ with t_nhl: render_league_tab("NHL", get_nhl_schedule)
 with t_mlb: render_league_tab("MLB", get_mlb_schedule)
 
 with t_nfl:
-    st.markdown("### 🏈 NFL Skynet Engine (Under Construction)")
-    st.info("The NFL Skynet Engine is currently offline for off-season maintenance. Training camps and pre-season models will boot up in August.")
-    st.markdown("""
-    <div style="background-color: #1e293b; border: 1px dashed #FFD700; border-radius: 8px; padding: 40px; text-align: center; margin-top: 20px;">
-        <div style="font-size: 50px; margin-bottom: 10px;">🚧</div>
-        <div style="font-size: 24px; font-weight: 900; color: #FFD700;">SYSTEM SUSPENDED UNTIL KICKOFF</div>
-        <div style="color: #94a3b8; margin-top: 10px;">Modules pending: Quarterback Archetypes, WR/CB Matchup Data, Weather Modifiers, and Rushing Expected Volume...</div>
-    </div>
-    """, unsafe_allow_html=True)
+    render_league_tab("NFL", get_nfl_schedule)
 
 with t_parlay:
             st.markdown("## 🎟️ Syndicate Parlay Builder")
