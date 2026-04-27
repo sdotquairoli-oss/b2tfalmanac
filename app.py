@@ -2892,12 +2892,14 @@ def render_syndicate_board(league_key):
                                         'AST': '🎯 Playmaker', 'FG3M': '🌐 3PT Threat',
                                         'STL': '🛡️ Steals', 'BLK': '🚫 Shot Blocker'
                                     }
-                                    badges = []
+                                    badge_scores = []
                                     for stat, benchmark in NBA_BENCHMARKS.items():
                                         if stat in df_with_ml.columns:
                                             avg = df_with_ml[stat].mean()
                                             if avg >= benchmark * 1.25:
-                                                badges.append(STAT_LABELS[stat])
+                                                badge_scores.append((STAT_LABELS[stat], avg / benchmark))
+
+                                    badges = [b for b, _ in sorted(badge_scores, key=lambda x: x[1], reverse=True)]
 
                                     if badges:
                                         badge_html = "".join([
