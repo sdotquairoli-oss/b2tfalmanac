@@ -830,6 +830,11 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
                             return str(name).lower().replace("'", "").replace("-", "").replace(".", "").replace(" ", "")
 
                         desc = o.get('description', '')
+                        # TEMP DEBUG — remove after diagnosing
+                        if last_name.lower() in desc.lower():
+                            st.write(f"DEBUG → clean_name: `{clean_name}` | scrubbed: `{scrub_name(clean_name)}` | api_desc: `{desc}` | api_scrubbed: `{scrub_name(desc)}`")
+
+                        desc = o.get('description', '')
                         # SMART MATCH — scrubbed comparison handles apostrophes, hyphens, casing
                         if (scrub_name(clean_name) in scrub_name(desc) or
                             scrub_name(desc) in scrub_name(clean_name) or
