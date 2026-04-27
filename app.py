@@ -244,8 +244,10 @@ def append_to_sheet(sheet_name, row_dict, expected_cols):
         ws.append_row(clean_row, value_input_option='USER_ENTERED')
         
         # Clear the cache so the dashboard updates instantly
-        load_sheet_df.clear()
-        load_ledger.clear()
+        # Skip for Model_Performance to prevent rate limiting during auto-grade
+        if sheet_name not in ["Model_Performance"]:
+            load_sheet_df.clear()
+            load_ledger.clear()
         
     except Exception as e:
         st.error(f"Failed to save to database: {e}")
@@ -1263,27 +1265,16 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         if league == "MLB": expected_mins = np.clip(expected_mins, 2.0, 6.0)
         elif league == "NHL": expected_mins = np.clip(expected_mins, 10.0, 28.0)
         else: expected_mins = np.clip(expected_mins, 5.0, 42.0)
+
     # ✅ MINUTE FLOOR PROBABILITY
-    # High minute volatility players have a realistic chance of
-    # playing significantly fewer minutes than their average.
-    # This blends the expected projection with a reduced-minute
-    # floor scenario to produce more honest win probabilities
-    # on volatile rotation players.
     if mins_std > 0 and expected_mins > 0:
-        # Probability of 20%+ minute reduction on any given night
         mins_floor_prob = min(0.25, (mins_std / expected_mins) * 0.5)
-
-        # What they project in a reduced-minute scenario
         floor_mins = expected_mins * 0.75
-
-        # Only apply if volatility is meaningful (std > 3.0 minutes)
         if mins_std >= 3.0:
             expected_mins = (
                 expected_mins * (1.0 - mins_floor_prob) +
                 floor_mins    * mins_floor_prob
             )
-
-            # Log the adjustment for transparency
             if mins_floor_prob >= 0.15:
                 mins_floor_note = (
                     f"⚠️ Minute floor applied: "
@@ -1296,55 +1287,180 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         else:
             mins_floor_note = ""
     else:
-        mins_floor_note = ""        
+        mins_floor_note = ""
 
-    X_poi_train = df_ml[['MINS']].copy()
-    X_poi_train['Trend'] = np.arange(len(df_ml))
+    # ══════════════════════════════════════════════════
+    # 🏀 NBA DEDICATED PIPELINE
+    # ══════════════════════════════════════════════════
+    if league == "NBA":
+        # ── Rolling averages ──────────────────────────
+        df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
 
-    df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
-    df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
-    df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
-    rf_feature_cols = ['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']
-    if 'USG_PCT' in df_ml.columns:
-        rf_feature_cols.append('USG_PCT')
- 
-    X_rf_train = df_ml[rf_feature_cols].fillna(0).values
+        # ── Back-to-back binary flag ──────────────────
+        df_ml['Is_B2B'] = (df_ml['Rest_Days'] <= 1).astype(float)
 
-    s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-    df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
-    X_xgb_train = df_ml[['MINS', 'Dev']].fillna(0).values
+        # ── L5 minute trend (slope) ───────────────────
+        # Positive = minutes increasing, Negative = minutes declining
+        recent_mins = df_ml['MINS'].tail(5).values
+        if len(recent_mins) >= 3:
+            x = np.arange(len(recent_mins))
+            mins_slope = float(np.polyfit(x, recent_mins, 1)[0])
+        else:
+            mins_slope = 0.0
+        df_ml['Mins_Trend'] = mins_slope
 
-    df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
-    X_hgbr_train = df_ml[['EWMA', 'MINS']].fillna(0).values
+        # ── Poisson: minute-driven volume model ───────
+        X_poi_train = df_ml[['MINS']].copy()
+        X_poi_train['Trend'] = np.arange(len(df_ml))
 
-    def train_poisson():
-        return PoissonRegressor(alpha=1e-3, max_iter=500).fit(X_poi_train.values, y, sample_weight=weights)
-    def train_rf():
-        return RandomForestRegressor(n_estimators=50, random_state=42).fit(X_rf_train, y, sample_weight=weights)
-    def train_xgb():
-        return XGBRegressor(n_estimators=50, learning_rate=0.05, random_state=42, objective='reg:squarederror').fit(X_xgb_train, y, sample_weight=weights)
-    def train_hgbr():
-        return HistGradientBoostingRegressor(max_iter=50, random_state=42).fit(X_hgbr_train, y, sample_weight=weights)
+        # ── Random Forest: pure NBA feature set ───────
+        nba_rf_cols = [
+            'Roll3', 'Roll5', 'Roll10',
+            'MINS', 'Is_Home', 'Rest_Days',
+            'Opp_Def_Mod', 'Is_B2B', 'Mins_Trend'
+        ]
+        if 'USG_PCT' in df_ml.columns:
+            nba_rf_cols.append('USG_PCT')
+        X_rf_train = df_ml[nba_rf_cols].fillna(0).values
 
-    try:
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            f_poi, f_rf, f_xgb, f_hgbr = executor.submit(train_poisson), executor.submit(train_rf), executor.submit(train_xgb), executor.submit(train_hgbr)
-            poi, rf, xgb, hgbr = f_poi.result(), f_rf.result(), f_xgb.result(), f_hgbr.result()
-    except Exception:
-        poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
+        # ── XGBoost: deviation from season norm ───────
+        s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+        df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
+        df_ml['Roll3_Dev'] = df_ml['Roll3'] - s_mean  # Short-term deviation
+        X_xgb_train = df_ml[['MINS', 'Dev', 'Roll3_Dev', 'Is_B2B']].fillna(0).values
 
-    tonight_rest = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
+        # ── HGBR: exponential weighted trend ──────────
+        df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
+        df_ml['EWMA_Mins'] = df_ml['MINS'].ewm(span=5, adjust=False).mean().fillna(expected_mins)
+        X_hgbr_train = df_ml[['EWMA', 'MINS', 'EWMA_Mins', 'Mins_Trend']].fillna(0).values
 
-    trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-    rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, tonight_def_mod]
-    if 'USG_PCT' in df_ml.columns:
-        rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
- 
-    stat_proj = rf.predict([rf_pred_vec])[0]
-    con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
-    base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
+        # ── Tonight's prediction vectors ──────────────
+        tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
+        tonight_b2b      = 1.0 if "B2B" in str(rest_status) else 0.0
 
-    return trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std, mins_floor_note
+        def train_poisson():
+            return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
+                X_poi_train.values, y, sample_weight=weights)
+
+        def train_rf():
+            return RandomForestRegressor(n_estimators=100, max_depth=6,
+                min_samples_leaf=2, random_state=42).fit(
+                X_rf_train, y, sample_weight=weights)
+
+        def train_xgb():
+            return XGBRegressor(n_estimators=100, learning_rate=0.03,
+                max_depth=4, subsample=0.8, random_state=42,
+                objective='reg:squarederror').fit(
+                X_xgb_train, y, sample_weight=weights)
+
+        def train_hgbr():
+            return HistGradientBoostingRegressor(
+                max_iter=100, max_depth=4, random_state=42).fit(
+                X_hgbr_train, y, sample_weight=weights)
+
+        try:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                f_poi, f_rf, f_xgb, f_hgbr = (
+                    executor.submit(train_poisson),
+                    executor.submit(train_rf),
+                    executor.submit(train_xgb),
+                    executor.submit(train_hgbr)
+                )
+                poi, rf, xgb, hgbr = (
+                    f_poi.result(), f_rf.result(),
+                    f_xgb.result(), f_hgbr.result()
+                )
+        except Exception:
+            poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
+
+        trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
+
+        rf_pred_vec = [
+            df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1],
+            expected_mins, is_home_current, tonight_rest_val,
+            tonight_def_mod, tonight_b2b, mins_slope
+        ]
+        if 'USG_PCT' in df_ml.columns:
+            rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
+        stat_proj = rf.predict([rf_pred_vec])[0]
+
+        roll3_dev = float(df_ml['Roll3'].iloc[-1]) - s_mean
+        con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean, roll3_dev, tonight_b2b]])[0]
+
+        ewma_mins = float(df_ml['EWMA_Mins'].iloc[-1])
+        base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins, ewma_mins, mins_slope]])[0]
+
+    # ══════════════════════════════════════════════════
+    # 🏒⚾ LEGACY PIPELINE (NHL + MLB)
+    # ══════════════════════════════════════════════════
+    else:
+        X_poi_train = df_ml[['MINS']].copy()
+        X_poi_train['Trend'] = np.arange(len(df_ml))
+
+        df_ml['Roll3']  = df_ml[s_col].rolling(3).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
+        df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
+
+        rf_feature_cols = ['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']
+        if 'USG_PCT' in df_ml.columns:
+            rf_feature_cols.append('USG_PCT')
+        X_rf_train = df_ml[rf_feature_cols].fillna(0).values
+
+        s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+        df_ml['Dev']  = df_ml[s_col].fillna(0) - s_mean
+        X_xgb_train  = df_ml[['MINS', 'Dev']].fillna(0).values
+
+        df_ml['EWMA']  = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
+        X_hgbr_train  = df_ml[['EWMA', 'MINS']].fillna(0).values
+
+        tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
+
+        def train_poisson():
+            return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
+                X_poi_train.values, y, sample_weight=weights)
+        def train_rf():
+            return RandomForestRegressor(n_estimators=50, random_state=42).fit(
+                X_rf_train, y, sample_weight=weights)
+        def train_xgb():
+            return XGBRegressor(n_estimators=50, learning_rate=0.05,
+                random_state=42, objective='reg:squarederror').fit(
+                X_xgb_train, y, sample_weight=weights)
+        def train_hgbr():
+            return HistGradientBoostingRegressor(
+                max_iter=50, random_state=42).fit(
+                X_hgbr_train, y, sample_weight=weights)
+
+        try:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                f_poi, f_rf, f_xgb, f_hgbr = (
+                    executor.submit(train_poisson), executor.submit(train_rf),
+                    executor.submit(train_xgb), executor.submit(train_hgbr)
+                )
+                poi, rf, xgb, hgbr = (
+                    f_poi.result(), f_rf.result(),
+                    f_xgb.result(), f_hgbr.result()
+                )
+        except Exception:
+            poi, rf, xgb, hgbr = train_poisson(), train_rf(), train_xgb(), train_hgbr()
+
+        trend_proj  = poi.predict([[expected_mins, len(df_ml)]])[0]
+        rf_pred_vec = [
+            df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1],
+            expected_mins, is_home_current, tonight_rest_val, tonight_def_mod
+        ]
+        if 'USG_PCT' in df_ml.columns:
+            rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
+        stat_proj = rf.predict([rf_pred_vec])[0]
+        con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
+        base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
+
+    return (trend_proj, stat_proj, con_proj, base_proj,
+            poi, rf, xgb, hgbr,
+            X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train,
+            expected_mins, mins_std, mins_floor_note)
+    
 def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
     fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
@@ -3285,49 +3401,6 @@ with t_roi:
         if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
             with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
             st.success(grade_msg); time.sleep(1.5); st.rerun()
-
-        # ✅ ONE-TIME BACKFILL BUTTON
-        if st.button("🧠 Backfill Model Memory", use_container_width=True,
-                     help="Seeds the persistent learning engine with your existing graded bets"):
-            with st.spinner("Feeding historical data to the model..."):
-                backfill_df = load_ledger()
-                backfill_df = backfill_df[
-                    (backfill_df['Result'].isin(['Win', 'Loss'])) &
-                    (backfill_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
-                ].copy()
-
-                backfill_df['Actual'] = pd.to_numeric(backfill_df['Actual'], errors='coerce')
-                backfill_df = backfill_df.dropna(subset=['Actual'])
-
-                seeded = 0
-                skipped = 0
-                for _, row in backfill_df.iterrows():
-                    try:
-                        min_max   = float(row.get('MIN Max Proj', 0) or 0)
-                        stat_p    = float(row.get('Stat Proj', 0) or 0)
-                        contra    = float(row.get('Contrarian Proj', 0) or 0)
-                        guru      = float(row.get('Context Proj', 0) or 0)
-                        actual_f  = float(row['Actual'])
-
-                        if all(v > 0 for v in [min_max, stat_p, contra, guru]):
-                            save_model_performance(
-                                str(row['League']),
-                                str(row['Stat']),
-                                abs(min_max  - actual_f),
-                                abs(stat_p   - actual_f),
-                                abs(contra   - actual_f),
-                                abs(guru     - actual_f),
-                            )
-                            seeded += 1
-                            time.sleep(0.3)  # Prevent Google Sheets rate limit
-                        else:
-                            skipped += 1
-                    except:
-                        skipped += 1
-
-                st.success(f"✅ Seeded {seeded} bets into model memory. ({skipped} skipped — missing projections)")
-                time.sleep(1.5)
-                st.rerun()
 
     ledger_df = load_ledger()
     if not ledger_df.empty:
