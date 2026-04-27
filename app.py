@@ -825,7 +825,9 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
                     for o in m.get('outcomes', []):
                         desc = o.get('description', '').lower()
                         # SMART MATCH
-                        if clean_name in desc or (last_name in desc and first_name[:3] in desc):
+                        desc_clean = desc.replace("'", "").replace(".", "")
+                        name_clean = clean_name.replace("'", "").replace(".", "")
+                        if name_clean in desc_clean or (last_name in desc_clean and first_name[:3] in desc_clean):
                             if 'point' in o and 'price' in o: return float(o['point']), int(o['price']), f"Synced: {b.get('title')}", used, rem
                             elif 'price' in o: return None, int(o['price']), f"Synced Odds: {b.get('title')}", used, rem
                             
