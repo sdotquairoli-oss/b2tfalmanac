@@ -2521,14 +2521,33 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         is_blowout_risk = True
         expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
         tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
+        tonight_b2b  = 1.0 if "B2B" in str(rest) else 0.0
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
+
+        # Recompute mins slope for blowout scenario
+        recent_mins_bl = df_ml['MINS'].tail(5).values
+        mins_slope_bl  = float(np.polyfit(np.arange(len(recent_mins_bl)),
+                                          recent_mins_bl, 1)[0]) if len(recent_mins_bl) >= 3 else 0.0
+
         trend_proj = poi.predict([[expected_mins, len(df_ml)]])[0]
-        rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest, mod_val]
+
+        # ✅ Match new NBA RF feature set: 9 base + optional USG_PCT
+        rf_pred_vec = [
+            df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1],
+            expected_mins, is_home_current, tonight_rest,
+            mod_val, tonight_b2b, mins_slope_bl
+        ]
         if 'USG_PCT' in df_ml.columns:
             rf_pred_vec.append(float(df_ml['USG_PCT'].iloc[-1]))
         stat_proj = rf.predict([rf_pred_vec])[0]
-        con_proj = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
-        base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
+
+        roll3_dev = float(df_ml['Roll3'].iloc[-1]) - s_mean
+        con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean,
+                                   roll3_dev, tonight_b2b]])[0]
+
+        ewma_mins = float(df_ml['EWMA_Mins'].iloc[-1]) if 'EWMA_Mins' in df_ml.columns else expected_mins
+        base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins,
+                                    ewma_mins, mins_slope_bl]])[0]
         
     y_actual = df_ml[s_col].fillna(0).values
     poi_hist = poi.predict(X_poi_train.values)
