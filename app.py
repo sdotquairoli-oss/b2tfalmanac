@@ -276,6 +276,33 @@ def overwrite_sheet(sheet_name, df):
     except Exception as e:
         st.error(f"Failed to update database: {e}")
 
+@st.cache_data(ttl=300)
+def get_historical_mae(model_col, league, stat_type, min_samples=5):
+    """Reads cumulative model MAE from Google Sheets for persistent learning."""
+    try:
+        df = load_sheet_df("Model_Performance", 
+            ["Date", "League", "Stat", "MIN_Max_Error", "Stat_Error", "Contrarian_Error", "Guru_Error"])
+        if df.empty: return None
+        subset = df[(df['League'] == league) & (df['Stat'] == stat_type)]
+        if len(subset) < min_samples: return None
+        vals = pd.to_numeric(subset[model_col], errors='coerce').dropna()
+        return float(vals.mean()) if len(vals) >= min_samples else None
+    except: return None
+
+def save_model_performance(league, stat_type, min_max_err, stat_err, contrarian_err, guru_err):
+    """Saves per-bet model errors to Google Sheets after grading."""
+    row = {
+        "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
+        "League": league,
+        "Stat": stat_type,
+        "MIN_Max_Error": round(float(min_max_err), 4),
+        "Stat_Error": round(float(stat_err), 4),
+        "Contrarian_Error": round(float(contrarian_err), 4),
+        "Guru_Error": round(float(guru_err), 4),
+    }
+    append_to_sheet("Model_Performance", row, 
+        ["Date", "League", "Stat", "MIN_Max_Error", "Stat_Error", "Contrarian_Error", "Guru_Error"])
+
 @st.cache_data(ttl=120)
 def load_ledger():
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]    
@@ -501,6 +528,23 @@ def auto_grade_ledger():
                                     except:
                                         pass
                             updated += 1
+
+                            # ✅ PERSISTENT LEARNING: Save model errors for this graded bet
+                            try:
+                                min_max_proj   = float(r.get('MIN Max Proj', 0) or 0)
+                                stat_proj_val  = float(r.get('Stat Proj', 0) or 0)
+                                contrarian_val = float(r.get('Contrarian Proj', 0) or 0)
+                                guru_val       = float(r.get('Context Proj', 0) or 0)
+                                actual_f       = float(val)
+                                if all(v > 0 for v in [min_max_proj, stat_proj_val, contrarian_val, guru_val]):
+                                    save_model_performance(
+                                        league, r['Stat'],
+                                        abs(min_max_proj   - actual_f),
+                                        abs(stat_proj_val  - actual_f),
+                                        abs(contrarian_val - actual_f),
+                                        abs(guru_val       - actual_f),
+                                    )
+                            except: pass
         except: continue
 
     overwrite_sheet("ROI_Ledger", df)
@@ -1485,7 +1529,18 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     mae_xgb = max(np.mean(np.abs(xgb_hist - y_actual)), 0.1)
     mae_hgbr = max(np.mean(np.abs(hgbr_hist - y_actual)), 0.1)
     
-    inv_poi, inv_rf, inv_xgb, inv_hgbr = 1.0/mae_poi, 1.0/mae_rf, 1.0/mae_xgb, 1.0/mae_hgbr
+    # ✅ PERSISTENT LEARNING: Blend historical MAE (70%) with session MAE (30%)
+    hist_poi  = get_historical_mae("MIN_Max_Error",   league, stat_type)
+    hist_rf   = get_historical_mae("Stat_Error",      league, stat_type)
+    hist_xgb  = get_historical_mae("Contrarian_Error", league, stat_type)
+    hist_hgbr = get_historical_mae("Guru_Error",      league, stat_type)
+
+    blended_poi  = (hist_poi  * 0.70 + mae_poi  * 0.30) if hist_poi  else mae_poi
+    blended_rf   = (hist_rf   * 0.70 + mae_rf   * 0.30) if hist_rf   else mae_rf
+    blended_xgb  = (hist_xgb  * 0.70 + mae_xgb  * 0.30) if hist_xgb  else mae_xgb
+    blended_hgbr = (hist_hgbr * 0.70 + mae_hgbr * 0.30) if hist_hgbr else mae_hgbr
+
+    inv_poi, inv_rf, inv_xgb, inv_hgbr = 1.0/blended_poi, 1.0/blended_rf, 1.0/blended_xgb, 1.0/blended_hgbr
     total_inv = inv_poi + inv_rf + inv_xgb + inv_hgbr
     
     w_poi, w_rf, w_xgb, w_hgbr = inv_poi/total_inv, inv_rf/total_inv, inv_xgb/total_inv, inv_hgbr/total_inv
@@ -3230,6 +3285,49 @@ with t_roi:
         if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
             with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
             st.success(grade_msg); time.sleep(1.5); st.rerun()
+
+        # ✅ ONE-TIME BACKFILL BUTTON
+        if st.button("🧠 Backfill Model Memory", use_container_width=True,
+                     help="Seeds the persistent learning engine with your existing graded bets"):
+            with st.spinner("Feeding historical data to the model..."):
+                backfill_df = load_ledger()
+                backfill_df = backfill_df[
+                    (backfill_df['Result'].isin(['Win', 'Loss'])) &
+                    (backfill_df['Actual'].astype(str).str.strip().isin(['', 'nan', 'None']) == False)
+                ].copy()
+
+                backfill_df['Actual'] = pd.to_numeric(backfill_df['Actual'], errors='coerce')
+                backfill_df = backfill_df.dropna(subset=['Actual'])
+
+                seeded = 0
+                skipped = 0
+                for _, row in backfill_df.iterrows():
+                    try:
+                        min_max   = float(row.get('MIN Max Proj', 0) or 0)
+                        stat_p    = float(row.get('Stat Proj', 0) or 0)
+                        contra    = float(row.get('Contrarian Proj', 0) or 0)
+                        guru      = float(row.get('Context Proj', 0) or 0)
+                        actual_f  = float(row['Actual'])
+
+                        if all(v > 0 for v in [min_max, stat_p, contra, guru]):
+                            save_model_performance(
+                                str(row['League']),
+                                str(row['Stat']),
+                                abs(min_max  - actual_f),
+                                abs(stat_p   - actual_f),
+                                abs(contra   - actual_f),
+                                abs(guru     - actual_f),
+                            )
+                            seeded += 1
+                            time.sleep(0.3)  # Prevent Google Sheets rate limit
+                        else:
+                            skipped += 1
+                    except:
+                        skipped += 1
+
+                st.success(f"✅ Seeded {seeded} bets into model memory. ({skipped} skipped — missing projections)")
+                time.sleep(1.5)
+                st.rerun()
 
     ledger_df = load_ledger()
     if not ledger_df.empty:
