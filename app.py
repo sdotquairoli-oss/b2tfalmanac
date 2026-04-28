@@ -2685,6 +2685,9 @@ def run_nba_heaters(stat_choice="Points"):
             "Assists": ("assists", "assists", "AST"),
             "Threes Made": ("threePointFieldGoalsMade", "threePointFieldGoalsMade", "FG3M"),
             "PRA (Pts+Reb+Ast)": ("points", "points", "PRA"),
+            "Points + Rebounds": ("points", "points", "PR"),
+            "Points + Assists": ("points", "points", "PA"),
+            "Rebounds + Assists": ("rebounds", "rebounds", "RA"),
         }
         
         api_cat, api_sort, s_col = stat_map.get(stat_choice, ("points", "points", "PTS"))
@@ -2751,9 +2754,15 @@ def run_nba_heaters(stat_choice="Points"):
                     if days_out >= 6:
                         matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                     
-                    # Build PRA if needed
+                    # Build combo stats if needed
                     if s_col == "PRA" and 'PTS' in df.columns:
                         df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
+                    if s_col == "PR" and 'PTS' in df.columns:
+                        df['PR'] = df['PTS'] + df['TRB']
+                    if s_col == "PA" and 'PTS' in df.columns:
+                        df['PA'] = df['PTS'] + df['AST']
+                    if s_col == "RA" and 'TRB' in df.columns:
+                        df['RA'] = df['TRB'] + df['AST']
                     
                     if s_col in df.columns:
                         dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}"
@@ -2982,7 +2991,7 @@ def render_league_scanners(league_name):
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
         if league_name == "NBA":
             c1, c2 = st.columns([1, 1.5])
-            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)"], key=f"{lk}.scan_stat")
+            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists"], key=f"{lk}.scan_stat")
             with c2:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
