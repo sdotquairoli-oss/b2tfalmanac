@@ -2670,6 +2670,121 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     ]
     
     return df_ml, board, final_consensus, f_vote, f_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote
+
+@st.cache_data(ttl=3600)
+def run_nba_heaters(stat_choice="Points"):
+    try:
+        sched, _ = get_nba_schedule()
+        if not sched: return None, "No NBA games scheduled today."
+        
+        teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
+        
+        stat_map = {
+            "Points": ("points", "points", "PTS"),
+            "Rebounds": ("rebounds", "rebounds", "TRB"),
+            "Assists": ("assists", "assists", "AST"),
+            "Threes Made": ("threePointFieldGoalsMade", "threePointFieldGoalsMade", "FG3M"),
+            "PRA (Pts+Reb+Ast)": ("points", "points", "PRA"),
+        }
+        
+        api_cat, api_sort, s_col = stat_map.get(stat_choice, ("points", "points", "PTS"))
+        
+        # ESPN stats leaderboard
+        r = requests.get(
+            f"https://site.web.api.espn.com/apis/v2/sports/basketball/nba/statistics/athletes",
+            params={
+                "limit": 100,
+                "sort": f"{api_cat}.{api_sort}:desc",
+                "season": datetime.now().year if datetime.now().month >= 10 else datetime.now().year - 1
+            },
+            timeout=10
+        ).json()
+        
+        ESPN_FIX = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA"}
+        
+        heaters = []
+        athletes = r.get('athletes', [])
+        
+        for entry in athletes:
+            try:
+                athlete = entry.get('athlete', {})
+                team_abbr_raw = athlete.get('team', {}).get('abbreviation', '').upper()
+                team_abbr = ESPN_FIX.get(team_abbr_raw, team_abbr_raw)
+                
+                if team_abbr not in teams_today:
+                    continue
+                
+                player_name = athlete.get('displayName', '')
+                if not player_name:
+                    continue
+                
+                # Get season average from stats
+                stats = entry.get('stats', [])
+                season_val = 0.0
+                if stats:
+                    try:
+                        season_val = round(float(stats[0]), 1)
+                    except:
+                        season_val = 0.0
+                
+                # Find opponent and home/away
+                opp, is_home = "OPP", True
+                for g in sched:
+                    if g['home'] == team_abbr:
+                        opp = g['away']; is_home = True; break
+                    elif g['away'] == team_abbr:
+                        opp = g['home']; is_home = False; break
+                
+                matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
+                ai_proj = 0.0
+                
+                player_label = f"{player_name} ({team_abbr})"
+                df, status, _ = get_nba_stats(player_label)
+                
+                if status == 200 and not df.empty and len(df) >= 5:
+                    # Check if active recently
+                    last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
+                    today_est = pd.to_datetime(datetime.now(
+                        pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
+                    days_out = (today_est - last_played).days
+                    
+                    if days_out >= 6:
+                        matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
+                    
+                    # Build PRA if needed
+                    if s_col == "PRA" and 'PTS' in df.columns:
+                        df['PRA'] = df['PTS'] + df['TRB'] + df['AST']
+                    
+                    if s_col in df.columns:
+                        dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}"
+                        _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                            df, s_col, float(season_val), opp, "NBA",
+                            "Rested (1+ Days)", int(is_home), stat_choice, df_hash=dh
+                        )
+                        ai_proj = round(c_proj, 1)
+                
+                time.sleep(0.15)
+                heaters.append({
+                    "Player": player_name,
+                    "Team": team_abbr,
+                    "Season Avg": season_val,
+                    "AI Proj": ai_proj,
+                    "Status": matchup_status
+                })
+                
+                if len(heaters) >= 15:
+                    break
+                    
+            except:
+                continue
+        
+        if not heaters:
+            return None, f"No top {stat_choice} leaders playing tonight."
+        
+        return pd.DataFrame(heaters), f"✅ NBA Radar Online: {len(heaters)} targets loaded for tonight."
+    
+    except Exception as e:
+        return None, f"ESPN API Error: {str(e)}"
 @st.cache_data(ttl=3600)
 def run_nhl_heaters(stat_choice="Points"):
     try:
@@ -2867,11 +2982,14 @@ def render_league_scanners(league_name):
     with st.expander(f"📡 Launch {league_name} Skynet Radar", expanded=False):
         if league_name == "NBA":
             c1, c2 = st.columns([1, 1.5])
-            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)", "Points + Rebounds", "Points + Assists", "Rebounds + Assists"], key=f"{lk}.scan_stat")
+            with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Rebounds", "Assists", "Threes Made", "PRA (Pts+Reb+Ast)"], key=f"{lk}.scan_stat")
             with c2:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 if st.button(f"🏀 Scan NBA {scan_stat}", type="primary", use_container_width=True, key=f"{lk}.btn.heaters"):
-                    st.info("🚧 NBA Radar temporarily offline — migrating from nba_api to ESPN. Coming back soon.")
+                    with st.spinner(f"Scanning NBA {scan_stat} leaders playing tonight..."):
+                        df, msg = run_nba_heaters(scan_stat)
+                        if df is not None: st.session_state[f'{lk}.radar.heaters'] = df
+                        st.info(msg)
         elif league_name == "NHL":
             c1, c2, c3 = st.columns([1.2, 1, 1])
             with c1: scan_stat = st.selectbox("🎯 Target Stat", ["Points", "Goals", "Assists", "Shots on Goal"], key=f"{lk}.scan_stat")
