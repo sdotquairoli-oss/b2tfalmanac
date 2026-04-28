@@ -1220,7 +1220,7 @@ def get_nba_stats(player_label):
 
         # Fallback: scan common rosters if team not found or player not on roster
         if not athlete_id:
-            for fallback_abbr in ["LAL", "GSW", "BOS", "MIA", "DEN", "PHX", "MIL", "PHI", "OKC", "NYK", "POR", "MIN", "CLE", "ATL", "DAL"]:
+            for fallback_abbr in ["LAL", "GSW", "BOS", "MIA", "DEN", "PHX", "MIL", "PHI", "OKC", "NYK", "POR", "MIN", "CLE", "ATL", "DAL", "DET", "ORL", "TOR", "IND", "CHA", "MEM", "SAS", "HOU", "SAC", "LAC", "BKN", "NOP", "WAS", "UTA"]:
                 roster = get_espn_roster(fallback_abbr)
                 for name, aid in roster.items():
                     name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
