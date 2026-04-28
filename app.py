@@ -67,7 +67,11 @@ S_MAP = {
     "Points + Assists": "PA", "Rebounds + Assists": "RA", "Hits": "H",
     "Home Runs": "HR", "Total Bases": "TB", "Pitcher Strikeouts": "K",
     "Pitcher Earned Runs": "ER", "Double Double": "DD", "Triple Double": "TD",
-    "Blocks": "BLK", "Steals": "STL", "Hits + Runs + RBIs": "HRR"
+    "Blocks": "BLK", "Steals": "STL", "Hits + Runs + RBIs": "HRR",
+    "Passing Yards": "PASS_YDS", "Passing TDs": "PASS_TDS",
+    "Completions": "COMP", "Interceptions": "INT",
+    "Rushing Yards": "RUSH_YDS", "Receiving Yards": "REC_YDS",
+    "Receptions": "REC", "Carries": "CARRIES"
 }
 
 PASS_THRESHOLDS = {
@@ -481,7 +485,21 @@ def auto_grade_ledger():
             cache_key = (league, player)
             if cache_key not in stats_cache:
                 time.sleep(1)
-                if league == "NBA":   stats, _, _ = get_nba_stats(f"{player} (NBA)"); d_col = 'ValidDate'
+                if league == "NBA":
+                    # Try to find team from ALIASES or pass NBA as fallback
+                    nba_label = f"{player} (NBA)"
+                    for abbr in ESPN_NBA_TEAM_IDS.keys():
+                        roster = get_espn_roster(abbr)
+                        cn_test = player.lower().replace('.', '').replace("'", '').replace('-', ' ')
+                        for name in roster:
+                            name_test = name.replace('.', '').replace("'", '').replace('-', ' ')
+                            if name_test == cn_test or cn_test in name_test:
+                                nba_label = f"{player} ({abbr})"
+                                break
+                        if f"({abbr})" in nba_label:
+                            break
+                    stats, _, _ = get_nba_stats(nba_label)
+                    d_col = 'ValidDate'
                 elif league == "NHL": stats, _, _ = get_nhl_stats(player); d_col = 'ValidDate'
                 elif league == "NFL": stats, _, _ = get_nfl_stats(player); d_col = 'ValidDate'
                 else:                 stats, _, _ = get_mlb_stats(player); d_col = 'ValidDate'
@@ -1218,9 +1236,9 @@ def get_nba_stats(player_label):
                     athlete_id = aid
                     break
 
-        # Fallback: scan common rosters if team not found or player not on roster
+        # Fallback: scan ALL NBA rosters — no player should ever fall through
         if not athlete_id:
-            for fallback_abbr in ["LAL", "GSW", "BOS", "MIA", "DEN", "PHX", "MIL", "PHI", "OKC", "NYK", "POR", "MIN", "CLE", "ATL", "DAL", "DET", "ORL", "TOR", "IND", "CHA", "MEM", "SAS", "HOU", "SAC", "LAC", "BKN", "NOP", "WAS", "UTA"]:
+            for fallback_abbr in ESPN_NBA_TEAM_IDS.keys():
                 roster = get_espn_roster(fallback_abbr)
                 for name, aid in roster.items():
                     name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
@@ -4490,7 +4508,7 @@ with t_roi:
         
         # 🎛️ FILTERS
         f_c1, f_c2 = st.columns(2)
-        league_filter = f_c1.selectbox("League Filter", ["All", "NBA", "NHL", "MLB"], label_visibility="collapsed")
+        league_filter = f_c1.selectbox("League Filter", ["All", "NBA", "NHL", "MLB", "NFL"], label_visibility="collapsed")
         time_filter = f_c2.selectbox("Time Filter", ["All Time", "Last 7 Days", "Last 30 Days"], label_visibility="collapsed")
 
         if league_filter != "All": graded_df = graded_df[graded_df['League'] == league_filter]
@@ -5092,6 +5110,7 @@ with t_roi:
                 st.caption(f"📋 Showing most recent {ROI_PAGE_SIZE} of {total_slips} slips. Grade older bets via Auto-Grade.")
     
             for i, row in slips_to_render.iterrows():
+                orig_idx = int(row['index'])
                 status = str(row.get('Result', 'Pending')).strip()
                 if status == 'Win': b_color = "#00c853"
                 elif status == 'Loss': b_color = "#ff0055"
