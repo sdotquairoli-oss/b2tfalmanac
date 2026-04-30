@@ -3327,26 +3327,27 @@ def render_syndicate_board(league_key):
     init_state(f"{lk}.is_home", True)
     init_state(f"{lk}.opp", teams[0])
 
-  # ── MATCHING CSS ───────────────────────────────────────
-    st.markdown("""
-    <style>
-    /* ───────────────────────────────────────────────────────── */
+  /* ───────────────────────────────────────────────────────── */
     /* TOP ROW CONTAINER (Translucent Glass & Cyan Glow)         */
     /* ───────────────────────────────────────────────────────── */
-    div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        /* 1. Translucent Background (Slate 800 at 40% opacity) */
+    
+    /* 1. The Outer Wrapper: Handles the glow, border, and frosted glass */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: rgba(30, 41, 59, 0.4) !important; 
-        
-        /* 2. Frosted Glass Blur Effect */
-        backdrop-filter: blur(10px) !important; 
-        -webkit-backdrop-filter: blur(10px) !important;
-        
-        /* 3. Electric Cyan Border & Glow */
-        border: 1px solid rgba(0, 229, 255, 0.6) !important; 
-        border-radius: 8px !important;
-        box-shadow: 0 0 15px rgba(0, 229, 255, 0.15), inset 0 0 10px rgba(0, 229, 255, 0.05) !important;
+        backdrop-filter: blur(12px) !important; 
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 2px solid rgba(0, 229, 255, 0.6) !important; 
+        border-radius: 10px !important;
+        box-shadow: 0 0 15px rgba(0, 229, 255, 0.2), inset 0 0 10px rgba(0, 229, 255, 0.1) !important;
+        overflow: hidden !important;
+        padding: 2px !important;
     }
 
+    /* 2. The Inner Div: Kill Streamlit's default solid background so the glass shows through */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        background-color: transparent !important;
+        border: none !important;
+    }
     /* ───────────────────────────────────────────────────────── */
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
