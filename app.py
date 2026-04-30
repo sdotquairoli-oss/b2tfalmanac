@@ -3401,29 +3401,53 @@ def render_syndicate_board(league_key):
             st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
 
         with tc6:
-            st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:2px;'>Energy</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;'>Energy</div>", unsafe_allow_html=True)
+
             if league_key == "NFL":
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
-                fat_map     = {
-                    "⚡ Short":    "Short Week (TNF ~4 Days)",
-                    "🟢 Standard": "Standard Rest (7 Days)",
-                    "🔋 Bye":      "Post-Bye Week (~14 Days)"
-                }
+                fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
                 fat_colors  = {"⚡ Short": "#f59e0b", "🟢 Standard": "#00c853", "🔋 Bye": "#00E5FF"}
+                fat_bgs     = {"⚡ Short": "rgba(245,158,11,.2)", "🟢 Standard": "rgba(0,200,83,.2)", "🔋 Bye": "rgba(0,229,255,.15)"}
             else:
                 fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
-                fat_map     = {
-                    "🟢 Rested": "Rested (1+ Days)",
-                    "😓 Tired":  "Tired (B2B)",
-                    "🔴 B2B":    "3 in 4 Nights"
-                }
+                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
                 fat_colors  = {"🟢 Rested": "#00c853", "😓 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
+                fat_bgs     = {"🟢 Rested": "rgba(0,200,83,.2)", "😓 Tired": "rgba(245,158,11,.2)", "🔴 B2B": "rgba(213,0,0,.2)"}
 
-            fat_sel = st.radio("Energy", fat_options, horizontal=True, key=f"{lk}.fat_radio", label_visibility="collapsed")
+            # Init default
+            if f"{lk}.fat_sel" not in st.session_state:
+                st.session_state[f"{lk}.fat_sel"] = fat_options[0]
+            fat_sel = st.session_state[f"{lk}.fat_sel"]
+
+            # Render segmented control
+            btn_cols = st.columns(len(fat_options))
+            for fi, fo in enumerate(fat_options):
+                is_active = fat_sel == fo
+                bg    = fat_bgs[fo]    if is_active else "transparent"
+                color = fat_colors[fo] if is_active else "#94a3b8"
+                border = f"1px solid {fat_colors[fo]}60" if is_active else "1px solid transparent"
+                btn_cols[fi].markdown(f"""
+                <div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:2px;">
+                </div>
+                """, unsafe_allow_html=True)
+                if btn_cols[fi].button(fo, key=f"{lk}.fat_btn_{fi}", use_container_width=True):
+                    st.session_state[f"{lk}.fat_sel"] = fo
+                    st.rerun()
+                # Overlay active style via markdown after button
+                if is_active:
+                    btn_cols[fi].markdown(f"""
+                    <style>
+                    div[data-testid="stButton"] button[kind="secondary"] {{
+                        background: {bg} !important;
+                        color: {color} !important;
+                        border: {border} !important;
+                        font-weight: 900 !important;
+                    }}
+                    </style>
+                    """, unsafe_allow_html=True)
+
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
-            fat_color = fat_colors.get(fat_sel, "#94a3b8")
-            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:-4px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
 
     # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
