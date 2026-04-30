@@ -3327,35 +3327,53 @@ def render_syndicate_board(league_key):
     init_state(f"{lk}.is_home", True)
     init_state(f"{lk}.opp", teams[0])
 
-    # ── FULL TOP ROW IN BORDERED CONTAINER ─────────────────
-    with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.1, 1.0, 1.0, 0.9, 0.7, 1.5])
+    # ── SEGMENTED CONTROL CSS ──────────────────────────────
+    st.markdown("""
+    <style>
+    div[data-testid="stRadio"] > div { display: flex; gap: 2px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 3px; }
+    div[data-testid="stRadio"] > div > label { flex: 1; text-align: center; padding: 5px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; cursor: pointer; color: #94a3b8; margin: 0; }
+    div[data-testid="stRadio"] > div > label:has(input:checked) { background: #1e293b; color: #f8fafc; }
+    div[data-testid="stRadio"] > div > label input { display: none; }
+    </style>
+    """, unsafe_allow_html=True)
 
-        with tc1:
-            sync = st.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
-        with tc2:
-            is_home_bool = st.toggle("🏠 Playing at Home?", key=f"{lk}.is_home")
-            is_home_current = 1 if is_home_bool else 0
-        with tc3:
-            teammate_out = st.checkbox("🚑 Key Teammate Out?", key=f"{lk}.teammate_out")
-            st.session_state[f"{lk}.injury_boost"] = teammate_out
+    # ── FULL TOP ROW IN STYLED BORDERED CONTAINER ──────────
+    st.markdown("""
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;
+         padding:14px 16px;margin-bottom:10px;">
+    """, unsafe_allow_html=True)
 
-        with tc4:
-            opp = st.session_state.get(f"{lk}.opp", teams[0])
-            opp_logo_url = get_team_logo(league_key, opp)
-            home_txt = "Home" if is_home_current else "Away"
-            teammate_html = "&nbsp;🚑" if teammate_out else ""
-            st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:6px;padding:6px 0;">
-                <img src='{opp_logo_url}' width='20' style='vertical-align:middle;flex-shrink:0;'>
-                <span style="font-size:10px;color:#94a3b8;">vs</span>
-                <span style="font-size:15px;font-weight:900;color:#00E5FF;">{opp}</span>
-                <span style="margin-left:auto;font-size:10px;color:#94a3b8;">{home_txt}{teammate_html}</span>
-            </div>
-            """, unsafe_allow_html=True)
+    tc1, tc2, tc3, tc4, tc5 = st.columns([1.0, 1.0, 0.8, 0.65, 1.6])
 
-        with tc5:
-            spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", label_visibility="collapsed")
+    with tc1:
+        sync = st.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
+
+    with tc2:
+        teammate_out = st.checkbox("🚑 Key Teammate Out?", key=f"{lk}.teammate_out")
+        st.session_state[f"{lk}.injury_boost"] = teammate_out
+
+    with tc3:
+        home_away = st.radio("Home/Away", ["🏠 Home", "✈️ Away"], horizontal=True, key=f"{lk}.home_away", label_visibility="collapsed")
+        is_home_bool = home_away == "🏠 Home"
+        is_home_current = 1 if is_home_bool else 0
+        st.session_state[f"{lk}.is_home"] = is_home_bool
+
+    with tc4:
+        opp = st.session_state.get(f"{lk}.opp", teams[0])
+        opp_logo_url = get_team_logo(league_key, opp)
+        teammate_html = "&nbsp;🚑" if teammate_out else ""
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 0;">
+            <img src='{opp_logo_url}' width='22' style='vertical-align:middle;flex-shrink:0;'>
+            <span style="font-size:10px;color:#94a3b8;">vs</span>
+            <span style="font-size:16px;font-weight:900;color:#00E5FF;">{opp}{teammate_html}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with tc5:
+        sp_c, fat_c = st.columns([0.6, 1])
+        with sp_c:
+            spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", label_visibility="collapsed", format="%.1f")
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
             elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
@@ -3363,30 +3381,22 @@ def render_syndicate_board(league_key):
             elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
             st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
-
-        with tc6:
+        with fat_c:
             if league_key == "NFL":
-                fat_options  = ["⚡ Short", "🟢 Standard", "🔋 Post-Bye"]
-                fat_map      = {
-                    "⚡ Short":     "Short Week (TNF ~4 Days)",
-                    "🟢 Standard":  "Standard Rest (7 Days)",
-                    "🔋 Post-Bye":  "Post-Bye Week (~14 Days)"
-                }
-                fat_colors   = {"⚡ Short": "#f59e0b", "🟢 Standard": "#00c853", "🔋 Post-Bye": "#00E5FF"}
+                fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
+                fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
+                fat_colors  = {"⚡ Short": "#f59e0b", "🟢 Standard": "#00c853", "🔋 Bye": "#00E5FF"}
             else:
-                fat_options  = ["🟢 Rested", "🟡 Tired", "🔴 B2B"]
-                fat_map      = {
-                    "🟢 Rested": "Rested (1+ Days)",
-                    "🟡 Tired":  "Tired (B2B)",
-                    "🔴 B2B":    "3 in 4 Nights"
-                }
-                fat_colors   = {"🟢 Rested": "#00c853", "🟡 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
-
+                fat_options = ["🟢 Rested", "🟡 Tired", "🔴 B2B"]
+                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "🟡 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
+                fat_colors  = {"🟢 Rested": "#00c853", "🟡 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
             fat_sel = st.radio("Fatigue", fat_options, horizontal=True, key=f"{lk}.fat_radio", label_visibility="collapsed")
             rest = fat_map.get(fat_sel, fat_options[0])
             st.session_state[f"{lk}.rest"] = rest
             fat_color = fat_colors.get(fat_sel, "#94a3b8")
             st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:-4px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
