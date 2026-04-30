@@ -3327,78 +3327,50 @@ def render_syndicate_board(league_key):
     init_state(f"{lk}.is_home", True)
     init_state(f"{lk}.opp", teams[0])
 
-    # ── TOP BAR ───────────────────────────────────────────────
-    bar_left, bar_right = st.columns([1, 1])
+    # ── TOP ROW — toggles only ─────────────────────────────
+    tc1, tc2, tc3, _ = st.columns([1, 1, 1, 2])
+    sync            = tc1.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
+    is_home_bool    = tc2.toggle("🏠 Playing at Home?",     key=f"{lk}.is_home")
+    teammate_out    = tc3.checkbox("🚑 Key Teammate Out?",  key=f"{lk}.teammate_out")
+    is_home_current = 1 if is_home_bool else 0
+    st.session_state[f"{lk}.injury_boost"] = teammate_out
 
-    with bar_left:
-        bc1, bc2, bc3 = st.columns([1, 1, 1])
-        sync         = bc1.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
-        is_home_bool = bc2.toggle("🏠 Playing at Home?",    key=f"{lk}.is_home")
-        teammate_out = bc3.checkbox("🚑 Key Teammate Out?", key=f"{lk}.teammate_out")
-        is_home_current = 1 if is_home_bool else 0
-        st.session_state[f"{lk}.injury_boost"] = teammate_out
+    # ── CONTROL BAR — opponent, spread, fatigue inline ─────
+    cb1, cb2, cb3, cb4, cb5 = st.columns([0.6, 0.5, 0.8, 0.5, 1.2])
 
-    with bar_right:
-        ri1, ri2, ri3, ri4 = st.columns([1, 0.9, 0.6, 1.2])
+    with cb1:
+        opp_logo_url = get_team_logo(league_key, st.session_state.get(f"{lk}.opp", teams[0]))
+        st.markdown(f"<div style='padding-top:6px;display:flex;align-items:center;gap:6px;'><img src='{opp_logo_url}' width='20' style='vertical-align:middle;'><span style='font-size:11px;color:#94a3b8;'>vs</span></div>", unsafe_allow_html=True)
 
-        with ri1:
-            opp = st.selectbox("vs", teams, key=f"{lk}.opp", label_visibility="collapsed")
-            st.markdown(f"<div style='font-size:9px;color:#94a3b8;text-align:center;margin-top:-8px;letter-spacing:.6px;text-transform:uppercase;'>vs Opponent</div>", unsafe_allow_html=True)
+    with cb2:
+        opp = st.selectbox("Opponent", teams, key=f"{lk}.opp", label_visibility="collapsed")
 
-        with ri2:
-            spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", label_visibility="collapsed")
-            spread_val = spread_input
-            if spread_val <= -10:   sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
-            elif spread_val < 0:    sh_color, sh_text = "#00c853", "▾ fav"
-            elif spread_val == 0:   sh_color, sh_text = "#94a3b8", "pick em"
-            elif spread_val >= 10:  sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
-            else:                   sh_color, sh_text = "#f59e0b", "▴ dog"
-            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-8px;'>{sh_text}</div>", unsafe_allow_html=True)
+    with cb3:
+        spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", label_visibility="collapsed")
+        spread_val = spread_input
+        if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
+        elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
+        elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "pick em"
+        elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
+        else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
+        st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
 
-        with ri3:
-            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-            st.markdown("<div style='font-size:11px;color:#94a3b8;text-align:center;padding-top:6px;'>Fatigue</div>", unsafe_allow_html=True)
+    with cb4:
+        home_txt = "Home" if is_home_current else "Away"
+        teammate_html = " | 🚑" if teammate_out else ""
+        st.markdown(f"<div style='padding-top:8px;font-size:12px;color:#94a3b8;'>{home_txt}{teammate_html}</div>", unsafe_allow_html=True)
 
-        with ri4:
-            if league_key == "NFL":
-                fatigue_opts = [
-                    "Standard Rest (7 Days)",
-                    "Short Week (TNF ~4 Days)",
-                    "Post-Bye Week (~14 Days)"
-                ]
-            else:
-                fatigue_opts = [
-                    "🟢 Rested (1+ Days)",
-                    "😓 Tired (B2B)",
-                    "🔴 3 in 4 Nights",
-                ]
-            fat_choice = st.selectbox("Fatigue", fatigue_opts, key=f"{lk}.rest", label_visibility="collapsed")
-            rest = fat_choice
-            fat_color = "#00c853" if "Rested" in fat_choice or "Standard" in fat_choice or "Bye" in fat_choice else ("#ff5252" if "3 in 4" in fat_choice else "#f59e0b")
-            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:-8px;'>{fat_choice.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+    with cb5:
+        if league_key == "NFL":
+            fatigue_opts = ["Standard Rest (7 Days)", "Short Week (TNF ~4 Days)", "Post-Bye Week (~14 Days)"]
+        else:
+            fatigue_opts = ["🟢 Rested (1+ Days)", "😓 Tired (B2B)", "🔴 3 in 4 Nights"]
+        fat_choice = st.selectbox("Fatigue", fatigue_opts, key=f"{lk}.rest", label_visibility="collapsed")
+        rest = fat_choice
+        fat_color = "#00c853" if "Rested" in fat_choice or "Standard" in fat_choice or "Bye" in fat_choice else ("#ff5252" if "3 in 4" in fat_choice else "#f59e0b")
+        st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:-6px;'>{fat_choice.split('(')[0].strip()}</div>", unsafe_allow_html=True)
 
-    # Status bar display
-    opp_logo = get_team_logo(league_key, opp)
-    home_txt = "Home" if is_home_current else "Away"
-    teammate_html = " &nbsp;|&nbsp; 🚑 <span style='color:#f59e0b;font-weight:700;'>Teammate Out</span>" if teammate_out else ""
-    st.markdown(f"""
-    <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;
-         padding:7px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
-        <img src='{opp_logo}' width='18' style='vertical-align:middle;opacity:.85;'>
-        <span style="font-size:12px;color:#94a3b8;">vs</span>
-        <span style="font-size:13px;font-weight:900;color:#00E5FF;">{opp}</span>
-        <span style="color:#334155;">|</span>
-        <span style="font-size:12px;color:#94a3b8;">Spread:</span>
-        <span style="font-size:12px;font-weight:700;color:{sh_color};">{spread_val:+.1f}</span>
-        <span style="color:#334155;">|</span>
-        <span style="font-size:12px;color:#94a3b8;">{home_txt}</span>
-        <span style="color:#334155;">|</span>
-        <span style="font-size:12px;color:{fat_color};font-weight:600;">{fat_choice.split('(')[0].strip()}</span>
-        {teammate_html}
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── SEARCH ROW ────────────────────────────────────────────
+    # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
     with s1:
         st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>1. Search Player/Team</div>", unsafe_allow_html=True)
@@ -3439,10 +3411,8 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.opp"]     = auto_opp
             st.session_state[f"{lk}.is_home"] = auto_is_home
 
-    # Live odds sync display
     live_odds_display = st.empty()
     if sync and player_name:
-        opening_key = f"{lk}.opening_line.{player_name}.general"
         with st.spinner("Syncing odds..."):
             f_line, f_odds, msg, used, rem = get_live_line(player_name, "Points", ODDS_API_KEY, sport_path)
         if used and rem:
