@@ -3327,7 +3327,7 @@ def render_syndicate_board(league_key):
     init_state(f"{lk}.is_home", True)
     init_state(f"{lk}.opp", teams[0])
 
-  /* ───────────────────────────────────────────────────────── */
+    /* ───────────────────────────────────────────────────────── */
     /* TOP ROW CONTAINER (Translucent Glass & Cyan Glow)         */
     /* ───────────────────────────────────────────────────────── */
     
