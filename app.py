@@ -3327,6 +3327,8 @@ def render_syndicate_board(league_key):
     init_state(f"{lk}.is_home", True)
     init_state(f"{lk}.opp", teams[0])
 
+    st.markdown("""
+    <style>
     /* ───────────────────────────────────────────────────────── */
     /* TOP ROW CONTAINER (Translucent Glass & Cyan Glow)         */
     /* ───────────────────────────────────────────────────────── */
@@ -3347,6 +3349,8 @@ def render_syndicate_board(league_key):
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
         background-color: transparent !important;
         border: none !important;
+    </style>
+    """, unsafe_allow_html=True)    
     }
     /* ───────────────────────────────────────────────────────── */
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
