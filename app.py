@@ -3442,13 +3442,15 @@ def render_syndicate_board(league_key):
             seg_html += "</div>"
             st.markdown(seg_html, unsafe_allow_html=True)
 
-            # Actual clickable buttons hidden behind — use columns
+            # Clickable buttons — hidden via CSS, visual handled by pill above
+            st.markdown("<div style='height:0px;overflow:hidden;opacity:0;pointer-events:none;position:absolute;'>", unsafe_allow_html=True)
             f1, f2, f3 = st.columns(3)
             fat_cols = [f1, f2, f3]
             for fi, fo in enumerate(fat_options):
                 if fat_cols[fi].button(fo, key=f"{lk}.fat_{fi}", use_container_width=True, help=fat_map[fo]):
                     st.session_state[f"{lk}.fat_sel"] = fo
                     st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
