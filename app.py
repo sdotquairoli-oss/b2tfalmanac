@@ -3335,41 +3335,6 @@ def render_syndicate_board(league_key):
     is_home_current = 1 if is_home_bool else 0
     st.session_state[f"{lk}.injury_boost"] = teammate_out
 
-    # ── CONTROL BAR — opponent, spread, fatigue inline ─────
-    cb1, cb2, cb3, cb4, cb5 = st.columns([0.6, 0.5, 0.8, 0.5, 1.2])
-
-    with cb1:
-        opp_logo_url = get_team_logo(league_key, st.session_state.get(f"{lk}.opp", teams[0]))
-        st.markdown(f"<div style='padding-top:6px;display:flex;align-items:center;gap:6px;'><img src='{opp_logo_url}' width='20' style='vertical-align:middle;'><span style='font-size:11px;color:#94a3b8;'>vs</span></div>", unsafe_allow_html=True)
-
-    with cb2:
-        opp = st.selectbox("Opponent", teams, key=f"{lk}.opp", label_visibility="collapsed")
-
-    with cb3:
-        spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", label_visibility="collapsed")
-        spread_val = spread_input
-        if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
-        elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
-        elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "pick em"
-        elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
-        else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
-        st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
-
-    with cb4:
-        home_txt = "Home" if is_home_current else "Away"
-        teammate_html = " | 🚑" if teammate_out else ""
-        st.markdown(f"<div style='padding-top:8px;font-size:12px;color:#94a3b8;'>{home_txt}{teammate_html}</div>", unsafe_allow_html=True)
-
-    with cb5:
-        if league_key == "NFL":
-            fatigue_opts = ["Standard Rest (7 Days)", "Short Week (TNF ~4 Days)", "Post-Bye Week (~14 Days)"]
-        else:
-            fatigue_opts = ["🟢 Rested (1+ Days)", "😓 Tired (B2B)", "🔴 3 in 4 Nights"]
-        fat_choice = st.selectbox("Fatigue", fatigue_opts, key=f"{lk}.rest", label_visibility="collapsed")
-        rest = fat_choice
-        fat_color = "#00c853" if "Rested" in fat_choice or "Standard" in fat_choice or "Bye" in fat_choice else ("#ff5252" if "3 in 4" in fat_choice else "#f59e0b")
-        st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:-6px;'>{fat_choice.split('(')[0].strip()}</div>", unsafe_allow_html=True)
-
     # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
     with s1:
@@ -3396,6 +3361,7 @@ def render_syndicate_board(league_key):
                     st.caption("No matches found.")
 
     # Auto-populate opponent from schedule
+    init_state(f"{lk}.opp", teams[0])
     auto_opp, auto_is_home = None, True
     if player_name and sched and "(" in player_name:
         team_abbr = player_name.split("(")[1].split(")")[0].strip().upper()
@@ -3411,6 +3377,49 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.opp"]     = auto_opp
             st.session_state[f"{lk}.is_home"] = auto_is_home
 
+    opp      = st.session_state.get(f"{lk}.opp", teams[0])
+    rest     = st.session_state.get(f"{lk}.rest", "🟢 Rested (1+ Days)")
+
+    # ── CONTROL BAR ────────────────────────────────────────
+    opp_logo_url = get_team_logo(league_key, opp)
+    cb1, cb2, cb3, cb4 = st.columns([1, 1.2, 0.6, 1.4])
+
+    with cb1:
+        home_txt = "Home" if is_home_current else "Away"
+        teammate_html = "&nbsp; 🚑" if teammate_out else ""
+        st.markdown(f"""
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;
+             padding:9px 12px;display:flex;align-items:center;gap:8px;height:44px;">
+            <img src='{opp_logo_url}' width='22' style='vertical-align:middle;flex-shrink:0;'>
+            <span style="font-size:11px;color:#94a3b8;">vs</span>
+            <span style="font-size:15px;font-weight:900;color:#00E5FF;">{opp}</span>
+            <span style="margin-left:auto;font-size:11px;color:#94a3b8;">{home_txt}{teammate_html}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with cb2:
+        spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", label_visibility="collapsed")
+        spread_val = spread_input
+        if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
+        elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
+        elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "pick em"
+        elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
+        else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
+        st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
+
+    with cb3:
+        st.markdown("<div style='font-size:10px;color:#94a3b8;padding-top:10px;text-align:center;'>Fatigue</div>", unsafe_allow_html=True)
+
+    with cb4:
+        if league_key == "NFL":
+            fatigue_opts = ["Standard Rest (7 Days)", "Short Week (TNF ~4 Days)", "Post-Bye Week (~14 Days)"]
+        else:
+            fatigue_opts = ["🟢 Rested (1+ Days)", "😓 Tired (B2B)", "🔴 3 in 4 Nights"]
+        fat_choice = st.selectbox("Fatigue", fatigue_opts, key=f"{lk}.rest", label_visibility="collapsed")
+        rest = fat_choice
+        fat_color = "#00c853" if "Rested" in fat_choice or "Standard" in fat_choice or "Bye" in fat_choice else ("#ff5252" if "3 in 4" in fat_choice else "#f59e0b")
+        st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:-6px;'>{fat_choice.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+
     live_odds_display = st.empty()
     if sync and player_name:
         with st.spinner("Syncing odds..."):
@@ -3425,7 +3434,7 @@ def render_syndicate_board(league_key):
 
     st.markdown("---")
     st.markdown("#### 📊 Build Your Stat Lines")
-
+    
     # --- STAT BUILDER ---
     add_c1, add_c2, add_c3, add_c4 = st.columns([3, 1, 1, 0.8])
     with add_c1:
