@@ -3425,9 +3425,19 @@ def render_syndicate_board(league_key):
                 fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
                 fat_colors  = {"🟢 Rested": "#00c853", "😓 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
 
-            # ✅ THE FIX: Use st.radio. Your custom CSS at the top of the file 
-            # automatically styles this into a perfect, clickable 3-way pill toggle!
-            fat_sel = st.radio("Energy", fat_options, horizontal=True, label_visibility="collapsed", key=f"{lk}.fat_sel")
+            # ✅ THE FIX: Streamlit's native multi-way sliding toggle
+            fat_sel = st.segmented_control(
+                "Energy", 
+                options=fat_options, 
+                default=fat_options[0], 
+                key=f"{lk}.fat_sel", 
+                label_visibility="collapsed"
+            )
+            
+            # Failsafe: segmented_control allows users to un-click an option (returning None).
+            # This forces it back to the default so your ML pipeline never receives a blank value.
+            if not fat_sel:
+                fat_sel = fat_options[0]
             
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
