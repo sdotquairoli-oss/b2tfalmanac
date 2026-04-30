@@ -3338,47 +3338,54 @@ def render_syndicate_board(league_key):
     }
 
     /* ───────────────────────────────────────────────────────── */
-    /* SEGMENTED CONTROL STYLING (The "Claude" Glowing Pills)    */
+    /* SEGMENTED CONTROL STYLING (Opaque Glowing Pills)          */
     /* ───────────────────────────────────────────────────────── */
 
-    /* 1. Base track styling */
-    div[data-testid="stSegmentedControl"] {
-        background-color: #0f172a;
-        border: 1px solid #334155;
-        border-radius: 8px;
-        padding: 3px;
+    /* 1. Base track styling (The Enclosed Box) */
+    div[data-testid="stSegmentedControl"] > div {
+        background-color: #0f172a !important;
+        border: 1px solid #334155 !important;
+        border-radius: 8px !important;
+        padding: 3px !important;
     }
 
-    /* 2. Unselected button styling (Muted) */
+    /* Hide Streamlit's native white sliding background entirely */
+    div[data-testid="stSegmentedControl"] > div > div {
+        display: none !important;
+    }
+
+    /* 2. Unselected button styling (Muted, no background) */
     div[data-testid="stSegmentedControl"] button {
         color: #94a3b8 !important;
         font-weight: 700 !important;
         background-color: transparent !important;
+        border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out;
+        border-radius: 6px !important;
     }
 
-    /* 3. Option 1 (🟢 Rested / ⚡ Short) - GREEN/ORANGE GLOW */
-    div[data-testid="stSegmentedControl"] button:nth-child(1)[aria-selected="true"] {
-        background-color: rgba(0, 200, 83, 0.15) !important;
+    /* 3. Option 1 (🟢 Rested) - OPAQUE BASE + GREEN TINT */
+    div[data-testid="stSegmentedControl"] button:nth-of-type(1)[aria-selected="true"] {
+        background: linear-gradient(rgba(0, 200, 83, 0.15), rgba(0, 200, 83, 0.15)), #0f172a !important;
         color: #00c853 !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
-        box-shadow: 0 0 8px rgba(0, 200, 83, 0.2);
+        box-shadow: 0 0 8px rgba(0, 200, 83, 0.2) !important;
     }
 
-    /* 4. Option 2 (😓 Tired / 🟢 Standard) - ORANGE/GREEN GLOW */
-    div[data-testid="stSegmentedControl"] button:nth-child(2)[aria-selected="true"] {
-        background-color: rgba(245, 158, 11, 0.15) !important;
+    /* 4. Option 2 (😓 Tired) - OPAQUE BASE + YELLOW TINT */
+    div[data-testid="stSegmentedControl"] button:nth-of-type(2)[aria-selected="true"] {
+        background: linear-gradient(rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.15)), #0f172a !important;
         color: #f59e0b !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
-        box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.2) !important;
     }
 
-    /* 5. Option 3 (🔴 B2B / 🔋 Bye) - RED/CYAN GLOW */
-    div[data-testid="stSegmentedControl"] button:nth-child(3)[aria-selected="true"] {
-        background-color: rgba(255, 82, 82, 0.15) !important;
+    /* 5. Option 3 (🔴 B2B) - OPAQUE BASE + RED TINT */
+    div[data-testid="stSegmentedControl"] button:nth-of-type(3)[aria-selected="true"] {
+        background: linear-gradient(rgba(255, 82, 82, 0.15), rgba(255, 82, 82, 0.15)), #0f172a !important;
         color: #ff5252 !important;
         border: 1px solid rgba(255, 82, 82, 0.4) !important;
-        box-shadow: 0 0 8px rgba(255, 82, 82, 0.2);
+        box-shadow: 0 0 8px rgba(255, 82, 82, 0.2) !important;
     }
     </style>
     """, unsafe_allow_html=True)
