@@ -3335,9 +3335,9 @@ def render_syndicate_board(league_key):
         border: 1px solid #334155 !important;
         border-radius: 12px !important;
     }
-    /* Hide fat toggle buttons */
-    div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] button p {
-        font-size: 0px !important;
+    /* Hide the fat hidden selectbox — pill handles display */
+    div[data-testid="stSelectbox"]:has(div[data-baseweb="select"] [aria-label="fat_hidden"]) {
+        display: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -3431,31 +3431,41 @@ def render_syndicate_board(league_key):
                 st.session_state[f"{lk}.fat_sel"] = fat_options[0]
             fat_sel = st.session_state[f"{lk}.fat_sel"]
 
-            # Build the toggle as a single HTML block with clickable segments
-            # using st.markdown + a hidden selectbox driven by JS postMessage
+            # Render pill — each segment is a form submit button
+            for fi, fo in enumerate(fat_options):
+                is_active = fat_sel == fo
+                bg    = fat_bgs[fo]    if is_active else "rgba(255,255,255,0.03)"
+                color = fat_colors[fo] if is_active else "#94a3b8"
+                bdr   = f"1px solid {fat_colors[fo]}60" if is_active else "1px solid transparent"
+                fw    = "900" if is_active else "600"
+
             seg_html = "<div style='display:flex;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:3px;gap:3px;'>"
             for fo in fat_options:
                 is_active = fat_sel == fo
-                bg    = fat_bgs[fo]    if is_active else "transparent"
+                bg    = fat_bgs[fo]    if is_active else "rgba(255,255,255,0.03)"
                 color = fat_colors[fo] if is_active else "#94a3b8"
-                seg_html += f"<div style='flex:1;text-align:center;padding:6px 4px;border-radius:4px;font-size:11px;font-weight:700;background:{bg};color:{color};cursor:pointer;'>{fo}</div>"
+                bdr   = f"1px solid {fat_colors[fo]}60" if is_active else "1px solid transparent"
+                fw    = "900" if is_active else "600"
+                seg_html += f"<div style='flex:1;text-align:center;padding:6px 4px;border-radius:4px;font-size:11px;font-weight:{fw};background:{bg};color:{color};border:{bdr};'>{fo}</div>"
             seg_html += "</div>"
             st.markdown(seg_html, unsafe_allow_html=True)
 
-            # Clickable buttons — hidden via CSS, visual handled by pill above
-            st.markdown("<div style='height:0px;overflow:hidden;opacity:0;pointer-events:none;position:absolute;'>", unsafe_allow_html=True)
-            f1, f2, f3 = st.columns(3)
-            fat_cols = [f1, f2, f3]
-            for fi, fo in enumerate(fat_options):
-                if fat_cols[fi].button(fo, key=f"{lk}.fat_{fi}", use_container_width=True, help=fat_map[fo]):
-                    st.session_state[f"{lk}.fat_sel"] = fo
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+            # Invisible selectbox drives the actual value
+            fat_choice = st.selectbox(
+                "fat_hidden",
+                fat_options,
+                index=fat_options.index(fat_sel),
+                key=f"{lk}.fat_hidden",
+                label_visibility="collapsed"
+            )
+            if fat_choice != fat_sel:
+                st.session_state[f"{lk}.fat_sel"] = fat_choice
+                st.rerun()
 
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
             fat_color = fat_colors.get(fat_sel, "#94a3b8")
-            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:2px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:3px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
 
     # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
