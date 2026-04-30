@@ -3330,12 +3330,21 @@ def render_syndicate_board(league_key):
   # ── MATCHING CSS ───────────────────────────────────────
     st.markdown("""
     <style>
-    /* Keep the panel borders looking clean (Matches scheduled games 8px radius) */
+    /* ───────────────────────────────────────────────────────── */
+    /* TOP ROW CONTAINER (Translucent Glass & Cyan Glow)         */
+    /* ───────────────────────────────────────────────────────── */
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        background-color: #1e293b !important;
-        border: 2px solid #00E5FF !important; /* Electric Cyan Highlight */
-        border-radius: 12px !important;
-        box-shadow: 0 0 12px rgba(0, 229, 255, 0.25) !important;
+        /* 1. Translucent Background (Slate 800 at 40% opacity) */
+        background-color: rgba(30, 41, 59, 0.4) !important; 
+        
+        /* 2. Frosted Glass Blur Effect */
+        backdrop-filter: blur(10px) !important; 
+        -webkit-backdrop-filter: blur(10px) !important;
+        
+        /* 3. Electric Cyan Border & Glow */
+        border: 1px solid rgba(0, 229, 255, 0.6) !important; 
+        border-radius: 8px !important;
+        box-shadow: 0 0 15px rgba(0, 229, 255, 0.15), inset 0 0 10px rgba(0, 229, 255, 0.05) !important;
     }
 
     /* ───────────────────────────────────────────────────────── */
