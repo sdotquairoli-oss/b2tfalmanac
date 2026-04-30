@@ -3415,55 +3415,23 @@ def render_syndicate_board(league_key):
 
         with tc6:
             st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;'>Energy</div>", unsafe_allow_html=True)
-
+            
             if league_key == "NFL":
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
                 fat_colors  = {"⚡ Short": "#f59e0b", "🟢 Standard": "#00c853", "🔋 Bye": "#00E5FF"}
-                fat_bgs     = {"⚡ Short": "rgba(245,158,11,.2)", "🟢 Standard": "rgba(0,200,83,.2)", "🔋 Bye": "rgba(0,229,255,.15)"}
             else:
                 fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
                 fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
                 fat_colors  = {"🟢 Rested": "#00c853", "😓 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
-                fat_bgs     = {"🟢 Rested": "rgba(0,200,83,.2)", "😓 Tired": "rgba(245,158,11,.2)", "🔴 B2B": "rgba(213,0,0,.2)"}
 
-            if f"{lk}.fat_sel" not in st.session_state:
-                st.session_state[f"{lk}.fat_sel"] = fat_options[0]
-            fat_sel = st.session_state[f"{lk}.fat_sel"]
-
-            # Render pill — each segment is a form submit button
-            for fi, fo in enumerate(fat_options):
-                is_active = fat_sel == fo
-                bg    = fat_bgs[fo]    if is_active else "rgba(255,255,255,0.03)"
-                color = fat_colors[fo] if is_active else "#94a3b8"
-                bdr   = f"1px solid {fat_colors[fo]}60" if is_active else "1px solid transparent"
-                fw    = "900" if is_active else "600"
-
-            seg_html = "<div style='display:flex;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:3px;gap:3px;'>"
-            for fo in fat_options:
-                is_active = fat_sel == fo
-                bg    = fat_bgs[fo]    if is_active else "rgba(255,255,255,0.03)"
-                color = fat_colors[fo] if is_active else "#94a3b8"
-                bdr   = f"1px solid {fat_colors[fo]}60" if is_active else "1px solid transparent"
-                fw    = "900" if is_active else "600"
-                seg_html += f"<div style='flex:1;text-align:center;padding:6px 4px;border-radius:4px;font-size:11px;font-weight:{fw};background:{bg};color:{color};border:{bdr};'>{fo}</div>"
-            seg_html += "</div>"
-            st.markdown(seg_html, unsafe_allow_html=True)
-
-            # Invisible selectbox drives the actual value
-            fat_choice = st.selectbox(
-                "fat_hidden",
-                fat_options,
-                index=fat_options.index(fat_sel),
-                key=f"{lk}.fat_hidden",
-                label_visibility="collapsed"
-            )
-            if fat_choice != fat_sel:
-                st.session_state[f"{lk}.fat_sel"] = fat_choice
-                st.rerun()
-
+            # ✅ THE FIX: Use st.radio. Your custom CSS at the top of the file 
+            # automatically styles this into a perfect, clickable 3-way pill toggle!
+            fat_sel = st.radio("Energy", fat_options, horizontal=True, label_visibility="collapsed", key=f"{lk}.fat_sel")
+            
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
+            
             fat_color = fat_colors.get(fat_sel, "#94a3b8")
             st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:3px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
 
