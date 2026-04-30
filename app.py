@@ -3343,8 +3343,7 @@ def render_syndicate_board(league_key):
 
     /* 1. Base track styling */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
-        flex: 1 1 0 !important;
-        min-width: 0 !important;
+        flex: 1 !important;
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
@@ -3352,10 +3351,9 @@ def render_syndicate_board(league_key):
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 6px !important;
-        padding: 6px 2px !important;
+        padding: 8px 4px !important; 
         margin: 0 !important;
         cursor: pointer !important;
-        box-sizing: border-box !important;
     }
 
     /* 2. Unselected button styling */
@@ -3399,7 +3397,7 @@ def render_syndicate_board(league_key):
         color: #00c853 !important;
     }
 
-    /* 4. Option 2 (😓 Tired) - YELLOW TINT */
+    /* 4. Option 2 (🟡 Tired) - YELLOW TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
@@ -3422,7 +3420,7 @@ def render_syndicate_board(league_key):
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.0, 1.1, 1.0, 0.7, 0.8, 1.4])
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([0.9, 1.1, 1.0, 0.7, 0.6, 1.7])
 
         with tc1:
             sync = st.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
