@@ -3327,55 +3327,61 @@ def render_syndicate_board(league_key):
     init_state(f"{lk}.is_home", True)
     init_state(f"{lk}.opp", teams[0])
 
-   # ── MATCHING CSS ───────────────────────────────────────
+  # ── MATCHING CSS ───────────────────────────────────────
     st.markdown("""
     <style>
+    /* Keep the panel borders looking clean */
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
         border-radius: 12px !important;
     }
-    /* Hide the fat hidden selectbox — pill handles display */
-    div[data-testid="stSelectbox"]:has(div[data-baseweb="select"] [aria-label="fat_hidden"]) {
-        display: none !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-    <style>
-    div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        background-color: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-radius: 12px !important;
-    }
-    div[data-testid="stRadio"] > div {
-        display: flex;
-        gap: 3px;
-        background: #0f172a;
-        border: 1px solid #334155;
-        border-radius: 6px;
-        padding: 3px;
-        margin-top: 2px;
-    }
-    div[data-testid="stRadio"] > div > label {
-        flex: 1;
-        text-align: center;
-        padding: 5px 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        font-weight: 700;
-        cursor: pointer;
-        color: #94a3b8;
-        margin: 0;
-    }
-    div[data-testid="stRadio"] > div > label:has(input:checked) {
-        background: #1e293b;
-        color: #f8fafc;
-    }
-    div[data-testid="stRadio"] > div > label input { display: none; }
-    </style>
-    """, unsafe_allow_html=True)
 
+    /* ───────────────────────────────────────────────────────── */
+    /* SEGMENTED CONTROL STYLING (The "Claude" Glowing Pills)    */
+    /* ───────────────────────────────────────────────────────── */
+
+    /* 1. Base track styling */
+    div[data-testid="stSegmentedControl"] {
+        background-color: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 3px;
+    }
+
+    /* 2. Unselected button styling (Muted) */
+    div[data-testid="stSegmentedControl"] button {
+        color: #94a3b8 !important;
+        font-weight: 700 !important;
+        background-color: transparent !important;
+        transition: all 0.2s ease-in-out;
+    }
+
+    /* 3. Option 1 (🟢 Rested / ⚡ Short) - GREEN/ORANGE GLOW */
+    div[data-testid="stSegmentedControl"] button:nth-child(1)[aria-selected="true"] {
+        background-color: rgba(0, 200, 83, 0.15) !important;
+        color: #00c853 !important;
+        border: 1px solid rgba(0, 200, 83, 0.4) !important;
+        box-shadow: 0 0 8px rgba(0, 200, 83, 0.2);
+    }
+
+    /* 4. Option 2 (😓 Tired / 🟢 Standard) - ORANGE/GREEN GLOW */
+    div[data-testid="stSegmentedControl"] button:nth-child(2)[aria-selected="true"] {
+        background-color: rgba(245, 158, 11, 0.15) !important;
+        color: #f59e0b !important;
+        border: 1px solid rgba(245, 158, 11, 0.4) !important;
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+    }
+
+    /* 5. Option 3 (🔴 B2B / 🔋 Bye) - RED/CYAN GLOW */
+    div[data-testid="stSegmentedControl"] button:nth-child(3)[aria-selected="true"] {
+        background-color: rgba(255, 82, 82, 0.15) !important;
+        color: #ff5252 !important;
+        border: 1px solid rgba(255, 82, 82, 0.4) !important;
+        box-shadow: 0 0 8px rgba(255, 82, 82, 0.2);
+    }
+    </style>
+    """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
     with st.container(border=True):
         tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.0, 1.1, 1.0, 0.7, 0.8, 1.4])
