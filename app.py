@@ -3388,7 +3388,7 @@ def render_syndicate_board(league_key):
         white-space: nowrap !important; /* 💥 FORCES TEXT TO STAY ON ONE LINE */
     }
 
-    /* 3. Option 1 (🟢Rested) - GREEN TINT */
+    /* 3. Option 1 (🟢 Rested) - GREEN TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
@@ -3398,7 +3398,7 @@ def render_syndicate_board(league_key):
         color: #00c853 !important;
     }
 
-    /* 4. Option 2 (🟡Tired) - YELLOW TINT */
+    /* 4. Option 2 (🟡 Tired) - YELLOW TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
@@ -3462,13 +3462,10 @@ def render_syndicate_board(league_key):
             if league_key == "NFL":
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
-                fat_colors  = {"⚡ Short": "#00c853", "🟢 Standard": "#f59e0b", "🔋 Bye": "#ff5252"}
             else:
-                fat_options = ["🟢Rested", "🟡Tired", "🔴 B2B"]
-                fat_map     = {"🟢Rested": "Rested (1+ Days)", " 🟡Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
-                fat_colors  = {"🟢Rested": "#00c853", "🟡Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
+                fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
+                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
 
-            # ✅ THE FIX: Revert to st.radio so our foolproof CSS can target the inputs directly
             fat_sel = st.radio(
                 "Energy", 
                 options=fat_options, 
@@ -3477,11 +3474,11 @@ def render_syndicate_board(league_key):
                 label_visibility="collapsed"
             )
             
+            # Save the selection to the session state for the ML pipeline
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
             
-            fat_color = fat_colors.get(fat_sel, "#94a3b8")
-            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:3px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+            # 🧹 REMOVED the redundant st.markdown text that was printing underneath!
 
     # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
