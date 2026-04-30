@@ -3333,8 +3333,9 @@ def render_syndicate_board(league_key):
     /* Keep the panel borders looking clean (Matches scheduled games 8px radius) */
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
         background-color: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-radius: 8px !important;
+        border: 2px solid #00E5FF !important; /* Electric Cyan Highlight */
+        border-radius: 12px !important;
+        box-shadow: 0 0 12px rgba(0, 229, 255, 0.25) !important;
     }
 
     /* ───────────────────────────────────────────────────────── */
