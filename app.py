@@ -3377,7 +3377,7 @@ def render_syndicate_board(league_key):
         display: none !important;
     }
 
-    /* Center the text and format font */
+    /* Center the text, format font, and PREVENT WRAPPING */
     div[data-testid="stRadio"] div[role="radiogroup"] label p {
         color: #94a3b8 !important;
         font-size: 11px !important;
@@ -3385,6 +3385,7 @@ def render_syndicate_board(league_key):
         margin: 0 !important;
         text-align: center !important;
         width: 100% !important;
+        white-space: nowrap !important; /* 💥 FORCES TEXT TO STAY ON ONE LINE */
     }
 
     /* 3. Option 1 (🟢Rested) - GREEN TINT */
