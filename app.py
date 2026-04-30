@@ -3323,58 +3323,135 @@ def render_syndicate_board(league_key):
         ["Points", "Goals", "Assists", "Shots on Goal"]
     )
 
-    top_c1, top_c2, _ = st.columns([1, 1, 2])
-    placeholder_sync = top_c1.empty()
-    placeholder_home = top_c2.empty()
+    init_state(f"{lk}.sync", False)
+    init_state(f"{lk}.is_home", True)
+    init_state(f"{lk}.opp", teams[0])
 
-    with st.container():
-        c1, c4 = st.columns([2, 1.5])
-        with c1:
-            search_query = st.text_input("🔍 1. Search Player/Team", placeholder="e.g. Judge, LeBron, Lakers", key=f"{lk}.search_query")
-            player_name = None
-            if search_query:
-                if search_query.upper() in teams:
-                    player_name = search_query.upper()
-                    st.info(f"Team {player_name} detected.")
-                else:
-                    matches = (
-                        search_nba_players(search_query) if league_key == "NBA" else
-                        search_mlb_players(search_query) if league_key == "MLB" else
-                        search_nfl_players(search_query) if league_key == "NFL" else
-                        search_nhl_players(search_query)
-                    )
-                    if matches: player_name = st.selectbox("🎯 2. Select Exact Match", matches, key=f"{lk}.dropdown")
-                    else: st.caption("No matches found.")
+    # ── TOP BAR ───────────────────────────────────────────────
+    bar_left, bar_right = st.columns([1, 1])
 
-        auto_opp, auto_is_home = None, True
-        if player_name and sched and "(" in player_name:
-            team_abbr = player_name.split("(")[1].split(")")[0].strip().upper()
-            for g in sched:
-                if g['home'].upper() == team_abbr: auto_opp = g['away'].upper(); auto_is_home = True; break
-                elif g['away'].upper() == team_abbr: auto_opp = g['home'].upper(); auto_is_home = False; break
+    with bar_left:
+        bc1, bc2, bc3 = st.columns([1, 1, 1])
+        sync         = bc1.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
+        is_home_bool = bc2.toggle("🏠 Playing at Home?",    key=f"{lk}.is_home")
+        teammate_out = bc3.checkbox("🚑 Key Teammate Out?", key=f"{lk}.teammate_out")
+        is_home_current = 1 if is_home_bool else 0
+        st.session_state[f"{lk}.injury_boost"] = teammate_out
 
-        if player_name and player_name != st.session_state.get(f"{lk}.last_player"):
-            st.session_state[f"{lk}.last_player"] = player_name
-            if auto_opp and auto_opp in teams:
-                st.session_state[f"{lk}.opp"] = auto_opp
-                st.session_state[f"{lk}.is_home"] = auto_is_home
+    with bar_right:
+        ri1, ri2, ri3, ri4 = st.columns([1, 0.9, 0.6, 1.2])
 
-        init_state(f"{lk}.sync", False)
-        init_state(f"{lk}.is_home", True)
-        init_state(f"{lk}.opp", teams[0])
+        with ri1:
+            opp = st.selectbox("vs", teams, key=f"{lk}.opp", label_visibility="collapsed")
+            st.markdown(f"<div style='font-size:9px;color:#94a3b8;text-align:center;margin-top:-8px;letter-spacing:.6px;text-transform:uppercase;'>vs Opponent</div>", unsafe_allow_html=True)
 
-        sync = placeholder_sync.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
-        is_home_current = 1 if placeholder_home.toggle("🏠 Playing at Home?", key=f"{lk}.is_home") else 0
+        with ri2:
+            spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", label_visibility="collapsed")
+            spread_val = spread_input
+            if spread_val <= -10:   sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
+            elif spread_val < 0:    sh_color, sh_text = "#00c853", "▾ fav"
+            elif spread_val == 0:   sh_color, sh_text = "#94a3b8", "pick em"
+            elif spread_val >= 10:  sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
+            else:                   sh_color, sh_text = "#f59e0b", "▴ dog"
+            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-8px;'>{sh_text}</div>", unsafe_allow_html=True)
 
-        with c4:
-            opp = st.selectbox("Opponent", teams, key=f"{lk}.opp")
+        with ri3:
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:11px;color:#94a3b8;text-align:center;padding-top:6px;'>Fatigue</div>", unsafe_allow_html=True)
+
+        with ri4:
             if league_key == "NFL":
-                rest = st.selectbox("Fatigue", ["Standard Rest (7 Days)", "Short Week (TNF ~4 Days)", "Post-Bye Week (~14 Days)"], key=f"{lk}.rest")
+                fatigue_opts = [
+                    "Standard Rest (7 Days)",
+                    "Short Week (TNF ~4 Days)",
+                    "Post-Bye Week (~14 Days)"
+                ]
             else:
-                rest = st.selectbox("Fatigue", ["Rested (1+ Days)", "Tired (B2B)", "Exhausted (3 in 4)"], key=f"{lk}.rest")
-            spread_input = st.number_input("📊 Team Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", help="Negative = underdog. Positive = favorite.")
-            key_teammate_out = st.checkbox("🚑 Key Teammate Out?", key=f"{lk}.teammate_out")
-            st.session_state[f"{lk}.injury_boost"] = key_teammate_out
+                fatigue_opts = [
+                    "🟢 Rested (1+ Days)",
+                    "😓 Tired (B2B)",
+                    "🔴 3 in 4 Nights",
+                ]
+            fat_choice = st.selectbox("Fatigue", fatigue_opts, key=f"{lk}.rest", label_visibility="collapsed")
+            rest = fat_choice
+            fat_color = "#00c853" if "Rested" in fat_choice or "Standard" in fat_choice or "Bye" in fat_choice else ("#ff5252" if "3 in 4" in fat_choice else "#f59e0b")
+            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:-8px;'>{fat_choice.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+
+    # Status bar display
+    opp_logo = get_team_logo(league_key, opp)
+    home_txt = "Home" if is_home_current else "Away"
+    teammate_html = " &nbsp;|&nbsp; 🚑 <span style='color:#f59e0b;font-weight:700;'>Teammate Out</span>" if teammate_out else ""
+    st.markdown(f"""
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;
+         padding:7px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+        <img src='{opp_logo}' width='18' style='vertical-align:middle;opacity:.85;'>
+        <span style="font-size:12px;color:#94a3b8;">vs</span>
+        <span style="font-size:13px;font-weight:900;color:#00E5FF;">{opp}</span>
+        <span style="color:#334155;">|</span>
+        <span style="font-size:12px;color:#94a3b8;">Spread:</span>
+        <span style="font-size:12px;font-weight:700;color:{sh_color};">{spread_val:+.1f}</span>
+        <span style="color:#334155;">|</span>
+        <span style="font-size:12px;color:#94a3b8;">{home_txt}</span>
+        <span style="color:#334155;">|</span>
+        <span style="font-size:12px;color:{fat_color};font-weight:600;">{fat_choice.split('(')[0].strip()}</span>
+        {teammate_html}
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── SEARCH ROW ────────────────────────────────────────────
+    s1, s2 = st.columns([1, 1])
+    with s1:
+        st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>1. Search Player/Team</div>", unsafe_allow_html=True)
+        search_query = st.text_input("Search", placeholder="e.g. Maxey, LeBron, Curry", key=f"{lk}.search_query", label_visibility="collapsed")
+
+    player_name = None
+    if search_query:
+        if search_query.upper() in teams:
+            player_name = search_query.upper()
+            st.info(f"Team {player_name} detected.")
+        else:
+            matches = (
+                search_nba_players(search_query) if league_key == "NBA" else
+                search_mlb_players(search_query) if league_key == "MLB" else
+                search_nfl_players(search_query) if league_key == "NFL" else
+                search_nhl_players(search_query)
+            )
+            with s2:
+                if matches:
+                    st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>2. Select Exact Match</div>", unsafe_allow_html=True)
+                    player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
+                else:
+                    st.caption("No matches found.")
+
+    # Auto-populate opponent from schedule
+    auto_opp, auto_is_home = None, True
+    if player_name and sched and "(" in player_name:
+        team_abbr = player_name.split("(")[1].split(")")[0].strip().upper()
+        for g in sched:
+            if g['home'].upper() == team_abbr:
+                auto_opp = g['away'].upper(); auto_is_home = True; break
+            elif g['away'].upper() == team_abbr:
+                auto_opp = g['home'].upper(); auto_is_home = False; break
+
+    if player_name and player_name != st.session_state.get(f"{lk}.last_player"):
+        st.session_state[f"{lk}.last_player"] = player_name
+        if auto_opp and auto_opp in teams:
+            st.session_state[f"{lk}.opp"]     = auto_opp
+            st.session_state[f"{lk}.is_home"] = auto_is_home
+
+    # Live odds sync display
+    live_odds_display = st.empty()
+    if sync and player_name:
+        opening_key = f"{lk}.opening_line.{player_name}.general"
+        with st.spinner("Syncing odds..."):
+            f_line, f_odds, msg, used, rem = get_live_line(player_name, "Points", ODDS_API_KEY, sport_path)
+        if used and rem:
+            st.session_state['api_used'] = int(used)
+            st.session_state['api_remaining'] = int(rem)
+        if f_line is not None:
+            live_odds_display.markdown(f'<div style="background:rgba(0,230,118,.08);border:1px solid #00E676;border-radius:6px;padding:8px 12px;font-size:12px;color:#00E676;font-weight:700;">📡 LIVE MARKET SYNCED — {msg}</div>', unsafe_allow_html=True)
+        else:
+            live_odds_display.caption(f"🟡 {msg}")
 
     st.markdown("---")
     st.markdown("#### 📊 Build Your Stat Lines")
