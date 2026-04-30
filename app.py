@@ -3341,8 +3341,8 @@ def render_syndicate_board(league_key):
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
 
-    /* 1. Base track styling */
-    div[data-testid="stRadio"] > div {
+    /* 1. Base track styling (Target ONLY the radiogroup, leave the hidden label alone) */
+    div[data-testid="stRadio"] div[role="radiogroup"] {
         display: flex !important;
         flex-direction: row !important;
         background-color: #1e293b !important;
@@ -3350,74 +3350,66 @@ def render_syndicate_board(league_key):
         border-radius: 8px !important;
         padding: 4px !important;
         gap: 4px !important;
+        width: 100% !important;
     }
 
-    /* 2. Unselected button styling */
-    div[data-testid="stRadio"] label {
+    /* 2. Unselected button styling (Restored larger sizing) */
+    div[data-testid="stRadio"] div[role="radiogroup"] label {
         flex: 1 !important;
         display: flex !important;
-        flex-direction: row !important;
         justify-content: center !important;
         align-items: center !important;
         background-color: transparent !important;
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 6px !important;
-        padding: 6px 0px !important;
+        padding: 8px 4px !important; 
         margin: 0 !important;
         cursor: pointer !important;
     }
 
-    /* 💥 THE NUKE: Kill the green radio circle dead */
-    div[data-testid="stRadio"] label > div:first-of-type {
+    /* 💥 THE NUKE: Kill the radio circle dead regardless of Streamlit version */
+    div[data-testid="stRadio"] div[role="radiogroup"] label input[type="radio"] + div {
         display: none !important;
     }
 
-    /* Center the text container inline */
-    div[data-testid="stRadio"] label > div:last-of-type {
-        display: flex !important;
-        width: 100% !important;
-        justify-content: center !important;
-        align-items: center !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    /* Make the unselected text muted */
-    div[data-testid="stRadio"] label p {
+    /* Center the text and restore font size */
+    div[data-testid="stRadio"] div[role="radiogroup"] label p {
         color: #94a3b8 !important;
         font-size: 12px !important;
         font-weight: 700 !important;
         margin: 0 !important;
+        text-align: center !important;
+        width: 100% !important;
     }
 
     /* 3. Option 1 (🟢 Rested) - GREEN TINT */
-    div[data-testid="stRadio"] label:nth-of-type(1):has(input:checked) {
+    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
         box-shadow: 0 0 8px rgba(0, 200, 83, 0.2) !important;
     }
-    div[data-testid="stRadio"] label:nth-of-type(1):has(input:checked) p {
+    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
         color: #00c853 !important;
     }
 
     /* 4. Option 2 (😓 Tired) - YELLOW TINT */
-    div[data-testid="stRadio"] label:nth-of-type(2):has(input:checked) {
+    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
         box-shadow: 0 0 8px rgba(245, 158, 11, 0.2) !important;
     }
-    div[data-testid="stRadio"] label:nth-of-type(2):has(input:checked) p {
+    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
         color: #f59e0b !important;
     }
 
     /* 5. Option 3 (🔴 B2B) - RED TINT */
-    div[data-testid="stRadio"] label:nth-of-type(3):has(input:checked) {
+    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
         background-color: rgba(255, 82, 82, 0.15) !important;
         border: 1px solid rgba(255, 82, 82, 0.4) !important;
         box-shadow: 0 0 8px rgba(255, 82, 82, 0.2) !important;
     }
-    div[data-testid="stRadio"] label:nth-of-type(3):has(input:checked) p {
+    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
         color: #ff5252 !important;
     }
     </style>
