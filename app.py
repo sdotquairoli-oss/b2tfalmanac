@@ -3342,15 +3342,20 @@ def render_syndicate_board(league_key):
     /* ───────────────────────────────────────────────────────── */
 
     /* 1. Base track styling */
-    div[data-testid="stRadio"] div[role="radiogroup"] {
+    div[data-testid="stRadio"] div[role="radiogroup"] label {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
         display: flex !important;
-        flex-direction: row !important;
-        background-color: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-radius: 8px !important;
-        padding: 4px !important;
-        gap: 4px !important;
-        width: 100% !important;
+        justify-content: center !important;
+        align-items: center !important;
+        background-color: transparent !important;
+        border: 1px solid transparent !important;
+        transition: all 0.2s ease-in-out !important;
+        border-radius: 6px !important;
+        padding: 6px 2px !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+        box-sizing: border-box !important;
     }
 
     /* 2. Unselected button styling */
