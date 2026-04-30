@@ -3387,7 +3387,7 @@ def render_syndicate_board(league_key):
         width: 100% !important;
     }
 
-    /* 3. Option 1 (🟢 Rested) - GREEN TINT */
+    /* 3. Option 1 (🟢Rested) - GREEN TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
@@ -3397,7 +3397,7 @@ def render_syndicate_board(league_key):
         color: #00c853 !important;
     }
 
-    /* 4. Option 2 (🟡 Tired) - YELLOW TINT */
+    /* 4. Option 2 (🟡Tired) - YELLOW TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
@@ -3463,9 +3463,9 @@ def render_syndicate_board(league_key):
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
                 fat_colors  = {"⚡ Short": "#00c853", "🟢 Standard": "#f59e0b", "🔋 Bye": "#ff5252"}
             else:
-                fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
-                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
-                fat_colors  = {"🟢 Rested": "#00c853", "😓 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
+                fat_options = ["🟢Rested", "🟡Tired", "🔴 B2B"]
+                fat_map     = {"🟢Rested": "Rested (1+ Days)", " 🟡Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
+                fat_colors  = {"🟢Rested": "#00c853", "🟡Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
 
             # ✅ THE FIX: Revert to st.radio so our foolproof CSS can target the inputs directly
             fat_sel = st.radio(
