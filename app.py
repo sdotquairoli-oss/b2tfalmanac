@@ -3341,7 +3341,7 @@ def render_syndicate_board(league_key):
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
 
-    /* 1. Base track styling (Matches Scheduled Games Card exactly!) */
+    /* 1. Base track styling */
     div[data-testid="stRadio"] > div {
         display: flex !important;
         flex-direction: row !important;
@@ -3353,9 +3353,10 @@ def render_syndicate_board(league_key):
     }
 
     /* 2. Unselected button styling */
-    div[data-testid="stRadio"] > div > label {
+    div[data-testid="stRadio"] label {
         flex: 1 !important;
         display: flex !important;
+        flex-direction: row !important;
         justify-content: center !important;
         align-items: center !important;
         background-color: transparent !important;
@@ -3367,46 +3368,56 @@ def render_syndicate_board(league_key):
         cursor: pointer !important;
     }
 
+    /* 💥 THE NUKE: Kill the green radio circle dead */
+    div[data-testid="stRadio"] label > div:first-of-type {
+        display: none !important;
+    }
+
+    /* Center the text container inline */
+    div[data-testid="stRadio"] label > div:last-of-type {
+        display: flex !important;
+        width: 100% !important;
+        justify-content: center !important;
+        align-items: center !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
     /* Make the unselected text muted */
-    div[data-testid="stRadio"] > div > label p {
+    div[data-testid="stRadio"] label p {
         color: #94a3b8 !important;
         font-size: 12px !important;
         font-weight: 700 !important;
         margin: 0 !important;
     }
 
-    /* Hide the native radio circles completely */
-    div[data-testid="stRadio"] > div > label > div:first-child {
-        display: none !important;
-    }
-
     /* 3. Option 1 (🟢 Rested) - GREEN TINT */
-    div[data-testid="stRadio"] > div > label:nth-of-type(1):has(input:checked) {
+    div[data-testid="stRadio"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
         box-shadow: 0 0 8px rgba(0, 200, 83, 0.2) !important;
     }
-    div[data-testid="stRadio"] > div > label:nth-of-type(1):has(input:checked) p {
+    div[data-testid="stRadio"] label:nth-of-type(1):has(input:checked) p {
         color: #00c853 !important;
     }
 
     /* 4. Option 2 (😓 Tired) - YELLOW TINT */
-    div[data-testid="stRadio"] > div > label:nth-of-type(2):has(input:checked) {
+    div[data-testid="stRadio"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
         box-shadow: 0 0 8px rgba(245, 158, 11, 0.2) !important;
     }
-    div[data-testid="stRadio"] > div > label:nth-of-type(2):has(input:checked) p {
+    div[data-testid="stRadio"] label:nth-of-type(2):has(input:checked) p {
         color: #f59e0b !important;
     }
 
     /* 5. Option 3 (🔴 B2B) - RED TINT */
-    div[data-testid="stRadio"] > div > label:nth-of-type(3):has(input:checked) {
+    div[data-testid="stRadio"] label:nth-of-type(3):has(input:checked) {
         background-color: rgba(255, 82, 82, 0.15) !important;
         border: 1px solid rgba(255, 82, 82, 0.4) !important;
         box-shadow: 0 0 8px rgba(255, 82, 82, 0.2) !important;
     }
-    div[data-testid="stRadio"] > div > label:nth-of-type(3):has(input:checked) p {
+    div[data-testid="stRadio"] label:nth-of-type(3):has(input:checked) p {
         color: #ff5252 !important;
     }
     </style>
