@@ -3748,13 +3748,12 @@ def render_syndicate_board(league_key):
                 with board_col:
                     st.markdown("**🤖 AI Board**")
                     board_members = result['board']
-                    cards_html = ""
-                    for mi, m in enumerate(board_members):
+
+                    def board_card_html(m):
                         m_color = "#00c853" if m['vote'] == "OVER" else ("#ff5252" if m['vote'] == "UNDER" else "#94a3b8")
                         vote_bg = "rgba(0,200,83,0.15)" if m['vote'] == "OVER" else ("rgba(213,0,0,0.15)" if m['vote'] == "UNDER" else "rgba(148,163,184,0.1)")
-                        grid_span = "grid-column:1/-1;" if mi == 4 else ""
-                        cards_html += f"""
-                        <div style="{grid_span}background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px;{'border-top:2px solid #00E5FF;' if mi == 4 else ''}">
+                        return f"""
+                        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px;height:100%;">
                             <div style="font-size:11px;font-weight:800;color:#00E5FF;margin-bottom:1px;">{m['name']}</div>
                             <div style="font-size:9px;color:#4ade80;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">{m['model']}</div>
                             <div style="font-size:9px;color:#94a3b8;font-style:italic;line-height:1.3;margin-bottom:8px;min-height:28px;">"{m['quote']}"</div>
@@ -3765,11 +3764,34 @@ def render_syndicate_board(league_key):
                                 </div>
                                 <div style="font-size:13px;font-weight:900;padding:4px 10px;border-radius:5px;background:{vote_bg};color:{m_color};border:1px solid {m_color}40;">{m['vote']}</div>
                             </div>
-                        </div>
-                        """
+                        </div>"""
+
+                    # Row 1 — MIN Max + Statistician
+                    br1, br2 = st.columns(2)
+                    with br1: st.markdown(board_card_html(board_members[0]), unsafe_allow_html=True)
+                    with br2: st.markdown(board_card_html(board_members[1]), unsafe_allow_html=True)
+
+                    # Row 2 — Contrarian + Baseline
+                    br3, br4 = st.columns(2)
+                    with br3: st.markdown(board_card_html(board_members[2]), unsafe_allow_html=True)
+                    with br4: st.markdown(board_card_html(board_members[3]), unsafe_allow_html=True)
+
+                    # Row 3 — Guru full width
+                    m = board_members[4]
+                    m_color = "#00c853" if m['vote'] == "OVER" else ("#ff5252" if m['vote'] == "UNDER" else "#94a3b8")
+                    vote_bg = "rgba(0,200,83,0.15)" if m['vote'] == "OVER" else ("rgba(213,0,0,0.15)" if m['vote'] == "UNDER" else "rgba(148,163,184,0.1)")
                     st.markdown(f"""
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                        {cards_html}
+                    <div style="background:#1e293b;border:1px solid #334155;border-top:2px solid #00E5FF;border-radius:8px;padding:10px;margin-top:2px;">
+                        <div style="font-size:11px;font-weight:800;color:#00E5FF;margin-bottom:1px;">{m['name']}</div>
+                        <div style="font-size:9px;color:#4ade80;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">{m['model']}</div>
+                        <div style="font-size:9px;color:#94a3b8;font-style:italic;line-height:1.3;margin-bottom:8px;">"{m['quote']}"</div>
+                        <div style="border-top:1px dashed #334155;padding-top:7px;display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <div style="font-size:9px;color:#94a3b8;">Proj</div>
+                                <div style="font-size:16px;font-weight:900;color:#fff;">{m['proj']:.2f}</div>
+                            </div>
+                            <div style="font-size:13px;font-weight:900;padding:4px 10px;border-radius:5px;background:{vote_bg};color:{m_color};border:1px solid {m_color}40;">{m['vote']}</div>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
 
