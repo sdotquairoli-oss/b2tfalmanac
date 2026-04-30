@@ -3335,6 +3335,19 @@ def render_syndicate_board(league_key):
         border: 1px solid #334155 !important;
         border-radius: 12px !important;
     }
+    /* Hide the raw fat buttons — visual is handled by HTML above */
+    button[data-testid="baseButton-secondary"]:has(span:is([data-testid])) {
+        display: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+    }
     div[data-testid="stRadio"] > div {
         display: flex;
         gap: 3px;
@@ -3414,40 +3427,33 @@ def render_syndicate_board(league_key):
                 fat_colors  = {"🟢 Rested": "#00c853", "😓 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
                 fat_bgs     = {"🟢 Rested": "rgba(0,200,83,.2)", "😓 Tired": "rgba(245,158,11,.2)", "🔴 B2B": "rgba(213,0,0,.2)"}
 
-            # Init default
             if f"{lk}.fat_sel" not in st.session_state:
                 st.session_state[f"{lk}.fat_sel"] = fat_options[0]
             fat_sel = st.session_state[f"{lk}.fat_sel"]
 
-            # Render segmented control
-            btn_cols = st.columns(len(fat_options))
-            for fi, fo in enumerate(fat_options):
+            # Build the toggle as a single HTML block with clickable segments
+            # using st.markdown + a hidden selectbox driven by JS postMessage
+            seg_html = "<div style='display:flex;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:3px;gap:3px;'>"
+            for fo in fat_options:
                 is_active = fat_sel == fo
                 bg    = fat_bgs[fo]    if is_active else "transparent"
                 color = fat_colors[fo] if is_active else "#94a3b8"
-                border = f"1px solid {fat_colors[fo]}60" if is_active else "1px solid transparent"
-                btn_cols[fi].markdown(f"""
-                <div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:2px;">
-                </div>
-                """, unsafe_allow_html=True)
-                if btn_cols[fi].button(fo, key=f"{lk}.fat_btn_{fi}", use_container_width=True):
+                seg_html += f"<div style='flex:1;text-align:center;padding:6px 4px;border-radius:4px;font-size:11px;font-weight:700;background:{bg};color:{color};cursor:pointer;'>{fo}</div>"
+            seg_html += "</div>"
+            st.markdown(seg_html, unsafe_allow_html=True)
+
+            # Actual clickable buttons hidden behind — use columns
+            f1, f2, f3 = st.columns(3)
+            fat_cols = [f1, f2, f3]
+            for fi, fo in enumerate(fat_options):
+                if fat_cols[fi].button(fo, key=f"{lk}.fat_{fi}", use_container_width=True, help=fat_map[fo]):
                     st.session_state[f"{lk}.fat_sel"] = fo
                     st.rerun()
-                # Overlay active style via markdown after button
-                if is_active:
-                    btn_cols[fi].markdown(f"""
-                    <style>
-                    div[data-testid="stButton"] button[kind="secondary"] {{
-                        background: {bg} !important;
-                        color: {color} !important;
-                        border: {border} !important;
-                        font-weight: 900 !important;
-                    }}
-                    </style>
-                    """, unsafe_allow_html=True)
 
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
+            fat_color = fat_colors.get(fat_sel, "#94a3b8")
+            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:2px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
 
     # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
