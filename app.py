@@ -3849,13 +3849,32 @@ def render_syndicate_board(league_key):
                     st.markdown("---")
                     if st.button("🛎️ Consult Syndicate Board (AI Debate)", use_container_width=True, key=f"consult_board_{league_key}"):
                         with st.spinner("The CFO (Claude) and COO (Gemini) are reviewing the setup..."):
-                            context = f"Player: {target_player}\nMarket: {stat_type} (Line: {line})\nOdds: {int(odds):+d}\n"
-                            context += f"Opponent: {opp}\nFatigue: {rest}\n"
-                            context += f"ML Consensus Proj: {c_proj:.2f} (Vote: {c_vote})\n"
-                            context += f"Win Prob: {win_prob*100:.1f}%\n"
-                            context += f"Defense Intel: {mod_desc}\n"
+                            import json
                             board_move_msg = st.session_state.get(f"{lk}.line_move_msg")
-                            if board_move_msg: context += f"Line Movement: {board_move_msg}\n"
+                            context = json.dumps({
+                                "player": target_player,
+                                "league": league_key,
+                                "market": stat_type,
+                                "line": float(line),
+                                "odds": int(odds),
+                                "opponent": opp,
+                                "fatigue": rest,
+                                "is_home": bool(is_home_current),
+                                "ml_consensus_proj": round(float(c_proj), 2),
+                                "ml_vote": c_vote,
+                                "win_probability_pct": round(float(win_prob * 100), 1),
+                                "implied_prob_pct": round(float(implied_prob * 100), 1),
+                                "edge_pct": round(float(edge_pct), 1),
+                                "ev_per_100": round(float(ev_dollars), 2),
+                                "defense_modifier": round(float(mod_val), 3),
+                                "season_avg": round(float(df[s_col].mean()), 2),
+                                "l5_avg": round(float(df_with_ml.tail(5)[s_col].mean()), 2),
+                                "l10_hit_rate": f"{l10_hits}/10",
+                                "board_consensus": f"{agree_count}/5",
+                                "archetype": archetype,
+                                "line_movement": board_move_msg or "None",
+                                "setup_score": int(calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type))
+                            }, indent=2)
                             
                             cfo_res, coo_res = consult_the_board(context)
                             cfo_res = cfo_res.replace("#", "")
@@ -5249,12 +5268,23 @@ with t_roi:
                             if st.button("🧠 Run Deep AI Autopsy", key=f"deep_auto_roi_{orig_idx}_{player}", use_container_width=True):
                                 with st.spinner("CFO & COO reviewing the tape..."):
                                     # Pack the evidence
-                                    context = f"Player: {player}\nMarket: {stat} (Line: {line_val})\nBet: {vote}\n"
-                                    context += f"AI Proj: {proj_val} | Actual Result: {actual_raw}\n"
-                                    if row.get('Actual_Mins'): context += f"Minutes Played: {row.get('Actual_Mins')}\n"
-                                    if row.get('Actual_Fouls') != "": context += f"Personal Fouls: {row.get('Actual_Fouls')}\n"
-                                    context += f"Miss Classification: {miss_type} ({abs_miss} units)\n"
-                                    context += f"Closing Line: {current_closing}\n"
+                                    import json
+                                    context = json.dumps({
+                                        "player": player,
+                                        "league": league,
+                                        "market": stat,
+                                        "line": float(line_val) if str(line_val).replace('.','').isdigit() else line_val,
+                                        "bet_direction": vote,
+                                        "ai_projection": float(proj_val) if str(proj_val).replace('.','').isdigit() else proj_val,
+                                        "actual_result": float(actual_raw),
+                                        "miss_amount": float(abs_miss),
+                                        "miss_classification": miss_type,
+                                        "minutes_played": float(row.get('Actual_Mins', 0)) if str(row.get('Actual_Mins', '')).replace('.','').isdigit() else None,
+                                        "fouls": int(float(row.get('Actual_Fouls', 0))) if str(row.get('Actual_Fouls', '')).replace('.','').isdigit() else None,
+                                        "closing_line": float(current_closing) if current_closing > 0 else None,
+                                        "setup_score": int(float(row.get('Setup_Score', 0))),
+                                        "win_probability_pct": round(float(row.get('Win_Prob', 0)) * 100, 1)
+                                    }, indent=2)
     
                                     cfo_res, coo_res = run_dual_autopsy(context)
     
