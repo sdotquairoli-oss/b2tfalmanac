@@ -3335,9 +3335,9 @@ def render_syndicate_board(league_key):
         border: 1px solid #334155 !important;
         border-radius: 12px !important;
     }
-    /* Hide the raw fat buttons — visual is handled by HTML above */
-    button[data-testid="baseButton-secondary"]:has(span:is([data-testid])) {
-        display: none;
+    /* Hide fat toggle buttons */
+    div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] button p {
+        font-size: 0px !important;
     }
     </style>
     """, unsafe_allow_html=True)
