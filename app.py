@@ -3411,6 +3411,126 @@ def render_syndicate_board(league_key):
     }
     </style>
     """, unsafe_allow_html=True)
+    # ── TOP ROW ────────────────────────────────────────────
+    with st.container(border=True):
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.0, 1.1, 1.0, 0.7, 0.8, 1.4])
+
+        with tc1:
+            sync = st.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
+
+        with tc2:
+            is_home_bool = st.toggle("🏠 Playing at Home?", key=f"{lk}.is_home")
+            is_home_current = 1 if is_home_bool else 0
+
+        with tc3:
+            teammate_out = st.checkbox("🚑 Key Teammate Out?", key=f"{lk}.teammate_out")
+            st.session_state[f"{lk}.injury_boost"] = teammate_out
+
+        with tc4:
+            opp = st.session_state.get(f"{lk}.opp", teams[0])
+            opp_logo_url = get_team_logo(league_key, opp)
+            teammate_html = "&nbsp;🚑" if teammate_out else ""
+            st.markdown(f"""
+            <div style="display:flex;align-items:center;gap:5px;padding-top:5px;">
+                <img src='{opp_logo_url}' width='20' style='vertical-align:middle;flex-shrink:0;'>
+                <span style="font-size:10px;color:#94a3b8;">vs</span>
+                <span style="font-size:15px;font-weight:900;color:#00E5FF;">{opp}{teammate_html}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with tc5:
+            spread_input = st.number_input("Spread:", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f")
+            spread_val = spread_input
+            if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
+            elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
+            elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "pick em"
+            elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
+            else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
+            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
+
+        with tc6:
+            st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;'>Energy</div>", unsafe_allow_html=True)
+            
+            if league_key == "NFL":
+                fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
+                fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
+                fat_colors  = {"⚡ Short": "#00c853", "🟢 Standard": "#f59e0b", "🔋 Bye": "#ff5252"}
+            else:
+                fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
+                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
+                fat_colors  = {"🟢 Rested": "#00c853", "😓 Tired": "#f59e0b", "🔴 B2B": "#ff5252"}
+
+            # ✅ THE FIX: Revert to st.radio so our foolproof CSS can target the inputs directly
+            fat_sel = st.radio(
+                "Energy", 
+                options=fat_options, 
+                horizontal=True,
+                key=f"{lk}.fat_sel", 
+                label_visibility="collapsed"
+            )
+            
+            rest = fat_map.get(fat_sel, "Rested (1+ Days)")
+            st.session_state[f"{lk}.rest"] = rest
+            
+            fat_color = fat_colors.get(fat_sel, "#94a3b8")
+            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{fat_color};text-align:center;margin-top:3px;'>{rest.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+
+    # ── SEARCH ROW ─────────────────────────────────────────
+    s1, s2 = st.columns([1, 1])
+    with s1:
+        st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>1. Search Player/Team</div>", unsafe_allow_html=True)
+        search_query = st.text_input("Search", placeholder="e.g. Maxey, LeBron, Curry", key=f"{lk}.search_query", label_visibility="collapsed")
+
+    player_name = None
+    if search_query:
+        if search_query.upper() in teams:
+            player_name = search_query.upper()
+            st.info(f"Team {player_name} detected.")
+        else:
+            matches = (
+                search_nba_players(search_query) if league_key == "NBA" else
+                search_mlb_players(search_query) if league_key == "MLB" else
+                search_nfl_players(search_query) if league_key == "NFL" else
+                search_nhl_players(search_query)
+            )
+            with s2:
+                if matches:
+                    st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>2. Select Exact Match</div>", unsafe_allow_html=True)
+                    player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
+                else:
+                    st.caption("No matches found.")
+
+    # Auto-populate opponent from schedule
+    init_state(f"{lk}.opp", teams[0])
+    auto_opp, auto_is_home = None, True
+    if player_name and sched and "(" in player_name:
+        team_abbr = player_name.split("(")[1].split(")")[0].strip().upper()
+        for g in sched:
+            if g['home'].upper() == team_abbr:
+                auto_opp = g['away'].upper(); auto_is_home = True; break
+            elif g['away'].upper() == team_abbr:
+                auto_opp = g['home'].upper(); auto_is_home = False; break
+
+    if player_name and player_name != st.session_state.get(f"{lk}.last_player"):
+        st.session_state[f"{lk}.last_player"] = player_name
+        if auto_opp and auto_opp in teams:
+            st.session_state[f"{lk}.opp"]     = auto_opp
+            st.session_state[f"{lk}.is_home"] = auto_is_home
+
+    live_odds_display = st.empty()
+    if sync and player_name:
+        with st.spinner("Syncing odds..."):
+            f_line, f_odds, msg, used, rem = get_live_line(player_name, "Points", ODDS_API_KEY, sport_path)
+        if used and rem:
+            st.session_state['api_used'] = int(used)
+            st.session_state['api_remaining'] = int(rem)
+        if f_line is not None:
+            live_odds_display.markdown(f'<div style="background:rgba(0,230,118,.08);border:1px solid #00E676;border-radius:6px;padding:8px 12px;font-size:12px;color:#00E676;font-weight:700;">📡 LIVE MARKET SYNCED — {msg}</div>', unsafe_allow_html=True)
+        else:
+            live_odds_display.caption(f"🟡 {msg}")
+
+    st.markdown("---")
+    st.markdown("#### 📊 Build Your Stat Lines")
     
     # --- STAT BUILDER ---
     add_c1, add_c2, add_c3, add_c4 = st.columns([3, 1, 1, 0.8])
