@@ -3341,7 +3341,7 @@ def render_syndicate_board(league_key):
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
 
-    /* 1. Base track styling (Target ONLY the radiogroup, leave the hidden label alone) */
+    /* 1. Base track styling */
     div[data-testid="stRadio"] div[role="radiogroup"] {
         display: flex !important;
         flex-direction: row !important;
@@ -3353,7 +3353,7 @@ def render_syndicate_board(league_key):
         width: 100% !important;
     }
 
-    /* 2. Unselected button styling (Restored larger sizing) */
+    /* 2. Unselected button styling */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
         flex: 1 !important;
         display: flex !important;
@@ -3368,15 +3368,16 @@ def render_syndicate_board(league_key):
         cursor: pointer !important;
     }
 
-    /* 💥 THE NUKE: Kill the radio circle dead regardless of Streamlit version */
-    div[data-testid="stRadio"] div[role="radiogroup"] label input[type="radio"] + div {
+    /* 💥 THE ACTUAL NUKE: Safely kill the radio circle without touching the text */
+    /* We hide the UI div that DOES NOT contain the paragraph (<p>) text tag */
+    div[data-testid="stRadio"] div[role="radiogroup"] label > div:not(:has(p)) {
         display: none !important;
     }
 
-    /* Center the text and restore font size */
+    /* Center the text and format font */
     div[data-testid="stRadio"] div[role="radiogroup"] label p {
         color: #94a3b8 !important;
-        font-size: 12px !important;
+        font-size: 11px !important;
         font-weight: 700 !important;
         margin: 0 !important;
         text-align: center !important;
