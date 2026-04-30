@@ -3349,9 +3349,9 @@ def render_syndicate_board(league_key):
     div[data-testid="stVerticalBlockBorderWrapper"] > div {
         background-color: transparent !important;
         border: none !important;
-    </style>
-    """, unsafe_allow_html=True)    
     }
+    </style>
+    """, unsafe_allow_html=True)
     /* ───────────────────────────────────────────────────────── */
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
