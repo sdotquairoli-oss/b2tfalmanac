@@ -4196,24 +4196,38 @@ def render_syndicate_board(league_key):
             )
 
             if not has_actionable:
-                st.markdown("""
-                <style>
-                div[data-testid="stButton"]:has(button[kind="secondary"]#override_btn) button {
-                    background: repeating-linear-gradient(
-                        45deg,
-                        #FFD700,
-                        #FFD700 10px,
-                        #1a1a1a 10px,
-                        #1a1a1a 20px
-                    ) !important;
-                    color: #FFD700 !important;
-                    border: 2px solid #FFD700 !important;
-                    font-weight: 900 !important;
-                    text-shadow: 0 0 8px #000, 0 0 2px #000 !important;
-                    letter-spacing: 1px !important;
+                # JS targets the button by text and applies caution styling
+                components.html("""
+                <script>
+                function styleOverrideBtn() {
+                    const paragraphs = window.parent.document.querySelectorAll('button p');
+                    paragraphs.forEach(p => {
+                        if (p.textContent.includes('OVERRIDE')) {
+                            const btn = p.closest('button');
+                            if (btn) {
+                                btn.style.cssText = `
+                                    background: repeating-linear-gradient(
+                                        45deg,
+                                        #1a1a1a 0px, #1a1a1a 10px,
+                                        #FFD700 10px, #FFD700 20px
+                                    ) !important;
+                                    color: #000000 !important;
+                                    border: 2px solid #FFD700 !important;
+                                    font-weight: 900 !important;
+                                    letter-spacing: 1px !important;
+                                    box-shadow: 0 0 15px rgba(255,215,0,0.7), 0 0 30px rgba(255,215,0,0.4), 0 0 60px rgba(255,215,0,0.2) !important;
+                                    text-shadow: 1px 1px 2px rgba(0,0,0,0.9) !important;
+                                `;
+                            }
+                        }
+                    });
                 }
-                </style>
-                """, unsafe_allow_html=True)
+                styleOverrideBtn();
+                setTimeout(styleOverrideBtn, 100);
+                setTimeout(styleOverrideBtn, 500);
+                </script>
+                """, height=0)
+
                 if st.button("🚨 OVERRIDE", use_container_width=True, key=f"{lk}.override_bar"):
                     for ri in targets:
                         if ri >= len(stat_results): continue
