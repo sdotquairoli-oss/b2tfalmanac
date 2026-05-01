@@ -3453,7 +3453,7 @@ def render_syndicate_board(league_key):
             opp_logo_url = get_team_logo(league_key, opp)
             teammate_html = "&nbsp;🚑" if teammate_out else ""
             st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-           st.markdown(f"""
+            st.markdown(f"""
             <div style="display:flex;align-items:center;gap:7px;">
                 <img src='{opp_logo_url}' width='28' style='vertical-align:middle;flex-shrink:0;'>
                 <span style="font-size:11px;color:#94a3b8;">vs</span>
