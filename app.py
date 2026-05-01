@@ -3488,8 +3488,8 @@ def render_syndicate_board(league_key):
         tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.2, 0.65, 1.0, 1.0, 2.2, 1.6])
 
         with tc1:
-            sync = st.toggle("📡 Sync Vegas Odds", key=f"{lk}.sync")
-            is_home_bool = st.toggle("🏠 Playing at Home?", key=f"{lk}.is_home")
+            sync = st.toggle("Sync Vegas Odds", key=f"{lk}.sync")
+            is_home_bool = st.toggle("Playing at Home?", key=f"{lk}.is_home")
             is_home_current = 1 if is_home_bool else 0
 
         with tc2:
