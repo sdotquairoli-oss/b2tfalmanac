@@ -3435,17 +3435,17 @@ def render_syndicate_board(league_key):
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([0.9, 1.1, 1.0, 0.7, 0.6, 1.7])
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.1, 1.0, 0.9, 0.8, 0.7, 1.6])
 
         with tc1:
-            sync = st.toggle("📡 Auto-Sync Vegas Odds", key=f"{lk}.sync")
+            sync = st.toggle("📡 Sync Vegas Odds", key=f"{lk}.sync")
 
         with tc2:
             is_home_bool = st.toggle("🏠 Playing at Home?", key=f"{lk}.is_home")
             is_home_current = 1 if is_home_bool else 0
 
         with tc3:
-            teammate_out = st.checkbox("🚑 Key Teammate Out?", key=f"{lk}.teammate_out")
+            teammate_out = st.checkbox("🚑 Teammate Out?", key=f"{lk}.teammate_out")
             st.session_state[f"{lk}.injury_boost"] = teammate_out
 
         with tc4:
@@ -3465,6 +3465,7 @@ def render_syndicate_board(league_key):
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
             elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
+            elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "neutral"    
             elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
             st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
