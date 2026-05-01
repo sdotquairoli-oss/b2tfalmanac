@@ -3449,20 +3449,19 @@ def render_syndicate_board(league_key):
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.1, 1.0, 0.9, 0.8, 0.7, 1.6])
+        tc1, tc2, tc3, tc4, tc5 = st.columns([1.0, 0.8, 0.8, 0.7, 1.8])
 
         with tc1:
             sync = st.toggle("📡 Sync Vegas Odds", key=f"{lk}.sync")
-
-        with tc2:
             is_home_bool = st.toggle("🏠 Playing at Home?", key=f"{lk}.is_home")
             is_home_current = 1 if is_home_bool else 0
 
-        with tc3:
+        with tc2:
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             teammate_out = st.checkbox("🚑 Teammate Out?", key=f"{lk}.teammate_out")
             st.session_state[f"{lk}.injury_boost"] = teammate_out
 
-        with tc4:
+        with tc3:
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
             teammate_html = "&nbsp;🚑" if teammate_out else ""
@@ -3474,15 +3473,27 @@ def render_syndicate_board(league_key):
             </div>
             """, unsafe_allow_html=True)
 
-        with tc5:
+        with tc4:
             spread_input = st.number_input("Spread:", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f")
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
             elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
-            elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "neutral"    
+            elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "neutral"
             elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
             st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
+
+        with tc5:
+            st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;'>Energy</div>", unsafe_allow_html=True)
+            if league_key == "NFL":
+                fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
+                fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
+            else:
+                fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
+                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
+            fat_sel = st.radio("Energy", fat_options, horizontal=True, key=f"{lk}.fat_sel", label_visibility="collapsed")
+            rest = fat_map.get(fat_sel, "Rested (1+ Days)")
+            st.session_state[f"{lk}.rest"] = rest
 
         with tc6:
             st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;'>Energy</div>", unsafe_allow_html=True)
