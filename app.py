@@ -3459,7 +3459,8 @@ def render_syndicate_board(league_key):
 
         with tc2:
             st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-            teammate_out = st.checkbox("🚑 Teammate Out?", key=f"{lk}.teammate_out")
+            teammate_out = st.checkbox("🚑 Out?", key=f"{lk}.teammate_out")
+            st.session_state[f"{lk}.injury_boost"] = teammate_out
 
         with tc3:
             opp = st.session_state.get(f"{lk}.opp", teams[0])
