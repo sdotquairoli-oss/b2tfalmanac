@@ -3558,21 +3558,10 @@ def render_syndicate_board(league_key):
     # ── TOP ROW ────────────────────────────────────────────
     player_name = None
     with st.container(border=True):
-        # 💥 Re-proportioned for 5 columns!
         tc1, tc2, tc3, tc4, tc5 = st.columns([1.2, 2.4, 1.4, 1.2, 1.0])
         
-        with tc1:
-            # 💥 Spacer 1: Pushes the first toggle down to perfectly align with the Search Input
-            st.markdown("<div style='height: 27px;'></div>", unsafe_allow_html=True)
-            sync = st.toggle("Sync Vegas Odds", key=f"{lk}.sync")
-            
-            # 💥 Spacer 2: Adds a gap so the second toggle aligns perfectly with the Match Dropdown
-            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-            is_home_bool = st.toggle("Playing at Home?", key=f"{lk}.is_home")
-            is_home_current = 1 if is_home_bool else 0
-
+        # 💥 EXECUTED FIRST: Search finds the player and sets the Home/Away state safely
         with tc2:
-            # 💥 Search is now tc2!
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Target Search</div>", unsafe_allow_html=True)
             search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
             if search_query:
@@ -3595,12 +3584,24 @@ def render_syndicate_board(league_key):
                         auto_opp = g['away'].upper(); auto_is_home = True; break
                     elif g['away'].upper() == team_abbr:
                         auto_opp = g['home'].upper(); auto_is_home = False; break
+            
+            # 💥 THE BUG FIX: Indented so it ONLY updates the toggle when the player actually changes!
             if player_name and player_name != st.session_state.get(f"{lk}.last_player"):
                 st.session_state[f"{lk}.last_player"] = player_name
-            if auto_opp and auto_opp in teams:
-                st.session_state[f"{lk}.opp"]     = auto_opp
-                st.session_state[f"{lk}.is_home"] = auto_is_home
+                if auto_opp and auto_opp in teams:
+                    st.session_state[f"{lk}.opp"]     = auto_opp
+                    st.session_state[f"{lk}.is_home"] = auto_is_home
 
+        # 💥 EXECUTED SECOND: Draws the toggles using the freshly updated state
+        with tc1:
+            st.markdown("<div style='height: 27px;'></div>", unsafe_allow_html=True)
+            sync = st.toggle("Sync Vegas Odds", key=f"{lk}.sync")
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            is_home_bool = st.toggle("Playing at Home?", key=f"{lk}.is_home")
+            is_home_current = 1 if is_home_bool else 0
+
+        # Syncing live odds stays directly under the search logic
+        with tc2:
             live_odds_display = st.empty()
             if sync and player_name:
                 with st.spinner("Syncing odds..."):
@@ -3617,10 +3618,7 @@ def render_syndicate_board(league_key):
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Matchup</div>", unsafe_allow_html=True)
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
-            
-            # 💥 Spacer: Pushes the Matchup logo down slightly to sit dead-center with the row
             st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-            
             st.markdown(f"""
             <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px; margin-bottom: 6px;">
                 <img src='{opp_logo_url}' width='28' style='vertical-align:middle; flex-shrink:0;'>
@@ -3633,10 +3631,7 @@ def render_syndicate_board(league_key):
 
         with tc4:
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Spread</div>", unsafe_allow_html=True)
-            
-            # 💥 Spacer: Pushes the Spread Box down slightly to sit dead-center
             st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-            
             spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f", label_visibility="collapsed")
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
@@ -3655,7 +3650,6 @@ def render_syndicate_board(league_key):
                 fat_options = ["🟢 Rested", "🟡 Tired", "🔴 B2B"]
                 fat_map     = {"🟢 Rested": "Rested (1+ Days)", "🟡 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
             
-            # 💥 horizontal=False tells Streamlit to natively stack them in a column!
             fat_sel = st.radio("Energy", fat_options, horizontal=False, key=f"{lk}.fat_sel", label_visibility="collapsed")
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
