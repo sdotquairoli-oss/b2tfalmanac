@@ -3502,12 +3502,12 @@ def render_syndicate_board(league_key):
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
             teammate_html = "&nbsp;🚑" if teammate_out else ""
-            st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+            
             st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:7px;">
-                <img src='{opp_logo_url}' width='28' style='vertical-align:middle;flex-shrink:0;'>
-                <span style="font-size:11px;color:#94a3b8;">vs</span>
-                <span style="font-size:20px;font-weight:900;color:#00E5FF;">{opp}{teammate_html}</span>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px;">
+                <img src='{opp_logo_url}' width='28' style='vertical-align:middle; flex-shrink:0;'>
+                <span style="font-size:12px; color:#94a3b8; font-weight:700; text-transform:uppercase;">vs</span>
+                <span style="font-size:22px; font-weight:900; color:#00E5FF; letter-spacing:1px;">{opp}{teammate_html}</span>
             </div>
             """, unsafe_allow_html=True)
 
