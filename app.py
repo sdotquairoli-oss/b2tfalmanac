@@ -3499,7 +3499,6 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.rest"] = rest
         
         with tc6:
-            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
             search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
             if search_query:
                 if search_query.upper() in teams:
