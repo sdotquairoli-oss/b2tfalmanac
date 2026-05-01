@@ -3355,7 +3355,7 @@ def render_syndicate_board(league_key):
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
 
-    /* 1. Base track styling */
+    /* Base label styling */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
         flex: 1 !important;
         display: flex !important;
@@ -3365,22 +3365,7 @@ def render_syndicate_board(league_key):
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 6px !important;
-        padding: 8px 4px !important; 
-        margin: 0 !important;
-        cursor: pointer !important;
-    }
-
-    /* 2. Unselected button styling */
-    div[data-testid="stRadio"] div[role="radiogroup"] label {
-        flex: 1 !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        background-color: transparent !important;
-        border: 1px solid transparent !important;
-        transition: all 0.2s ease-in-out !important;
-        border-radius: 6px !important;
-        padding: 8px 4px !important; 
+        padding: 10px 6px !important;
         margin: 0 !important;
         cursor: pointer !important;
     }
@@ -3450,7 +3435,7 @@ def render_syndicate_board(league_key):
     # ── TOP ROW ────────────────────────────────────────────
     player_name = None
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.2, 0.7, 0.9, 0.7, 1.8, 1.8])
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.1, 0.6, 0.9, 0.8, 2.0, 1.6])
 
         with tc1:
             sync = st.toggle("📡 Sync Vegas Odds", key=f"{lk}.sync")
@@ -3468,11 +3453,11 @@ def render_syndicate_board(league_key):
             opp_logo_url = get_team_logo(league_key, opp)
             teammate_html = "&nbsp;🚑" if teammate_out else ""
             st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-            st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:5px;">
-                <img src='{opp_logo_url}' width='20' style='vertical-align:middle;flex-shrink:0;'>
-                <span style="font-size:10px;color:#94a3b8;">vs</span>
-                <span style="font-size:15px;font-weight:900;color:#00E5FF;">{opp}{teammate_html}</span>
+           st.markdown(f"""
+            <div style="display:flex;align-items:center;gap:7px;">
+                <img src='{opp_logo_url}' width='28' style='vertical-align:middle;flex-shrink:0;'>
+                <span style="font-size:11px;color:#94a3b8;">vs</span>
+                <span style="font-size:20px;font-weight:900;color:#00E5FF;">{opp}{teammate_html}</span>
             </div>
             """, unsafe_allow_html=True)
 
@@ -3484,10 +3469,10 @@ def render_syndicate_board(league_key):
             elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "neutral"
             elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
-            st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:11px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
 
         with tc5:
-            st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;'>Energy</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:12px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;'>Energy</div>", unsafe_allow_html=True)
             if league_key == "NFL":
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
