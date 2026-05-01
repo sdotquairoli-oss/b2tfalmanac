@@ -4196,7 +4196,25 @@ def render_syndicate_board(league_key):
             )
 
             if not has_actionable:
-                if st.button("🚨 Override", use_container_width=True, key=f"{lk}.override_bar"):
+                st.markdown("""
+                <style>
+                div[data-testid="stButton"]:has(button[kind="secondary"]#override_btn) button {
+                    background: repeating-linear-gradient(
+                        45deg,
+                        #FFD700,
+                        #FFD700 10px,
+                        #1a1a1a 10px,
+                        #1a1a1a 20px
+                    ) !important;
+                    color: #FFD700 !important;
+                    border: 2px solid #FFD700 !important;
+                    font-weight: 900 !important;
+                    text-shadow: 0 0 8px #000, 0 0 2px #000 !important;
+                    letter-spacing: 1px !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                if st.button("🚨 OVERRIDE", use_container_width=True, key=f"{lk}.override_bar"):
                     for ri in targets:
                         if ri >= len(stat_results): continue
                         r = stat_results[ri]
