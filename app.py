@@ -3355,7 +3355,8 @@ def render_syndicate_board(league_key):
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
     
-    /* 1. Center the parent container so it aligns perfectly under the label */
+    /* 1. Force both the widget AND Streamlit's invisible wrapper to 100% width and center */
+    div[data-testid="stElementContainer"]:has(div[data-testid="stRadio"]),
     div[data-testid="stRadio"] {
         display: flex !important;
         flex-direction: column !important;
