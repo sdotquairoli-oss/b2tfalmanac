@@ -3445,9 +3445,15 @@ def render_syndicate_board(league_key):
         color: #ff5252 !important;
     }
 
-    /* Vertically center all items in the top control row */
+    /* 💥 FIX: Align columns to the TOP so the headers share the exact same roof */
     div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
-        align-items: center !important;
+        align-items: flex-start !important; 
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div {
+        display: flex !important; 
+        flex-direction: column !important; 
+        justify-content: flex-start !important; 
+    }
     }
     div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div {
         display: flex !important;
@@ -3541,8 +3547,8 @@ def render_syndicate_board(league_key):
     div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(4) > div[data-testid="stVerticalBlock"] {
         display: flex !important;
         flex-direction: column !important;
-        align-items: center !important;      /* 💥 Forces perfect horizontal center */
-        justify-content: center !important;  /* 💥 Forces perfect vertical center */
+        align-items: center !important;      
+        justify-content: flex-start !important;  /* 💥 CHANGED: Keeps them top-aligned with the rest of the row */
         text-align: center !important;
         height: 100% !important;
         width: 100% !important;
@@ -3556,6 +3562,7 @@ def render_syndicate_board(league_key):
         tc1, tc2, tc3, tc4, tc5 = st.columns([1.2, 2.4, 1.4, 1.2, 1.0])
         
         with tc1:
+            st.markdown("<div style='font-size:11px;font-weight:700;margin-bottom:6px;visibility:hidden;'>SPACER</div>", unsafe_allow_html=True)
             sync = st.toggle("Sync Vegas Odds", key=f"{lk}.sync")
             is_home_bool = st.toggle("Playing at Home?", key=f"{lk}.is_home")
             is_home_current = 1 if is_home_bool else 0
