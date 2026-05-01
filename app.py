@@ -3448,8 +3448,9 @@ def render_syndicate_board(league_key):
     </style>
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
+    player_name = None
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5 = st.columns([1.2, 0.7, 1.0, 0.8, 2.2])
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.2, 0.7, 0.9, 0.7, 1.8, 1.8])
 
         with tc1:
             sync = st.toggle("📡 Sync Vegas Odds", key=f"{lk}.sync")
@@ -3494,32 +3495,26 @@ def render_syndicate_board(league_key):
             fat_sel = st.radio("Energy", fat_options, horizontal=True, key=f"{lk}.fat_sel", label_visibility="collapsed")
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
-
-    # ── SEARCH ROW ─────────────────────────────────────────
-    s1, s2 = st.columns([1, 1])
-    with s1:
-        st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>1. Search Player/Team</div>", unsafe_allow_html=True)
-        search_query = st.text_input("Search", placeholder="e.g. Maxey, LeBron, Curry", key=f"{lk}.search_query", label_visibility="collapsed")
-
-    player_name = None
-    if search_query:
-        if search_query.upper() in teams:
-            player_name = search_query.upper()
-            st.info(f"Team {player_name} detected.")
-        else:
-            matches = (
-                search_nba_players(search_query) if league_key == "NBA" else
-                search_mlb_players(search_query) if league_key == "MLB" else
-                search_nfl_players(search_query) if league_key == "NFL" else
-                search_nhl_players(search_query)
-            )
-            with s2:
-                if matches:
-                    st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>2. Select Exact Match</div>", unsafe_allow_html=True)
-                    player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
+        
+        with tc6:
+            st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>1. Search Player</div>", unsafe_allow_html=True)
+            search_query = st.text_input("Search", placeholder="e.g. Maxey, LeBron", key=f"{lk}.search_query", label_visibility="collapsed")
+            if search_query:
+                if search_query.upper() in teams:
+                    player_name = search_query.upper()
                 else:
-                    st.caption("No matches found.")
-
+                    matches = (
+                        search_nba_players(search_query) if league_key == "NBA" else
+                        search_mlb_players(search_query) if league_key == "MLB" else
+                        search_nfl_players(search_query) if league_key == "NFL" else
+                        search_nhl_players(search_query)
+                    )
+                    if matches:
+                        st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:2px;margin-top:4px;'>2. Select Match</div>", unsafe_allow_html=True)
+                        player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
+                    else:
+                        st.caption("No matches found.")
+    
     # Auto-populate opponent from schedule
     init_state(f"{lk}.opp", teams[0])
     auto_opp, auto_is_home = None, True
