@@ -3431,6 +3431,20 @@ def render_syndicate_board(league_key):
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
         color: #ff5252 !important;
     }
+    
+    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
+        color: #ff5252 !important;
+    }
+
+    /* Vertically center all items in the top control row */
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+        align-items: center !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div {
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
