@@ -3481,28 +3481,63 @@ def render_syndicate_board(league_key):
         margin: 0 auto !important;
     }
 
-    /* 3. Number Input Aesthetics */
-    div[data-testid="stNumberInput"] div[data-baseweb="input"] {
-        width: 110px !important;
+    /* 3. Number Input Aesthetics (Now with Toggles!) */
+    div[data-testid="stNumberInput"] {
+        width: 130px !important; /* 💥 Widened slightly to fit the +/- buttons */
+        margin: 0 auto !important;
+    }
+
+    /* Style the OUTER wrapper so the buttons are inside the pill */
+    div[data-testid="stNumberInput"] > div {
         height: 40px !important;
         min-height: 40px !important;
         border-radius: 8px !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
+        display: flex !important;
+        align-items: center !important;
+        overflow: hidden !important; /* Keeps the hover effects inside the rounded corners */
     }
-    div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
-        background-color: #1e293b !important; 
+
+    /* Make the inner text box transparent so it blends perfectly */
+    div[data-testid="stNumberInput"] div[data-baseweb="input"] {
+        background-color: transparent !important;
+        border: none !important;
+        height: 100% !important;
+    }
+
+    /* Move the glowing focus effect to the outer wrapper */
+    div[data-testid="stNumberInput"] > div:focus-within {
         border: 1px solid rgba(0, 229, 255, 0.6) !important; 
         box-shadow: 0 0 8px rgba(0, 229, 255, 0.3) !important;
     }
+    div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
+        box-shadow: none !important; /* Kill the default Streamlit red box */
+    }
+
+    /* Center and style the Spread number */
     div[data-testid="stNumberInput"] input {
         background-color: transparent !important; 
-        font-size: 11px !important;
+        font-size: 12px !important;
         font-weight: 700 !important;
-        color: #94a3b8 !important;
+        color: #f8fafc !important; /* Brightened the text so it pops between the toggles */
         text-align: center !important;
     }
 
+    /* 💥 NEW: Style the actual +/- Toggles! */
+    div[data-testid="stNumberInput"] button {
+        background-color: transparent !important;
+        border: none !important;
+        height: 100% !important;
+        width: 35px !important;
+        transition: background 0.2s ease-in-out !important;
+    }
+    div[data-testid="stNumberInput"] button:hover {
+        background-color: rgba(0, 229, 255, 0.15) !important;
+    }
+    div[data-testid="stNumberInput"] button svg {
+        fill: #00E5FF !important; /* Makes the plus/minus icons B2TF Cyan */
+    }
     /* 4. Checkbox & Toggle Fonts/Alignment */
     div[data-testid="stCheckbox"] label {
         width: fit-content !important;
