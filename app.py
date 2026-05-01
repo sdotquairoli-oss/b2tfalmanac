@@ -4027,42 +4027,38 @@ def render_syndicate_board(league_key):
 
                 chart_col, board_col = st.columns([1.8, 1])
 
-                with chart_col:
-                    st.markdown(f"**📊 L10 — {stat_type} vs Line {line_val}**")
-                    if s_col in df_l10.columns:
-                        df_l10_chart = df_l10.copy()
-                        df_l10_chart['Matchup_Formatted'] = np.where(df_l10_chart['Is_Home'] == 1, "vs " + df_l10_chart['MATCHUP'], "@ " + df_l10_chart['MATCHUP'])
-                        df_l10_chart['Matchup_Label'] = df_l10_chart['ShortDate'] + "|" + df_l10_chart['Matchup_Formatted']
-                        df_l10_chart['Is_Target_Opp'] = df_l10_chart['MATCHUP'] == opp
-
-                        if 'AI_Proj' not in df_l10_chart.columns:
-                            df_l10_chart['AI_Proj'] = proj
-
+                # 💥 2. BUILD THE BASE CHART LAYERS (With Explicit Types :Q and :N)
                         bars = alt.Chart(df_l10_chart).mark_bar(opacity=0.85).encode(
-                            x=alt.X('Matchup_Label', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
-                            y=alt.Y(s_col, title=stat_type),
+                            x=alt.X('Matchup_Label:N', sort=None, title=None, axis=alt.Axis(labelAngle=0, labelExpr="split(datum.value, '|')")),
+                            y=alt.Y(f'{s_col}:Q', title=stat_type),
                             color=alt.condition(alt.datum[s_col] >= line_val, alt.value('#00c853'), alt.value('#d50000')),
                             stroke=alt.condition(alt.datum.Is_Target_Opp, alt.value('#FFD700'), alt.value('transparent')),
                             strokeWidth=alt.condition(alt.datum.Is_Target_Opp, alt.value(3), alt.value(0)),
-                            tooltip=[alt.Tooltip('ShortDate', title='Date'), alt.Tooltip('Matchup_Formatted', title='Opp'), alt.Tooltip('MINS', title='Mins', format='.1f'), alt.Tooltip(s_col, title='Actual'), alt.Tooltip('AI_Proj', title='AI Proj', format='.2f')]
+                            tooltip=[alt.Tooltip('ShortDate:N', title='Date'), alt.Tooltip('Matchup_Formatted:N', title='Opp'), alt.Tooltip('MINS:Q', title='Mins', format='.1f'), alt.Tooltip(f'{s_col}:Q', title='Actual'), alt.Tooltip('AI_Proj:Q', title='AI Proj', format='.2f')]
                         ).properties(height=260)
-                        vegas_rule = alt.Chart(pd.DataFrame({'y': [line_val]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
-                        # 💥 Removed proj_rule (Dashed Red Line)
-                        ai_line = alt.Chart(df_l10_chart).mark_line(color='#00E5FF', strokeWidth=2, point=alt.OverlayMarkDef(color='#00E5FF', size=50)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
                         
-                        # 💥 3. THE VAULT DOTS: Placed strictly on dates where a vault receipt exists
+                        vegas_rule = alt.Chart(pd.DataFrame({'y': [line_val]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y:Q')
+                        
+                        ai_line = alt.Chart(df_l10_chart).mark_line(color='#00E5FF', strokeWidth=2, point=alt.OverlayMarkDef(color='#00E5FF', size=50)).encode(
+                            x=alt.X('Matchup_Label:N', sort=None), 
+                            y=alt.Y('AI_Proj:Q')
+                        )
+                        
+                        # 💥 3. THE VAULT DOTS (With Explicit Types to prevent crashes on empty data)
                         vault_dots = alt.Chart(df_l10_chart).mark_circle(color='#ff0055', size=120, opacity=1).encode(
-                            x=alt.X('Matchup_Label', sort=None),
-                            y=alt.Y('Saved_Proj'),
-                            tooltip=[alt.Tooltip('ShortDate', title='Date'), alt.Tooltip('Matchup_Formatted', title='Opp'), alt.Tooltip('Saved_Proj', title='Locked Proj', format='.2f')]
+                            x=alt.X('Matchup_Label:N', sort=None),
+                            y=alt.Y('Saved_Proj:Q'),
+                            tooltip=[alt.Tooltip('ShortDate:N', title='Date'), alt.Tooltip('Matchup_Formatted:N', title='Opp'), alt.Tooltip('Saved_Proj:Q', title='Locked Proj', format='.2f')]
                         ).transform_filter('isValid(datum.Saved_Proj)')
 
-                        text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=13, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
+                        text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=13, fontWeight='bold').encode(
+                            text=alt.Text(f'{s_col}:Q', format='.0f'), 
+                            color=alt.value('#ffffff')
+                        )
                         
                         # 💥 4. RENDER WITHOUT THE RED LINE & UPDATE CAPTION
                         st.altair_chart((bars + vegas_rule + ai_line + vault_dots + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
                         st.caption("🟡 Dashed = Vegas Line &nbsp;|&nbsp; 🔴 Solid Dot = Historical Vault Proj &nbsp;|&nbsp; 🔵 Cyan = AI Trend")
-
                 with board_col:
                     st.markdown("**🤖 AI Board**")
                     board_members = result['board']
