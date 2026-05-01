@@ -3492,23 +3492,39 @@ def render_syndicate_board(league_key):
     /* ───────────────────────────────────────────────────────── */
     /* TOGGLE & CHECKBOX ALIGNMENT & CENTERING                   */
     /* ───────────────────────────────────────────────────────── */
-    div[data-testid="stToggle"],
-    div[data-testid="stCheckbox"] {
+    
+    /* 1. Toggles remain centered and pushed down to match Search */
+    div[data-testid="stToggle"] {
         width: fit-content !important;
-        margin: 10px auto !important;     /* 💥 Pushes them down to perfectly align with search boxes */
+        margin: 10px auto !important;     
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
-    }
-    div[data-testid="stCheckbox"] {
         height: 40px !important;
-        min-height: 40px !important;      /* 💥 Matches input box heights exactly */
-    }
-    div[data-testid="stToggle"] {
-        height: 40px !important;
-        min-height: 40px !important;      /* 💥 Matches input box heights exactly */
+        min-height: 40px !important;      
         padding: 0 !important;
     }
+
+    /* 2. 💥 Checkbox Container: Force full width so it spans the column */
+    div[data-testid="stCheckbox"] {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        min-height: 30px !important; /* Tucked slightly tighter under the logo */
+        margin: 0 !important; 
+    }
+
+    /* 3. 💥 Checkbox Label: Shrink-wrap the actual text and square, and force center! */
+    div[data-testid="stCheckbox"] label {
+        width: fit-content !important;
+        margin: 0 auto !important; 
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    /* 4. Sleek HUD Font */
     div[data-testid="stToggle"] label p, 
     div[data-testid="stCheckbox"] label p {
         font-size: 13px !important; 
