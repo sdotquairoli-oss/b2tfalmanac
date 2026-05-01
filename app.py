@@ -1110,14 +1110,18 @@ def get_nfl_stats(player_label):
                 for eid, stats in game_stats.items():
                     meta = events_meta.get(eid, {})
                     if not meta: continue
-
+                    
                     date_str = meta.get('gameDate', meta.get('date', ''))
                     try:
                         game_date = pd.to_datetime(date_str)
                     except:
                         continue
-
-                    is_home = 1 if meta.get('homeAway', 'away') == 'home' else 0
+                        
+                    # 💥 THE FIX: Checks ESPN's actual location keys for NFL games
+                    at_vs = str(meta.get('atVs', '')).lower().strip()
+                    game_loc = str(meta.get('gameLocation', '')).lower().strip()
+                    is_home = 1 if (at_vs in ['vs', 'vs.'] or game_loc == 'home' or meta.get('homeAway', '') == 'home') else 0
+                    
                     raw_opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
                     opp     = raw_opp
 
@@ -1306,10 +1310,12 @@ def get_nba_stats(player_label):
                         game_date = pd.to_datetime(date_str)
                     except:
                         continue
-
-                    # Home/Away
-                    is_home = 1 if meta.get('homeAway', 'away') == 'home' else 0
-
+        
+                    # 💥 THE FIX: Checks ESPN's actual location keys to correctly tag Home vs Away
+                    at_vs = str(meta.get('atVs', '')).lower().strip()
+                    game_loc = str(meta.get('gameLocation', '')).lower().strip()
+                    is_home = 1 if (at_vs in ['vs', 'vs.'] or game_loc == 'home' or meta.get('homeAway', '') == 'home') else 0
+        
                     # Opponent abbreviation with ESPN normalization
                     raw_opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
                     opp = ESPN_FIX.get(raw_opp, raw_opp)
