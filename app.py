@@ -3484,7 +3484,7 @@ def render_syndicate_board(league_key):
     /* TOGGLE & CHECKBOX ALIGNMENT (Match HUD Proportions)       */
     /* ───────────────────────────────────────────────────────── */
     
-    /* 1. Checkbox: Match the 40px height of Spread/Energy boxes & center it */
+    /* 1. Checkbox: Match the 40px height & force dead-center alignment */
     div[data-testid="stCheckbox"] {
         display: flex !important;
         justify-content: center !important;
@@ -3492,8 +3492,14 @@ def render_syndicate_board(league_key):
         min-height: 40px !important;
         margin: 0 !important;
     }
+    
+    /* Force the square and text to shrink-wrap so they can actually center */
+    div[data-testid="stCheckbox"] label {
+        width: fit-content !important;
+        margin: 0 auto !important; 
+    }
 
-    /* 2. Toggles: 30px each (60px total) to mathematically mirror the Header + Box height of the other columns */
+    /* 2. Toggles: 30px each (60px total) */
     div[data-testid="stToggle"] {
         display: flex !important;
         align-items: center !important;
@@ -3502,9 +3508,9 @@ def render_syndicate_board(league_key):
         padding: 0 !important;
     }
     
-    /* 3. Sleek HUD Font for both */
+    /* 3. Sleek HUD Font for both (Slightly Bigger!) */
     div[data-testid="stToggle"] label p, div[data-testid="stCheckbox"] label p {
-        font-size: 12px !important;
+        font-size: 13px !important; /* 💥 Bumped up from 12px for better legibility */
         color: #94a3b8 !important;
         font-weight: 700 !important;
     }
@@ -3521,8 +3527,7 @@ def render_syndicate_board(league_key):
             is_home_current = 1 if is_home_bool else 0
 
         with tc2:
-            # Replaced spacer and matched the 11px uppercase HUD font
-            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Teammate</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;white-space:nowrap;'>Teammate</div>", unsafe_allow_html=True)
             teammate_out = st.checkbox("Out", key=f"{lk}.teammate_out")
             st.session_state[f"{lk}.injury_boost"] = teammate_out
 
