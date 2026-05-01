@@ -3119,34 +3119,28 @@ def classify_miss(proj, line, actual, vote, minutes_played=None, actual_fouls=No
     return miss_type, round(abs_miss, 1), likely_cause, color
 @st.cache_data(ttl=300)
 def load_vault_receipts(player_name, stat_type):
-    """Cached fetch of pre-game vault projections. Avoids a raw API call on every chart render."""
+    """Cached fetch of pre-game vault projections."""
     try:
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        creds = Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"], scopes=scope
-        )
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
         sheet = client.open("B2TF_Vault").sheet1
         all_records = sheet.get_all_records()
         receipts = pd.DataFrame(all_records)
-        if receipts.empty:
-            return {}
-        receipts = receipts[
-            (receipts['Player'] == player_name) &
-            (receipts['Stat'] == stat_type)
-        ]
-        if receipts.empty:
-            return {}
-        return dict(zip(
-            pd.to_datetime(receipts['Game_Date']).dt.strftime('%Y-%m-%d'),
-            receipts['Live_Proj']
-        ))
+        if receipts.empty: return {}
+        
+        # 💥 FIX 1: Strip the team abbreviation so "Cade Cunningham (DET)" matches "Cade Cunningham"
+        receipts['Clean_Player'] = receipts['Player'].astype(str).apply(lambda x: x.split('(')[0].strip())
+        
+        receipts = receipts[(receipts['Clean_Player'] == player_name) & (receipts['Stat'] == stat_type)]
+        if receipts.empty: return {}
+        
+        # 💥 FIX 2: Force the projection to be a float so Altair doesn't drop the dot as "text"
+        receipts['Live_Proj'] = pd.to_numeric(receipts['Live_Proj'], errors='coerce')
+        
+        return dict(zip(pd.to_datetime(receipts['Game_Date']).dt.strftime('%Y-%m-%d'), receipts['Live_Proj']))
     except:
         return {}
-
 def calculate_clv(bet_line, closing_line, opening_line, vote):
     """
     Returns (bet_clv, timing_clv, clv_rating, timing_rating).
@@ -4045,8 +4039,15 @@ def render_syndicate_board(league_key):
                             receipt_dict = load_vault_receipts(clean_player, stat_type)
                             if receipt_dict:
                                 date_col = 'ValidDate' if 'ValidDate' in df_l10_chart.columns else 'Date'
-                                df_l10_date_strs = pd.to_datetime(df_l10_chart[date_col]).dt.strftime('%Y-%m-%d')
-                                df_l10_chart['Saved_Proj'] = df_l10_date_strs.map(receipt_dict)
+                                chart_dates = pd.to_datetime(df_l10_chart[date_col])
+                                
+                                # 1. Try to map the exact game date
+                                exact_match = chart_dates.dt.strftime('%Y-%m-%d').map(receipt_dict)
+                                df_l10_chart['Saved_Proj'] = exact_match
+                                
+                                # 💥 FIX 3: If you locked the bet the night before, check for a receipt 1 day prior!
+                                prev_day_strs = (chart_dates - pd.Timedelta(days=1)).dt.strftime('%Y-%m-%d')
+                                df_l10_chart['Saved_Proj'] = df_l10_chart['Saved_Proj'].fillna(prev_day_strs.map(receipt_dict))
                         except:
                             pass
 
