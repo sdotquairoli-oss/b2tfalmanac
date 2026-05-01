@@ -3652,8 +3652,8 @@ def render_syndicate_board(league_key):
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
             else:
-                fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
-                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
+                fat_options = ["🟢 Rested", "🟡 Tired", "🔴 B2B"]
+                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "🟡 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
             
             # 💥 horizontal=False tells Streamlit to natively stack them in a column!
             fat_sel = st.radio("Energy", fat_options, horizontal=False, key=f"{lk}.fat_sel", label_visibility="collapsed")
