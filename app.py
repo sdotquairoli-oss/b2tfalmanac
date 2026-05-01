@@ -3358,7 +3358,8 @@ def render_syndicate_board(league_key):
     /* 1. Center the parent container so it aligns perfectly under the label */
     div[data-testid="stRadio"] {
         display: flex !important;
-        justify-content: center !important;
+        flex-direction: column !important; /* Stack vertically to respect the center alignment */
+        align-items: center !important;    /* Force perfect horizontal center */
         width: 100% !important;
     }
 
@@ -3373,12 +3374,13 @@ def render_syndicate_board(league_key):
         padding: 4px !important;
         gap: 4px !important;
         width: fit-content !important; 
-        margin: 0 auto !important;
+        margin: 0 !important;
     }
 
-    /* 3. Unselected button styling */
+    /* 3. Unselected button styling (FORCES EQUAL WIDTH) */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
-        flex: 1 !important;
+        flex: 1 1 0px !important;  /* 💥 Forces all 3 pills to share width equally */
+        min-width: 80px !important; /* Ensures the text never gets crushed */
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
@@ -3386,7 +3388,7 @@ def render_syndicate_board(league_key):
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 6px !important;
-        padding: 8px 12px !important; 
+        padding: 8px 4px !important; 
         margin: 0 !important;
         cursor: pointer !important;
     }
