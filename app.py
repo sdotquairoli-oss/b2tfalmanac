@@ -4217,6 +4217,8 @@ def render_syndicate_board(league_key):
                                     text-shadow: 1px 1px 2px rgba(0,0,0,0.9) !important;
                                     transition: box-shadow 0.2s ease-in-out !important;
                                 `;
+                                p.style.fontWeight = '900';
+                                p.style.color = '#ffffff';
 
                                 btn.addEventListener('mouseenter', function() {
                                     btn.style.boxShadow = '0 0 15px rgba(255,0,0,0.7), 0 0 30px rgba(255,0,0,0.4), 0 0 60px rgba(255,0,0,0.2)';
