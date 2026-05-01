@@ -3495,30 +3495,6 @@ def render_syndicate_board(league_key):
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
 
-        with tc6:
-            st.markdown("<div style='font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;'>Energy</div>", unsafe_allow_html=True)
-            
-            if league_key == "NFL":
-                fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
-                fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
-            else:
-                fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
-                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
-
-            fat_sel = st.radio(
-                "Energy", 
-                options=fat_options, 
-                horizontal=True,
-                key=f"{lk}.fat_sel", 
-                label_visibility="collapsed"
-            )
-            
-            # Save the selection to the session state for the ML pipeline
-            rest = fat_map.get(fat_sel, "Rested (1+ Days)")
-            st.session_state[f"{lk}.rest"] = rest
-            
-            # 🧹 REMOVED the redundant st.markdown text that was printing underneath!
-
     # ── SEARCH ROW ─────────────────────────────────────────
     s1, s2 = st.columns([1, 1])
     with s1:
