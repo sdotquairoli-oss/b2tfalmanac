@@ -3458,9 +3458,9 @@ def render_syndicate_board(league_key):
             is_home_current = 1 if is_home_bool else 0
 
         with tc2:
-            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-            teammate_out = st.checkbox("Teammate Out?", key=f"{lk}.teammate_out", label_visibility="collapsed")
-            st.markdown(f"<div style='display:flex;align-items:center;gap:6px;margin-top:-28px;'><span style='font-size:12px;color:#94a3b8;font-weight:600;'>🚑 Teammate Out?</span></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:2px;'>Teammate</div>", unsafe_allow_html=True)
+            teammate_out = st.checkbox("Out", key=f"{lk}.teammate_out")
             st.session_state[f"{lk}.injury_boost"] = teammate_out
 
         with tc3:
