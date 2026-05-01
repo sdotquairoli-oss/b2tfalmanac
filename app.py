@@ -3981,7 +3981,7 @@ def render_syndicate_board(league_key):
             rh_c0, rh_c1, rh_c2, rh_c3, rh_c4, rh_c5 = st.columns([0.25, 2.8, 0.7, 0.7, 0.8, 0.6])
 
             with rh_c0:
-                chk_label = "✓" if is_checked else " "
+                chk_label = "✅" if is_checked else "⬜"
                 if st.button(chk_label, key=f"{lk}.chk_{ri}", use_container_width=True):
                     if is_checked: selected_for_lock.discard(ri)
                     else: selected_for_lock.add(ri)
