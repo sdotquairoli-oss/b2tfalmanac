@@ -3461,21 +3461,35 @@ def render_syndicate_board(league_key):
         justify-content: center !important;
     }
     /* ───────────────────────────────────────────────────────── */
-    /* SPREAD BOX ALIGNMENT & CENTERING                          */
+    /* BULLETPROOF HORIZONTAL CENTERING (Toggles, Checkbox, Spread)*/
     /* ───────────────────────────────────────────────────────── */
-    div[data-testid="stNumberInput"] {
-        width: 110px !important;
-        margin: 10px auto 0px auto !important; /* 💥 Pushes spread box down to align with search bar */
-        display: block !important;
+    
+    /* 1. Force the invisible Streamlit wrappers to center their contents */
+    div[data-testid="stElementContainer"]:has(div[data-testid="stToggle"]),
+    div[data-testid="stElementContainer"]:has(div[data-testid="stCheckbox"]),
+    div[data-testid="stElementContainer"]:has(div[data-testid="stNumberInput"]) {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
     }
+
+    /* 2. Shrink-wrap the widgets so they lock to the center */
+    div[data-testid="stToggle"],
+    div[data-testid="stCheckbox"],
+    div[data-testid="stNumberInput"] {
+        width: fit-content !important;
+        margin: 0 auto !important;
+    }
+
+    /* 3. Number Input Aesthetics */
     div[data-testid="stNumberInput"] div[data-baseweb="input"] {
+        width: 110px !important;
         height: 40px !important;
         min-height: 40px !important;
         border-radius: 8px !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
     }
-    /* Kill Streamlit's default red focus tint */
     div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
         background-color: #1e293b !important; 
         border: 1px solid rgba(0, 229, 255, 0.6) !important; 
@@ -3489,59 +3503,18 @@ def render_syndicate_board(league_key):
         text-align: center !important;
     }
 
-    /* ───────────────────────────────────────────────────────── */
-    /* TOGGLE & CHECKBOX ALIGNMENT & CENTERING                   */
-    /* ───────────────────────────────────────────────────────── */
-    
-    /* 1. Toggles remain centered and pushed down to match Search */
-    div[data-testid="stToggle"] {
-        width: fit-content !important;
-        margin: 10px auto !important;     
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        height: 40px !important;
-        min-height: 40px !important;      
-        padding: 0 !important;
-    }
-
-    /* 2. 💥 Checkbox Container: Force full width so it spans the column */
-    div[data-testid="stCheckbox"] {
-        width: 100% !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        min-height: 30px !important; /* Tucked slightly tighter under the logo */
-        margin: 0 !important; 
-    }
-
-    /* 3. 💥 Checkbox Label: Shrink-wrap the actual text and square, and force center! */
+    /* 4. Checkbox & Toggle Fonts/Alignment */
     div[data-testid="stCheckbox"] label {
         width: fit-content !important;
         margin: 0 auto !important; 
         display: flex !important;
         align-items: center !important;
-        justify-content: center !important;
     }
-
-    /* 4. Sleek HUD Font */
     div[data-testid="stToggle"] label p, 
     div[data-testid="stCheckbox"] label p {
         font-size: 13px !important; 
         color: #94a3b8 !important;
         font-weight: 700 !important;
-    }
-
-    /* ───────────────────────────────────────────────────────── */
-    /* COLUMN WRAPPER BRUTE-FORCE CENTERING                      */
-    /* ───────────────────────────────────────────────────────── */
-    div[data-testid="column"]:nth-of-type(1) > div,
-    div[data-testid="column"]:nth-of-type(3) > div,
-    div[data-testid="column"]:nth-of-type(4) > div {
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        width: 100% !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -3552,8 +3525,12 @@ def render_syndicate_board(league_key):
         tc1, tc2, tc3, tc4, tc5 = st.columns([1.2, 2.4, 1.4, 1.2, 1.0])
         
         with tc1:
-            st.markdown("<div style='font-size:11px;font-weight:700;margin-bottom:6px;visibility:hidden;'>SPACER</div>", unsafe_allow_html=True)
+            # 💥 Spacer 1: Pushes the first toggle down to perfectly align with the Search Input
+            st.markdown("<div style='height: 27px;'></div>", unsafe_allow_html=True)
             sync = st.toggle("Sync Vegas Odds", key=f"{lk}.sync")
+            
+            # 💥 Spacer 2: Adds a gap so the second toggle aligns perfectly with the Match Dropdown
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
             is_home_bool = st.toggle("Playing at Home?", key=f"{lk}.is_home")
             is_home_current = 1 if is_home_bool else 0
 
@@ -3600,12 +3577,15 @@ def render_syndicate_board(league_key):
                         live_odds_display.caption(f"🟡 {msg}")
 
         with tc3:
-            # 💥 Opponent and Teammate Checkbox Stacked!
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Matchup</div>", unsafe_allow_html=True)
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
+            
+            # 💥 Spacer: Pushes the Matchup logo down slightly to sit dead-center with the row
+            st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+            
             st.markdown(f"""
-            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px; margin-top: 10px; margin-bottom: 6px;">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px; margin-bottom: 6px;">
                 <img src='{opp_logo_url}' width='28' style='vertical-align:middle; flex-shrink:0;'>
                 <span style="font-size:12px; color:#94a3b8; font-weight:700; text-transform:uppercase;">vs</span>
                 <span style="font-size:22px; font-weight:900; color:#00E5FF; letter-spacing:1px;">{opp}</span>
@@ -3616,6 +3596,10 @@ def render_syndicate_board(league_key):
 
         with tc4:
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Spread</div>", unsafe_allow_html=True)
+            
+            # 💥 Spacer: Pushes the Spread Box down slightly to sit dead-center
+            st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+            
             spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f", label_visibility="collapsed")
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
