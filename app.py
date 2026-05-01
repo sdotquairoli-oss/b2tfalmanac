@@ -3457,6 +3457,18 @@ def render_syndicate_board(league_key):
     /* ───────────────────────────────────────────────────────── */
     /* SPREAD BOX ALIGNMENT (Match Energy Pill Height & Style)   */
     /* ───────────────────────────────────────────────────────── */
+    
+    /* 💥 NEW: Force wrapper to center and shrink the box so it matches the pills */
+    div[data-testid="stElementContainer"]:has(div[data-testid="stNumberInput"]) {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+    }
+    div[data-testid="stNumberInput"] {
+        width: 110px !important; 
+        margin: 0 auto !important;
+    }
+
     div[data-testid="stNumberInput"] div[data-baseweb="input"] {
         height: 40px !important;
         min-height: 40px !important;
@@ -3465,16 +3477,16 @@ def render_syndicate_board(league_key):
         border: 1px solid #334155 !important;
     }
 
-    /* 💥 KILL STREAMLIT'S DEFAULT RED FOCUS TINT */
+    /* KILL STREAMLIT'S DEFAULT RED FOCUS TINT */
     div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
-        background-color: #1e293b !important; /* Forces it to stay slate blue */
-        border: 1px solid rgba(0, 229, 255, 0.6) !important; /* B2TF Cyan focus border */
+        background-color: #1e293b !important; 
+        border: 1px solid rgba(0, 229, 255, 0.6) !important; 
         box-shadow: 0 0 8px rgba(0, 229, 255, 0.3) !important;
     }
 
     /* Make the number text perfectly match the Energy Pill font */
     div[data-testid="stNumberInput"] input {
-        background-color: transparent !important; /* Ensures the slate blue shows through */
+        background-color: transparent !important; 
         font-size: 11px !important;
         font-weight: 700 !important;
         color: #94a3b8 !important;
@@ -3484,33 +3496,38 @@ def render_syndicate_board(league_key):
     /* TOGGLE & CHECKBOX ALIGNMENT (Match HUD Proportions)       */
     /* ───────────────────────────────────────────────────────── */
     
-    /* 1. Checkbox: Match the 40px height & force dead-center alignment */
+    /* 💥 NEW: Force the invisible Streamlit wrappers to perfectly center their widgets */
+    div[data-testid="stElementContainer"]:has(div[data-testid="stCheckbox"]),
+    div[data-testid="stElementContainer"]:has(div[data-testid="stToggle"]) {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+    }
+    
+    /* 1. Checkbox: Match the height & force dead-center alignment */
     div[data-testid="stCheckbox"] {
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
-        min-height: 25px !important; /* 💥 Shrunk from 40px to nest tightly under logo */
-        margin: 0 !important;
-    }
-    
-    /* Force the square and text to shrink-wrap so they can actually center */
-    div[data-testid="stCheckbox"] label {
-        width: fit-content !important;
-        margin: 0 auto !important; 
+        min-height: 25px !important; 
+        width: fit-content !important; /* Shrink to fit */
+        margin: 0 auto !important;     /* Auto-margin centers it */
     }
 
-    /* 2. Toggles: 30px each (60px total) */
+    /* 2. Toggles: Force dead-center alignment */
     div[data-testid="stToggle"] {
         display: flex !important;
+        justify-content: center !important;
         align-items: center !important;
         min-height: 30px !important;
-        margin: 0 !important;
+        width: fit-content !important; /* Shrink to fit */
+        margin: 0 auto !important;     /* Auto-margin centers it */
         padding: 0 !important;
     }
     
-    /* 3. Sleek HUD Font for both (Slightly Bigger!) */
+    /* 3. Sleek HUD Font for both */
     div[data-testid="stToggle"] label p, div[data-testid="stCheckbox"] label p {
-        font-size: 13px !important; /* 💥 Bumped up from 12px for better legibility */
+        font-size: 13px !important; 
         color: #94a3b8 !important;
         font-weight: 700 !important;
     }
