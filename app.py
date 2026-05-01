@@ -3981,7 +3981,17 @@ def render_syndicate_board(league_key):
             rh_c0, rh_c1, rh_c2, rh_c3, rh_c4, rh_c5 = st.columns([0.25, 2.8, 0.7, 0.7, 0.8, 0.6])
 
             with rh_c0:
-                chk_label = "✅" if is_checked else "⬜"
+                chk_label = "✓" if is_checked else "·"
+                chk_color = "#ff0055" if is_checked else "#334155"
+                st.markdown(f"""
+                <style>
+                div[data-testid="stVerticalBlock"] button[kind="secondary"][data-testid="baseButton-secondary"]:nth-of-type({ri + 1}) {{
+                    color: {chk_color} !important;
+                    font-weight: 900 !important;
+                    font-size: 18px !important;
+                }}
+                </style>
+                """, unsafe_allow_html=True)
                 if st.button(chk_label, key=f"{lk}.chk_{ri}", use_container_width=True):
                     if is_checked: selected_for_lock.discard(ri)
                     else: selected_for_lock.add(ri)
