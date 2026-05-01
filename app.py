@@ -4268,7 +4268,7 @@ def render_syndicate_board(league_key):
                         if ri >= len(stat_results): continue
                         r = stat_results[ri]
                         save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r['win_prob'], False, r['setup_score'], r['win_prob'], r['line'])
-                    st.success("Override locked!"); time.sleep(1); st.rerun()
+                    st.success("Override pick saved!"); time.sleep(1); st.rerun()
             else:
                 if st.button("🔒 Lock Selected", type="primary", use_container_width=True, key=f"{lk}.lock_selected"):
                     if not selected_for_lock:
