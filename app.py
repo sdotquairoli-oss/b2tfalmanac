@@ -3527,9 +3527,21 @@ def render_syndicate_board(league_key):
             is_home_current = 1 if is_home_bool else 0
 
         with tc2:
-            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;white-space:nowrap;'>Teammate</div>", unsafe_allow_html=True)
-            teammate_out = st.checkbox("Out", key=f"{lk}.teammate_out")
-            st.session_state[f"{lk}.injury_boost"] = teammate_out
+            search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
+            if search_query:
+                if search_query.upper() in teams:
+                    player_name = search_query.upper()
+                else:
+                    matches = (
+                        search_nba_players(search_query) if league_key == "NBA" else
+                        search_mlb_players(search_query) if league_key == "MLB" else
+                        search_nfl_players(search_query) if league_key == "NFL" else
+                        search_nhl_players(search_query)
+                    )
+                    if matches:
+                        player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
+                    else:
+                        st.caption("No matches.")
 
         with tc3:
             opp = st.session_state.get(f"{lk}.opp", teams[0])
@@ -3556,6 +3568,7 @@ def render_syndicate_board(league_key):
             elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
             st.markdown(f"<div style='font-size:11px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
+       
         with tc5:
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Energy</div>", unsafe_allow_html=True)
             if league_key == "NFL":
@@ -3569,21 +3582,9 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.rest"] = rest
         
         with tc6:
-            search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
-            if search_query:
-                if search_query.upper() in teams:
-                    player_name = search_query.upper()
-                else:
-                    matches = (
-                        search_nba_players(search_query) if league_key == "NBA" else
-                        search_mlb_players(search_query) if league_key == "MLB" else
-                        search_nfl_players(search_query) if league_key == "NFL" else
-                        search_nhl_players(search_query)
-                    )
-                    if matches:
-                        player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
-                    else:
-                        st.caption("No matches.")
+            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;white-space:nowrap;'>Teammate</div>", unsafe_allow_html=True)
+            teammate_out = st.checkbox("Out", key=f"{lk}.teammate_out")
+            st.session_state[f"{lk}.injury_boost"] = teammate_out
     
     # Auto-populate opponent from schedule
     init_state(f"{lk}.opp", teams[0])
