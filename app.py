@@ -3364,25 +3364,25 @@ def render_syndicate_board(league_key):
         width: 100% !important;
     }
 
-    /* 2. Base track styling (Shrink-wraps and centers) */
+    /* 2. Base track styling (Vertical Traffic Light) */
     div[data-testid="stRadio"] div[role="radiogroup"] {
         display: flex !important;
-        flex-direction: row !important;
+        flex-direction: column !important; /* 💥 Stack Vertically */
         justify-content: center !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
-        border-radius: 8px !important;
+        border-radius: 12px !important; /* 💥 Rounder edges for traffic light */
         padding: 4px !important;
         gap: 4px !important;
         width: fit-content !important; 
         margin: 0 auto !important;
-        height: 40px !important; /* 💥 FORCES TRACK TO EXACT SPREAD BOX HEIGHT */
+        height: auto !important; /* 💥 Allows track to stretch and fit all 3 pills */
     }
 
     /* 3. Unselected button styling (HARDCODED EQUAL WIDTH & HEIGHT) */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
-        width: 90px !important;    
-        height: 100% !important;   /* 💥 STRETCHES PILL TO FILL 40PX HEIGHT */
+        width: 80px !important;    
+        height: 30px !important;   /* 💥 Fixed height per pill */
         flex: none !important;     
         display: flex !important;
         justify-content: center !important;
@@ -3390,8 +3390,8 @@ def render_syndicate_board(league_key):
         background-color: transparent !important;
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
-        border-radius: 6px !important;
-        padding: 0px 4px !important; /* 💥 Removed vertical padding so it perfectly fits */
+        border-radius: 8px !important;
+        padding: 0 !important;
         margin: 0 !important;
         cursor: pointer !important;
     }
@@ -3489,7 +3489,7 @@ def render_syndicate_board(league_key):
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
-        min-height: 40px !important;
+        min-height: 25px !important; /* 💥 Shrunk from 40px to nest tightly under logo */
         margin: 0 !important;
     }
     
@@ -3519,32 +3519,70 @@ def render_syndicate_board(league_key):
     # ── TOP ROW ────────────────────────────────────────────
     player_name = None
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.2, 0.65, 1.0, 1.0, 2.2, 1.6])
-
+        # 💥 Re-proportioned for 5 columns!
+        tc1, tc2, tc3, tc4, tc5 = st.columns([1.2, 2.4, 1.4, 1.2, 1.0])
+        
         with tc1:
             sync = st.toggle("Sync Vegas Odds", key=f"{lk}.sync")
             is_home_bool = st.toggle("Playing at Home?", key=f"{lk}.is_home")
             is_home_current = 1 if is_home_bool else 0
 
         with tc2:
-            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;white-space:nowrap;'>Teammate</div>", unsafe_allow_html=True)
-            teammate_out = st.checkbox("Out", key=f"{lk}.teammate_out")
-            st.session_state[f"{lk}.injury_boost"] = teammate_out
+            # 💥 Search is now tc2!
+            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Target Search</div>", unsafe_allow_html=True)
+            search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
+            if search_query:
+                if search_query.upper() in teams:
+                    player_name = search_query.upper()
+                else:
+                    matches = (search_nba_players(search_query) if league_key == "NBA" else search_mlb_players(search_query) if league_key == "MLB" else search_nfl_players(search_query) if league_key == "NFL" else search_nhl_players(search_query) )
+                    if matches:
+                        player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
+                    else:
+                        st.caption("No matches.")
+            
+            # Auto-populate opponent from schedule
+            init_state(f"{lk}.opp", teams[0])
+            auto_opp, auto_is_home = None, True
+            if player_name and sched and "(" in player_name:
+                team_abbr = player_name.split("(")[1].split(")")[0].strip().upper()
+                for g in sched:
+                    if g['home'].upper() == team_abbr:
+                        auto_opp = g['away'].upper(); auto_is_home = True; break
+                    elif g['away'].upper() == team_abbr:
+                        auto_opp = g['home'].upper(); auto_is_home = False; break
+            if player_name and player_name != st.session_state.get(f"{lk}.last_player"):
+                st.session_state[f"{lk}.last_player"] = player_name
+            if auto_opp and auto_opp in teams:
+                st.session_state[f"{lk}.opp"]     = auto_opp
+                st.session_state[f"{lk}.is_home"] = auto_is_home
+
+            live_odds_display = st.empty()
+            if sync and player_name:
+                with st.spinner("Syncing odds..."):
+                    f_line, f_odds, msg, used, rem = get_live_line(player_name, "Points", ODDS_API_KEY, sport_path)
+                    if used and rem:
+                        st.session_state['api_used'] = int(used)
+                        st.session_state['api_remaining'] = int(rem)
+                    if f_line is not None:
+                        live_odds_display.markdown(f'<div style="background:rgba(0,230,118,.08);border:1px solid #00E676;border-radius:6px;padding:8px 12px;font-size:12px;color:#00E676;font-weight:700;text-align:center;">📡 LIVE MARKET SYNCED — {msg}</div>', unsafe_allow_html=True)
+                    else:
+                        live_odds_display.caption(f"🟡 {msg}")
 
         with tc3:
+            # 💥 Opponent and Teammate Checkbox Stacked!
+            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Matchup</div>", unsafe_allow_html=True)
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
-            teammate_html = "&nbsp;🚑" if teammate_out else ""
-             
-            st.markdown("<div style='font-size:11px; margin-bottom:6px; visibility:hidden;'>SPACER</div>", unsafe_allow_html=True)
-            
             st.markdown(f"""
-            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px;">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px; margin-bottom: 2px;">
                 <img src='{opp_logo_url}' width='28' style='vertical-align:middle; flex-shrink:0;'>
                 <span style="font-size:12px; color:#94a3b8; font-weight:700; text-transform:uppercase;">vs</span>
-                <span style="font-size:22px; font-weight:900; color:#00E5FF; letter-spacing:1px;">{opp}{teammate_html}</span>
+                <span style="font-size:22px; font-weight:900; color:#00E5FF; letter-spacing:1px;">{opp}</span>
             </div>
             """, unsafe_allow_html=True)
+            teammate_out = st.checkbox("🚑 Teammate Out", key=f"{lk}.teammate_out")
+            st.session_state[f"{lk}.injury_boost"] = teammate_out
 
         with tc4:
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Spread</div>", unsafe_allow_html=True)
@@ -3556,7 +3594,7 @@ def render_syndicate_board(league_key):
             elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
             st.markdown(f"<div style='font-size:11px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
-       
+
         with tc5:
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Energy</div>", unsafe_allow_html=True)
             if league_key == "NFL":
@@ -3565,26 +3603,11 @@ def render_syndicate_board(league_key):
             else:
                 fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
                 fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
-            fat_sel = st.radio("Energy", fat_options, horizontal=True, key=f"{lk}.fat_sel", label_visibility="collapsed")
+            
+            # 💥 horizontal=False tells Streamlit to natively stack them in a column!
+            fat_sel = st.radio("Energy", fat_options, horizontal=False, key=f"{lk}.fat_sel", label_visibility="collapsed")
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
-        
-        with tc6:
-            search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
-            if search_query:
-                if search_query.upper() in teams:
-                    player_name = search_query.upper()
-                else:
-                    matches = (
-                        search_nba_players(search_query) if league_key == "NBA" else
-                        search_mlb_players(search_query) if league_key == "MLB" else
-                        search_nfl_players(search_query) if league_key == "NFL" else
-                        search_nhl_players(search_query)
-                    )
-                    if matches:
-                        player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
-                    else:
-                        st.caption("No matches.")
     
     # Auto-populate opponent from schedule
     init_state(f"{lk}.opp", teams[0])
