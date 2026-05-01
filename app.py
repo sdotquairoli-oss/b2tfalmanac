@@ -4196,7 +4196,6 @@ def render_syndicate_board(league_key):
             )
 
             if not has_actionable:
-                # JS targets the button by text and applies caution styling
                 components.html("""
                 <script>
                 function styleOverrideBtn() {
@@ -4211,13 +4210,26 @@ def render_syndicate_board(league_key):
                                         #1a1a1a 0px, #1a1a1a 10px,
                                         #FFD700 10px, #FFD700 20px
                                     ) !important;
-                                    color: #000000 !important;
+                                    color: #ffffff !important;
                                     border: 2px solid #FFD700 !important;
                                     font-weight: 900 !important;
                                     letter-spacing: 1px !important;
-                                    box-shadow: 0 0 15px rgba(255,215,0,0.7), 0 0 30px rgba(255,215,0,0.4), 0 0 60px rgba(255,215,0,0.2) !important;
                                     text-shadow: 1px 1px 2px rgba(0,0,0,0.9) !important;
+                                    transition: box-shadow 0.2s ease-in-out !important;
                                 `;
+
+                                btn.addEventListener('mouseenter', function() {
+                                    btn.style.boxShadow = '0 0 15px rgba(255,0,0,0.7), 0 0 30px rgba(255,0,0,0.4), 0 0 60px rgba(255,0,0,0.2)';
+                                });
+                                btn.addEventListener('mouseleave', function() {
+                                    btn.style.boxShadow = 'none';
+                                });
+                                btn.addEventListener('mousedown', function() {
+                                    btn.style.boxShadow = '0 0 20px rgba(255,0,0,0.9), 0 0 40px rgba(255,0,0,0.6), 0 0 80px rgba(255,0,0,0.3)';
+                                });
+                                btn.addEventListener('mouseup', function() {
+                                    btn.style.boxShadow = '0 0 15px rgba(255,0,0,0.7), 0 0 30px rgba(255,0,0,0.4), 0 0 60px rgba(255,0,0,0.2)';
+                                });
                             }
                         }
                     });
