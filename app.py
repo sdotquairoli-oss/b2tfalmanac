@@ -3458,18 +3458,26 @@ def render_syndicate_board(league_key):
     /* SPREAD BOX ALIGNMENT (Match Energy Pill Height & Style)   */
     /* ───────────────────────────────────────────────────────── */
     div[data-testid="stNumberInput"] div[data-baseweb="input"] {
-        height: 40px !important;      /* 💥 Lock exact height */
-        min-height: 40px !important; 
+        height: 40px !important;
+        min-height: 40px !important;
         border-radius: 8px !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
     }
-    
+
+    /* 💥 KILL STREAMLIT'S DEFAULT RED FOCUS TINT */
+    div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
+        background-color: #1e293b !important; /* Forces it to stay slate blue */
+        border: 1px solid rgba(0, 229, 255, 0.6) !important; /* B2TF Cyan focus border */
+        box-shadow: 0 0 8px rgba(0, 229, 255, 0.3) !important;
+    }
+
     /* Make the number text perfectly match the Energy Pill font */
     div[data-testid="stNumberInput"] input {
-        font-size: 11px !important;   /* 💥 Shrunk from 14px to match pill */
+        background-color: transparent !important; /* Ensures the slate blue shows through */
+        font-size: 11px !important;
         font-weight: 700 !important;
-        color: #94a3b8 !important;    /* 💥 Changed from white to muted gray to match pill */
+        color: #94a3b8 !important;
         text-align: center !important;
     }
     </style>
