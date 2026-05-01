@@ -3459,7 +3459,7 @@ def render_syndicate_board(league_key):
 
         with tc2:
             st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-            st.markdown("<div style='font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:2px;'>Teammate</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:14px;font-weight:600;color:#f8fafc;margin-bottom:2px;'>Teammate</div>", unsafe_allow_html=True)
             teammate_out = st.checkbox("Out", key=f"{lk}.teammate_out")
             st.session_state[f"{lk}.injury_boost"] = teammate_out
 
@@ -3499,6 +3499,7 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.rest"] = rest
         
         with tc6:
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
             search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
             if search_query:
                 if search_query.upper() in teams:
