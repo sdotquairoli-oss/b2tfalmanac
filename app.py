@@ -4207,12 +4207,15 @@ def render_syndicate_board(league_key):
             else:
                 st.markdown("<div style='font-size:11px;color:#94a3b8;padding:8px 0;'>Check picks above to select</div>", unsafe_allow_html=True)
         with lk_c2:
-            # Check if any selected picks are actionable
-            targets = list(selected_for_lock) if selected_for_lock else list(range(len(stat_results)))
-            has_actionable = any(
-                stat_results[ri]['vote'] not in ["PASS", "VETO", "SUPPRESSED"]
-                for ri in targets if ri < len(stat_results)
-            )
+            # Only evaluate against explicitly checked picks
+            # If nothing checked yet, always show Lock
+            if not selected_for_lock:
+                has_actionable = True
+            else:
+                has_actionable = any(
+                    stat_results[ri]['vote'] not in ["PASS", "VETO", "SUPPRESSED"]
+                    for ri in selected_for_lock if ri < len(stat_results)
+                )
 
             if not has_actionable:
                 components.html("""
