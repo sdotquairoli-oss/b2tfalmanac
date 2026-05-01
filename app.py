@@ -3531,6 +3531,22 @@ def render_syndicate_board(league_key):
         color: #94a3b8 !important;
         font-weight: 700 !important;
     }
+    /* ───────────────────────────────────────────────────────── */
+    /* PERFECT COLUMN CENTERING (TC1, TC3, TC4)                  */
+    /* ───────────────────────────────────────────────────────── */
+    
+    /* Target the invisible vertical wrapper inside Columns 1, 3, and 4 */
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(1) > div[data-testid="stVerticalBlock"],
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(3) > div[data-testid="stVerticalBlock"],
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"]:nth-child(4) > div[data-testid="stVerticalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;      /* 💥 Forces perfect horizontal center */
+        justify-content: center !important;  /* 💥 Forces perfect vertical center */
+        text-align: center !important;
+        height: 100% !important;
+        width: 100% !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
