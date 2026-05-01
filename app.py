@@ -3465,7 +3465,7 @@ def render_syndicate_board(league_key):
     /* ───────────────────────────────────────────────────────── */
     div[data-testid="stNumberInput"] {
         width: 110px !important;
-        margin: 0 auto !important; /* 💥 Forces horizontal dead-center */
+        margin: 10px auto 0px auto !important; /* 💥 Pushes spread box down to align with search bar */
         display: block !important;
     }
     div[data-testid="stNumberInput"] div[data-baseweb="input"] {
@@ -3494,17 +3494,19 @@ def render_syndicate_board(league_key):
     /* ───────────────────────────────────────────────────────── */
     div[data-testid="stToggle"],
     div[data-testid="stCheckbox"] {
-        width: fit-content !important; /* 💥 Shrink-wrap to text size */
-        margin: 0 auto !important;     /* 💥 Forces horizontal dead-center */
+        width: fit-content !important;
+        margin: 10px auto !important;     /* 💥 Pushes them down to perfectly align with search boxes */
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
     }
     div[data-testid="stCheckbox"] {
-        min-height: 25px !important;
+        height: 40px !important;
+        min-height: 40px !important;      /* 💥 Matches input box heights exactly */
     }
     div[data-testid="stToggle"] {
-        min-height: 30px !important;
+        height: 40px !important;
+        min-height: 40px !important;      /* 💥 Matches input box heights exactly */
         padding: 0 !important;
     }
     div[data-testid="stToggle"] label p, 
@@ -3587,7 +3589,7 @@ def render_syndicate_board(league_key):
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
             st.markdown(f"""
-            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px; margin-bottom: 2px;">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px; margin-top: 10px; margin-bottom: 6px;">
                 <img src='{opp_logo_url}' width='28' style='vertical-align:middle; flex-shrink:0;'>
                 <span style="font-size:12px; color:#94a3b8; font-weight:700; text-transform:uppercase;">vs</span>
                 <span style="font-size:22px; font-weight:900; color:#00E5FF; letter-spacing:1px;">{opp}</span>
@@ -3597,7 +3599,7 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.injury_boost"] = teammate_out
 
         with tc4:
-            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Spread</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:11px;font-weight:700;color:{sh_color};text-align:center;margin-top:2px;'>{sh_text}</div>", unsafe_allow_html=True)
             spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f", label_visibility="collapsed")
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
