@@ -3449,7 +3449,7 @@ def render_syndicate_board(league_key):
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5 = st.columns([1.0, 0.8, 0.8, 0.7, 1.8])
+        tc1, tc2, tc3, tc4, tc5 = st.columns([1.2, 0.7, 1.0, 0.8, 2.2])
 
         with tc1:
             sync = st.toggle("📡 Sync Vegas Odds", key=f"{lk}.sync")
@@ -3457,14 +3457,14 @@ def render_syndicate_board(league_key):
             is_home_current = 1 if is_home_bool else 0
 
         with tc2:
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
             teammate_out = st.checkbox("🚑 Teammate Out?", key=f"{lk}.teammate_out")
-            st.session_state[f"{lk}.injury_boost"] = teammate_out
 
         with tc3:
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
             teammate_html = "&nbsp;🚑" if teammate_out else ""
+            st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
             st.markdown(f"""
             <div style="display:flex;align-items:center;gap:5px;">
                 <img src='{opp_logo_url}' width='20' style='vertical-align:middle;flex-shrink:0;'>
