@@ -3481,63 +3481,65 @@ def render_syndicate_board(league_key):
         margin: 0 auto !important;
     }
 
-    /* 3. Number Input Aesthetics (Now with Toggles!) */
+    /* 3. Number Input Aesthetics (Split Toggles & New Font Color) */
     div[data-testid="stNumberInput"] {
-        width: 130px !important; /* 💥 Widened slightly to fit the +/- buttons */
+        width: 130px !important;
         margin: 0 auto !important;
     }
 
-    /* Style the OUTER wrapper so the buttons are inside the pill */
+    /* Style the outer pill */
     div[data-testid="stNumberInput"] > div {
         height: 40px !important;
         min-height: 40px !important;
         border-radius: 8px !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
-        display: flex !important;
-        align-items: center !important;
-        overflow: hidden !important; /* Keeps the hover effects inside the rounded corners */
+        overflow: hidden !important;
     }
 
-    /* Make the inner text box transparent so it blends perfectly */
+    /* Make the inner wrapper a flexbox */
     div[data-testid="stNumberInput"] div[data-baseweb="input"] {
+        display: flex !important;
+        width: 100% !important;
+        height: 100% !important;
         background-color: transparent !important;
         border: none !important;
-        height: 100% !important;
+        padding: 0 !important;
     }
 
-    /* Move the glowing focus effect to the outer wrapper */
+    /* 💥 THE MAGIC TRICK: Dissolve the invisible box holding the buttons */
+    div[data-testid="stNumberInput"] div[data-baseweb="input"] > div:last-child {
+        display: contents !important;
+    }
+
+    /* 💥 REORDER THEM: Minus (1), Input text (2), Plus (3) */
+    div[data-testid="stNumberInput"] button:nth-of-type(1) { order: 1 !important; border-right: 1px solid #334155 !important; }
+    div[data-testid="stNumberInput"] input                 { order: 2 !important; flex-grow: 1 !important; }
+    div[data-testid="stNumberInput"] button:nth-of-type(2) { order: 3 !important; border-left: 1px solid #334155 !important; }
+
+    /* Focus Glow */
     div[data-testid="stNumberInput"] > div:focus-within {
-        border: 1px solid rgba(0, 229, 255, 0.6) !important; 
+        border: 1px solid rgba(0, 229, 255, 0.6) !important;
         box-shadow: 0 0 8px rgba(0, 229, 255, 0.3) !important;
     }
     div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
-        box-shadow: none !important; /* Kill the default Streamlit red box */
+        box-shadow: none !important; /* Kill default red focus */
     }
 
-    /* Center and style the Spread number */
+    /* 💥 STYLE THE NUMBER FONT */
     div[data-testid="stNumberInput"] input {
-        background-color: transparent !important; 
-        font-size: 12px !important;
-        font-weight: 700 !important;
-        color: #f8fafc !important; /* Brightened the text so it pops between the toggles */
+        background-color: transparent !important;
+        font-size: 13px !important;
+        font-weight: 900 !important;
+        color: #00E5FF !important; /* <-- CHANGE TO #f8fafc (white) or #94a3b8 (gray) IF DESIRED */
         text-align: center !important;
     }
 
-    /* 💥 NEW: Style the actual +/- Toggles! */
+    /* 💥 STYLE THE SMALLER TOGGLES */
     div[data-testid="stNumberInput"] button {
-        background-color: transparent !important;
+        background-color: #0f172a !important; /* Slightly darker end-caps */
         border: none !important;
-        height: 100% !important;
-        width: 35px !important;
-        transition: background 0.2s ease-in-out !important;
-    }
-    div[data-testid="stNumberInput"] button:hover {
-        background-color: rgba(0, 229, 255, 0.15) !important;
-    }
-    div[data-testid="stNumberInput"] button svg {
-        fill: #00E5FF !important; /* Makes the plus/minus icons B2TF Cyan */
-    }
+        height: 100% !important
     /* 4. Checkbox & Toggle Fonts/Alignment */
     div[data-testid="stCheckbox"] label {
         width: fit-content !important;
