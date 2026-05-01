@@ -4047,11 +4047,21 @@ def render_syndicate_board(league_key):
                             tooltip=[alt.Tooltip('ShortDate', title='Date'), alt.Tooltip('Matchup_Formatted', title='Opp'), alt.Tooltip('MINS', title='Mins', format='.1f'), alt.Tooltip(s_col, title='Actual'), alt.Tooltip('AI_Proj', title='AI Proj', format='.2f')]
                         ).properties(height=260)
                         vegas_rule = alt.Chart(pd.DataFrame({'y': [line_val]})).mark_rule(color='#FFD700', strokeDash=[5,5], size=2).encode(y='y')
-                        proj_rule = alt.Chart(pd.DataFrame({'y': [proj]})).mark_rule(color='#ff5252', strokeDash=[4,2], size=2).encode(y='y')
+                        # 💥 Removed proj_rule (Dashed Red Line)
                         ai_line = alt.Chart(df_l10_chart).mark_line(color='#00E5FF', strokeWidth=2, point=alt.OverlayMarkDef(color='#00E5FF', size=50)).encode(x=alt.X('Matchup_Label', sort=None), y=alt.Y('AI_Proj'))
+                        
+                        # 💥 3. THE VAULT DOTS: Placed strictly on dates where a vault receipt exists
+                        vault_dots = alt.Chart(df_l10_chart).mark_circle(color='#ff0055', size=120, opacity=1).encode(
+                            x=alt.X('Matchup_Label', sort=None),
+                            y=alt.Y('Saved_Proj'),
+                            tooltip=[alt.Tooltip('ShortDate', title='Date'), alt.Tooltip('Matchup_Formatted', title='Opp'), alt.Tooltip('Saved_Proj', title='Locked Proj', format='.2f')]
+                        ).transform_filter('isValid(datum.Saved_Proj)')
+
                         text = bars.mark_text(align='center', baseline='top', dy=5, fontSize=13, fontWeight='bold').encode(text=alt.Text(s_col, format='.0f'), color=alt.value('#ffffff'))
-                        st.altair_chart((bars + vegas_rule + proj_rule + ai_line + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
-                        st.caption("🟡 Dashed = Vegas Line &nbsp;|&nbsp; 🔴 Red Dashed = Tonight's AI Proj &nbsp;|&nbsp; 🔵 Cyan = Historical Proj &nbsp;|&nbsp; 🏆 Gold Border = Target Opp")
+                        
+                        # 💥 4. RENDER WITHOUT THE RED LINE & UPDATE CAPTION
+                        st.altair_chart((bars + vegas_rule + ai_line + vault_dots + text).configure(background='transparent').configure_axis(gridColor='#334155', domainColor='#334155', tickColor='#334155', labelColor='#94a3b8', titleColor='#f8fafc').configure_view(strokeWidth=0), use_container_width=True)
+                        st.caption("🟡 Dashed = Vegas Line &nbsp;|&nbsp; 🔴 Solid Dot = Historical Vault Proj &nbsp;|&nbsp; 🔵 Cyan = AI Trend")
 
                 with board_col:
                     st.markdown("**🤖 AI Board**")
