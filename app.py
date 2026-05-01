@@ -3435,7 +3435,7 @@ def render_syndicate_board(league_key):
     # ── TOP ROW ────────────────────────────────────────────
     player_name = None
     with st.container(border=True):
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.1, 0.6, 0.9, 0.8, 2.0, 1.6])
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns([1.2, 0.65, 1.0, 1.0, 2.2, 1.6])
 
         with tc1:
             sync = st.toggle("📡 Sync Vegas Odds", key=f"{lk}.sync")
@@ -3462,7 +3462,8 @@ def render_syndicate_board(league_key):
             """, unsafe_allow_html=True)
 
         with tc4:
-            spread_input = st.number_input("Spread:", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f")
+            st.markdown("<div style='font-size:13px;font-weight:600;color:#f8fafc;text-align:center;margin-bottom:4px;'>Spread</div>", unsafe_allow_html=True)
+            spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f", label_visibility="collapsed")
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
             elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
@@ -3472,7 +3473,7 @@ def render_syndicate_board(league_key):
             st.markdown(f"<div style='font-size:11px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
 
         with tc5:
-            st.markdown("<div style='font-size:12px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;'>Energy</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:12px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Energy</div>", unsafe_allow_html=True)
             if league_key == "NFL":
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
