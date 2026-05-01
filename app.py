@@ -4180,7 +4180,7 @@ def render_syndicate_board(league_key):
                 st.markdown("---")
 
         # LOCK BAR
-        lk_c1, lk_c2, lk_c3 = st.columns([3, 1, 1])
+        lk_c1, lk_c2 = st.columns([3, 1])
         with lk_c1:
             if selected_for_lock:
                 names = [stat_results[i]['stat_type'] for i in selected_for_lock if i < len(stat_results)]
@@ -4188,33 +4188,40 @@ def render_syndicate_board(league_key):
             else:
                 st.markdown("<div style='font-size:11px;color:#94a3b8;padding:8px 0;'>Check picks above to select</div>", unsafe_allow_html=True)
         with lk_c2:
-            if st.button("🚨 Override", use_container_width=True, key=f"{lk}.override_bar"):
-                targets = list(selected_for_lock) if selected_for_lock else list(range(len(stat_results)))
-                for ri in targets:
-                    if ri >= len(stat_results): continue
-                    r = stat_results[ri]
-                    save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r['win_prob'], False, r['setup_score'], r['win_prob'], r['line'])
-                st.success("Override locked!"); time.sleep(1); st.rerun()
-        with lk_c3:
-            if st.button("🔒 Lock Selected", type="primary", use_container_width=True, key=f"{lk}.lock_selected"):
-                if not selected_for_lock:
-                    st.warning("Select at least one stat.")
-                else:
-                    locked = 0
-                    for ri in selected_for_lock:
+            # Check if any selected picks are actionable
+            targets = list(selected_for_lock) if selected_for_lock else list(range(len(stat_results)))
+            has_actionable = any(
+                stat_results[ri]['vote'] not in ["PASS", "VETO", "SUPPRESSED"]
+                for ri in targets if ri < len(stat_results)
+            )
+
+            if not has_actionable:
+                if st.button("🚨 Override", use_container_width=True, key=f"{lk}.override_bar"):
+                    for ri in targets:
                         if ri >= len(stat_results): continue
                         r = stat_results[ri]
-                        if r['vote'] in ["PASS", "VETO", "SUPPRESSED"]: continue
-                        min_max_proj   = r['board'][0]['proj'] if r['board'] else 0.0
-                        stat_proj_v    = r['board'][1]['proj'] if len(r['board']) > 1 else 0.0
-                        contrarian_v   = r['board'][2]['proj'] if len(r['board']) > 2 else 0.0
-                        context_v      = r['board'][4]['proj'] if len(r['board']) > 4 else 0.0
-                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], r['vote'], r['win_prob'], False, r['setup_score'], r['win_prob'], r['line'], min_max_proj, stat_proj_v, contrarian_v, context_v)
-                        log_prediction_receipt(target_player, r['stat_type'], r['proj'], datetime.now().strftime("%Y-%m-%d"))
-                        locked += 1
-                    st.success(f"✅ {locked} pick(s) locked to ledger!")
-                    st.session_state[f"{lk}.selected_for_lock"] = set()
-                    time.sleep(1); st.rerun()
+                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r['win_prob'], False, r['setup_score'], r['win_prob'], r['line'])
+                    st.success("Override locked!"); time.sleep(1); st.rerun()
+            else:
+                if st.button("🔒 Lock Selected", type="primary", use_container_width=True, key=f"{lk}.lock_selected"):
+                    if not selected_for_lock:
+                        st.warning("Select at least one stat.")
+                    else:
+                        locked = 0
+                        for ri in selected_for_lock:
+                            if ri >= len(stat_results): continue
+                            r = stat_results[ri]
+                            if r['vote'] in ["PASS", "VETO", "SUPPRESSED"]: continue
+                            min_max_proj   = r['board'][0]['proj'] if r['board'] else 0.0
+                            stat_proj_v    = r['board'][1]['proj'] if len(r['board']) > 1 else 0.0
+                            contrarian_v   = r['board'][2]['proj'] if len(r['board']) > 2 else 0.0
+                            context_v      = r['board'][4]['proj'] if len(r['board']) > 4 else 0.0
+                            save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], r['vote'], r['win_prob'], False, r['setup_score'], r['win_prob'], r['line'], min_max_proj, stat_proj_v, contrarian_v, context_v)
+                            log_prediction_receipt(target_player, r['stat_type'], r['proj'], datetime.now().strftime("%Y-%m-%d"))
+                            locked += 1
+                        st.success(f"✅ {locked} pick(s) locked to ledger!")
+                        st.session_state[f"{lk}.selected_for_lock"] = set()
+                        time.sleep(1); st.rerun()
 def render_league_tab(league_name, get_sched_func):
     lk = league_name.lower()
     render_league_scanners(league_name)
