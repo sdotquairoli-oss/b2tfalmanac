@@ -3502,6 +3502,8 @@ def render_syndicate_board(league_key):
             opp = st.session_state.get(f"{lk}.opp", teams[0])
             opp_logo_url = get_team_logo(league_key, opp)
             teammate_html = "&nbsp;🚑" if teammate_out else ""
+             
+            st.markdown("<div style='font-size:11px; margin-bottom:6px; visibility:hidden;'>SPACER</div>", unsafe_allow_html=True)
             
             st.markdown(f"""
             <div style="display: flex; justify-content: center; align-items: center; gap: 8px; height: 40px;">
