@@ -3354,8 +3354,29 @@ def render_syndicate_board(league_key):
     /* ───────────────────────────────────────────────────────── */
     /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
     /* ───────────────────────────────────────────────────────── */
+    
+    /* 1. Center the parent container so it aligns perfectly under the label */
+    div[data-testid="stRadio"] {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+    }
 
-    /* Base label styling */
+    /* 2. Base track styling (Shrink-wraps and centers) */
+    div[data-testid="stRadio"] div[role="radiogroup"] {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: center !important;
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 8px !important;
+        padding: 4px !important;
+        gap: 4px !important;
+        width: fit-content !important; 
+        margin: 0 auto !important;
+    }
+
+    /* 3. Unselected button styling */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
         flex: 1 !important;
         display: flex !important;
@@ -3365,23 +3386,18 @@ def render_syndicate_board(league_key):
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 6px !important;
-        padding: 10px 6px !important;
+        padding: 8px 12px !important; 
         margin: 0 !important;
         cursor: pointer !important;
     }
 
     /* 💥 THE ACTUAL NUKE: Safely kill the radio circle without touching the text */
-    /* We hide the UI div that DOES NOT contain the paragraph (<p>) text tag */
     div[data-testid="stRadio"] div[role="radiogroup"] label > div:not(:has(p)) {
         display: none !important;
     }
 
-    /* Shift energy pills right to align under label */
-    div[data-testid="stRadio"] div[role="radiogroup"] {
-        margin-left: auto !important;
-        margin-right: auto !important;
-        width: fit-content !important;
-    }
+    /* 4. Center the text and format font (FIXED MISSING SELECTOR) */
+    div[data-testid="stRadio"] div[role="radiogroup"] label p {
         color: #94a3b8 !important;
         font-size: 11px !important;
         font-weight: 700 !important;
@@ -3391,7 +3407,7 @@ def render_syndicate_board(league_key):
         white-space: nowrap !important; /* 💥 FORCES TEXT TO STAY ON ONE LINE */
     }
 
-    /* 3. Option 1 (🟢 Rested) - GREEN TINT */
+    /* 5. Option 1 (🟢 Rested) - GREEN TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
@@ -3401,7 +3417,7 @@ def render_syndicate_board(league_key):
         color: #00c853 !important;
     }
 
-    /* 4. Option 2 (🟡 Tired) - YELLOW TINT */
+    /* 6. Option 2 (🟡 Tired) - YELLOW TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
@@ -3411,7 +3427,7 @@ def render_syndicate_board(league_key):
         color: #f59e0b !important;
     }
 
-    /* 5. Option 3 (🔴 B2B) - RED TINT */
+    /* 7. Option 3 (🔴 B2B) - RED TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
         background-color: rgba(255, 82, 82, 0.15) !important;
         border: 1px solid rgba(255, 82, 82, 0.4) !important;
