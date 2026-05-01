@@ -3497,8 +3497,7 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.rest"] = rest
         
         with tc6:
-            st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px;'>1. Search Player</div>", unsafe_allow_html=True)
-            search_query = st.text_input("Search", placeholder="e.g. Maxey, LeBron", key=f"{lk}.search_query", label_visibility="collapsed")
+            search_query = st.text_input("Search", placeholder="🔍 Search player...", key=f"{lk}.search_query", label_visibility="collapsed")
             if search_query:
                 if search_query.upper() in teams:
                     player_name = search_query.upper()
@@ -3510,10 +3509,9 @@ def render_syndicate_board(league_key):
                         search_nhl_players(search_query)
                     )
                     if matches:
-                        st.markdown("<div style='font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.8px;text-transform:uppercase;margin-bottom:2px;margin-top:4px;'>2. Select Match</div>", unsafe_allow_html=True)
                         player_name = st.selectbox("Match", matches, key=f"{lk}.dropdown", label_visibility="collapsed")
                     else:
-                        st.caption("No matches found.")
+                        st.caption("No matches.")
     
     # Auto-populate opponent from schedule
     init_state(f"{lk}.opp", teams[0])
