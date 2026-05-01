@@ -3480,7 +3480,9 @@ def render_syndicate_board(league_key):
             else:
                 fat_options = ["🟢 Rested", "😓 Tired", "🔴 B2B"]
                 fat_map     = {"🟢 Rested": "Rested (1+ Days)", "😓 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
+            st.markdown("<div style='display:flex;justify-content:center;'>", unsafe_allow_html=True)
             fat_sel = st.radio("Energy", fat_options, horizontal=True, key=f"{lk}.fat_sel", label_visibility="collapsed")
+            st.markdown("</div>", unsafe_allow_html=True)
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
         
