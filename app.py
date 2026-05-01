@@ -3453,6 +3453,23 @@ def render_syndicate_board(league_key):
         flex-direction: column !important;
         justify-content: center !important;
     }
+    /* ───────────────────────────────────────────────────────── */
+    /* SPREAD BOX ALIGNMENT (Match Energy Pill Height & Style)   */
+    /* ───────────────────────────────────────────────────────── */
+    div[data-testid="stNumberInput"] div[data-baseweb="input"] {
+        min-height: 40px !important; /* Forces it to stretch to the pill's exact height */
+        border-radius: 8px !important;
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+    }
+    
+    /* Make the number text pop cleanly inside the new taller box */
+    div[data-testid="stNumberInput"] input {
+        font-size: 14px !important;
+        font-weight: 700 !important;
+        color: #f8fafc !important;
+        text-align: center !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     # ── TOP ROW ────────────────────────────────────────────
@@ -3485,7 +3502,7 @@ def render_syndicate_board(league_key):
             """, unsafe_allow_html=True)
 
         with tc4:
-            st.markdown("<div style='font-size:13px;font-weight:600;color:#f8fafc;text-align:center;margin-bottom:4px;'>Spread</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Spread</div>", unsafe_allow_html=True)
             spread_input = st.number_input("Spread", min_value=-30.0, max_value=30.0, value=0.0, step=0.5, key=f"{lk}.spread", format="%.1f", label_visibility="collapsed")
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
@@ -3495,8 +3512,8 @@ def render_syndicate_board(league_key):
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
             st.markdown(f"<div style='font-size:11px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
 
-        with tc5:
-            st.markdown("<div style='font-size:12px;font-weight:700;color:#94a3b8;letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Energy</div>", unsafe_allow_html=True)
+       with tc5:
+            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Energy</div>", unsafe_allow_html=True)
             if league_key == "NFL":
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
