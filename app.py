@@ -4207,17 +4207,18 @@ def render_syndicate_board(league_key):
             else:
                 st.markdown("<div style='font-size:11px;color:#94a3b8;padding:8px 0;'>Check picks above to select</div>", unsafe_allow_html=True)
         with lk_c2:
-            # Only evaluate against explicitly checked picks
-            # If nothing checked yet, always show Lock
+            # Define targets first
+            targets = list(selected_for_lock) if selected_for_lock else []
+
             if not selected_for_lock:
                 has_actionable = True
             else:
                 has_actionable = any(
                     stat_results[ri]['vote'] not in ["PASS", "VETO", "SUPPRESSED"]
-                    for ri in selected_for_lock if ri < len(stat_results)
+                    for ri in targets if ri < len(stat_results)
                 )
 
-            if not has_actionable:
+            if not has_actionable and targets:
                 components.html("""
                 <script>
                 function styleOverrideBtn() {
@@ -4241,7 +4242,6 @@ def render_syndicate_board(league_key):
                                 `;
                                 p.style.fontWeight = '900';
                                 p.style.color = '#ffffff';
-
                                 btn.addEventListener('mouseenter', function() {
                                     btn.style.boxShadow = '0 0 15px rgba(255,0,0,0.7), 0 0 30px rgba(255,0,0,0.4), 0 0 60px rgba(255,0,0,0.2)';
                                 });
@@ -4263,7 +4263,6 @@ def render_syndicate_board(league_key):
                 setTimeout(styleOverrideBtn, 500);
                 </script>
                 """, height=0)
-
                 if st.button("🚨 OVERRIDE", use_container_width=True, key=f"{lk}.override_bar"):
                     for ri in targets:
                         if ri >= len(stat_results): continue
