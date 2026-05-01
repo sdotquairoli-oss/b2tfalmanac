@@ -3376,12 +3376,14 @@ def render_syndicate_board(league_key):
         gap: 4px !important;
         width: fit-content !important; 
         margin: 0 auto !important;
+        height: 40px !important; /* 💥 FORCES TRACK TO EXACT SPREAD BOX HEIGHT */
     }
 
-    /* 3. Unselected button styling (HARDCODED EQUAL WIDTH) */
+    /* 3. Unselected button styling (HARDCODED EQUAL WIDTH & HEIGHT) */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
-        width: 90px !important;    /* 💥 FORCES ALL BUTTONS TO BE EXACTLY 90px WIDE */
-        flex: none !important;     /* 💥 Stops wider text from overriding the width */
+        width: 90px !important;    
+        height: 100% !important;   /* 💥 STRETCHES PILL TO FILL 40PX HEIGHT */
+        flex: none !important;     
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
@@ -3389,11 +3391,10 @@ def render_syndicate_board(league_key):
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 6px !important;
-        padding: 8px 4px !important; 
+        padding: 0px 4px !important; /* 💥 Removed vertical padding so it perfectly fits */
         margin: 0 !important;
         cursor: pointer !important;
     }
-
     /* 💥 THE ACTUAL NUKE: Safely kill the radio circle without touching the text */
     div[data-testid="stRadio"] div[role="radiogroup"] label > div:not(:has(p)) {
         display: none !important;
@@ -3457,17 +3458,18 @@ def render_syndicate_board(league_key):
     /* SPREAD BOX ALIGNMENT (Match Energy Pill Height & Style)   */
     /* ───────────────────────────────────────────────────────── */
     div[data-testid="stNumberInput"] div[data-baseweb="input"] {
-        min-height: 40px !important; /* Forces it to stretch to the pill's exact height */
+        height: 40px !important;      /* 💥 Lock exact height */
+        min-height: 40px !important; 
         border-radius: 8px !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
     }
     
-    /* Make the number text pop cleanly inside the new taller box */
+    /* Make the number text perfectly match the Energy Pill font */
     div[data-testid="stNumberInput"] input {
-        font-size: 14px !important;
+        font-size: 11px !important;   /* 💥 Shrunk from 14px to match pill */
         font-weight: 700 !important;
-        color: #f8fafc !important;
+        color: #94a3b8 !important;    /* 💥 Changed from white to muted gray to match pill */
         text-align: center !important;
     }
     </style>
