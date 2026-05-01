@@ -3465,7 +3465,6 @@ def render_syndicate_board(league_key):
             spread_val = spread_input
             if spread_val <= -10:  sh_color, sh_text = "#ff5252", "heavy fav ⚠️"
             elif spread_val < 0:   sh_color, sh_text = "#00c853", "▾ fav"
-            elif spread_val == 0:  sh_color, sh_text = "#94a3b8", "pick em"
             elif spread_val >= 10: sh_color, sh_text = "#ff5252", "heavy dog ⚠️"
             else:                  sh_color, sh_text = "#f59e0b", "▴ dog"
             st.markdown(f"<div style='font-size:9px;font-weight:700;color:{sh_color};text-align:center;margin-top:-6px;'>{sh_text}</div>", unsafe_allow_html=True)
