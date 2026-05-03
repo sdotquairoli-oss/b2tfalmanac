@@ -4040,6 +4040,44 @@ def render_syndicate_board(league_key):
                 st.session_state[f"{lk}.expanded_{ri}"] = not is_expanded
                 st.rerun()
 
+            exp_label = "▼ Hide" if is_expanded else "▶ Expand"
+            if st.button(exp_label, key=f"{lk}.expand_{ri}", use_container_width=True):
+                st.session_state[f"{lk}.expanded_{ri}"] = not is_expanded
+                st.rerun()
+
+            # 💡 ALT LINE SUGGESTIONS — only shows on PASS
+            if vote == "PASS":
+                thresh = PASS_THRESHOLDS.get(s_col, 0.5)
+                alt_over_1  = round(proj - thresh - 0.5, 1)
+                alt_over_2  = round(proj - thresh - 1.0, 1)
+                alt_under_1 = round(proj + thresh + 0.5, 1)
+                alt_under_2 = round(proj + thresh + 1.0, 1)
+                st.markdown(f"""
+                <div style="background:#0f172a;border:1px solid #334155;border-left:3px solid #00E5FF;
+                     border-radius:6px;padding:10px 14px;margin-bottom:8px;">
+                    <div style="font-size:10px;font-weight:700;color:#00E5FF;letter-spacing:.8px;
+                         text-transform:uppercase;margin-bottom:8px;">💡 Alt Line Suggestions</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">
+                        Model projects <span style="color:#00E5FF;font-weight:700;">{proj:.1f}</span> — 
+                        current line <span style="color:#fff;font-weight:700;">{line_val}</span> has no edge. 
+                        Update the line input to one of these and re-run — model will confirm and lock as a
+                        <span style="color:#00E676;font-weight:700;">Machine pick</span>.
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div style="background:#1e293b;border-radius:6px;padding:8px 10px;border:1px solid rgba(0,200,83,0.3);">
+                            <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">🟢 OVER targets</div>
+                            <div style="font-size:14px;font-weight:900;color:#00c853;">OVER {alt_over_1}</div>
+                            <div style="font-size:12px;font-weight:700;color:#00c853;opacity:0.7;">OVER {alt_over_2}</div>
+                        </div>
+                        <div style="background:#1e293b;border-radius:6px;padding:8px 10px;border:1px solid rgba(213,0,0,0.3);">
+                            <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">🔴 UNDER targets</div>
+                            <div style="font-size:14px;font-weight:900;color:#ff5252;">UNDER {alt_under_1}</div>
+                            <div style="font-size:12px;font-weight:700;color:#ff5252;opacity:0.7;">UNDER {alt_under_2}</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
             if is_expanded and result['board']:
                 df_l10 = result.get('df_l10', result['df_ml'].tail(10).reset_index(drop=True))
                 df_ml  = result['df_ml']
