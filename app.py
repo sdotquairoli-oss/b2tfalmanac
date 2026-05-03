@@ -3430,24 +3430,32 @@ def render_syndicate_board(league_key):
         padding: 0 !important;
     }
 
-    /* Force the label to center just the text with no leftover space */
+    /* 4. Force the label to align the emojis perfectly */
     div[data-testid="stRadio"] div[role="radiogroup"] label {
-        width: 80px !important;    
+        width: 88px !important; /* Slightly widened to accommodate the text */
         height: 30px !important;
-        flex: none !important;     
+        flex: none !important;
         display: flex !important;
         flex-direction: row !important;
-        justify-content: center !important;
+        justify-content: flex-start !important; /* 💥 Forces emojis to form a perfect vertical line */
+        padding-left: 12px !important;          /* 💥 Pushes the aligned block into the center of the pill */
         align-items: center !important;
         background-color: transparent !important;
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 8px !important;
-        padding: 0 !important;
         margin: 0 !important;
         cursor: pointer !important;
     }
 
+    /* 💥 Revert font size to original and lock margins */
+    div[data-testid="stRadio"] div[role="radiogroup"] label p {
+        font-size: 11px !important; 
+        font-weight: 700 !important;
+        color: #94a3b8 !important; /* Base unselected color */
+        margin: 0 !important;
+        padding: 0 !important;
+    }
     /* 5. Option 1 (🟢 Rested) - GREEN TINT */
     div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
