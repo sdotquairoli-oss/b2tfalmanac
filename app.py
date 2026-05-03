@@ -3892,6 +3892,8 @@ def render_syndicate_board(league_key):
                     "s_avg": round(float(df_stat[s_col].mean()), 1),
                     "l10_avg": round(float(df_l10[s_col].mean()), 1),
                     "l5_avg_val": round(float(df_ml.tail(5)[s_col].mean()), 1),
+                    "opp_pitcher_name": opp_pitcher_name,
+                    "opp_pitcher_era": opp_pitcher_era,
                 })
 
             pb.empty()
@@ -3913,9 +3915,24 @@ def render_syndicate_board(league_key):
         current_split_mod = first.get('current_split_mod', 1.0)
         fatigue_desc = first.get('fatigue_desc', '')
         player_team = target_player.split('(')[1].replace(')', '').strip() if '(' in target_player else opp
+        opp_pitcher_name = first.get('opp_pitcher_name')
+        opp_pitcher_era  = first.get('opp_pitcher_era')
 
         def_color = "#ff5252" if mod_val <= 0.93 else ("#00c853" if mod_val >= 1.07 else "#FFD700")
         def_label = "Elite Def (-10%)" if mod_val <= 0.90 else ("Weak Def (+10%)" if mod_val >= 1.10 else "Average (Neutral)")
+
+        pitcher_box = ""
+        if league_key == "MLB" and opp_pitcher_name and opp_pitcher_name != "TBD":
+            era_str   = f"{opp_pitcher_era:.2f} ERA" if opp_pitcher_era else "ERA N/A"
+            era_color = "#ff5252" if (opp_pitcher_era and opp_pitcher_era <= 3.30) else ("#00c853" if (opp_pitcher_era and opp_pitcher_era >= 4.50) else "#FFD700")
+            pitcher_box = f"""
+            <div style="background:#0f172a;border-radius:6px;padding:8px 10px;">
+                <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:3px;">Starting Pitcher</div>
+                <div style="font-size:11px;font-weight:700;color:#f8fafc;">{opp_pitcher_name}</div>
+                <div style="font-size:11px;font-weight:700;color:{era_color};">{era_str}</div>
+            </div>"""
+
+        grid_cols = "1fr 1fr 1fr 1fr 1fr" if pitcher_box else "1fr 1fr 1fr 1fr"
 
         st.markdown(f"""
         <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px;margin-bottom:12px;">
@@ -3926,7 +3943,7 @@ def render_syndicate_board(league_key):
                 <img src='{get_team_logo(league_key, opp)}' width='22' style='vertical-align:middle;margin-left:4px;'>
                 <span style="margin-left:auto;font-size:10px;color:#94a3b8;font-style:italic;">Applies to all stats below</span>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
+            <div style="display:grid;grid-template-columns:{grid_cols};gap:8px;">
                 <div style="background:#0f172a;border-radius:6px;padding:8px 10px;">
                     <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:3px;">AI Archetype</div>
                     <div style="font-size:11px;font-weight:700;color:#00E676;">{archetype}</div>
@@ -3943,6 +3960,7 @@ def render_syndicate_board(league_key):
                     <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:3px;">Energy</div>
                     <div style="font-size:12px;font-weight:700;color:#f8fafc;">{fatigue_desc.split("(")[0].strip() if "(" in fatigue_desc else fatigue_desc}</div>
                 </div>
+                {pitcher_box}
             </div>
         </div>
         """, unsafe_allow_html=True)
