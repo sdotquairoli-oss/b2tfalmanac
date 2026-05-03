@@ -3776,7 +3776,6 @@ def render_syndicate_board(league_key):
             st.session_state[f"{lk}.stat_results"] = []
             st.rerun()
 
-    # --- ANALYSIS ENGINE ---
     if analyze_all and target_player and queued_stats:
         with st.spinner(f"Pulling data for {target_player}..."):
             if league_key == "NBA":   df, status_code, fetch_errors = get_nba_stats(target_player)
@@ -3789,34 +3788,39 @@ def render_syndicate_board(league_key):
         elif df.empty:
             st.error(f"⚠️ No data found for {target_player}."); st.stop()
         else:
+            # ── PRE-FETCH EVERYTHING ONCE BEFORE THE LOOP ──────────
+            suppressed     = get_suppressed_stats(league_key)
+            current_ledger = load_ledger()
+            liq_bal        = get_liquid_balance()
+            graded_counts  = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
+            ledger_hash    = str(hash(str(sorted(graded_counts.items()))))
+            COMBO_STATS    = {"PRA", "PR", "PA", "RA", "HRR"}
+
+            # Pre-fetch pitcher once for MLB
             opp_pitcher_era, opp_pitcher_name = None, None
             if league_key == "MLB" and sched:
                 for g in sched:
                     if g['home'] == opp and not is_home_current:
                         opp_pitcher_name = g.get('home_pitcher')
-                        opp_pitcher_era = get_pitcher_era(g.get('home_pitcher_id'))
+                        opp_pitcher_era  = get_pitcher_era(g.get('home_pitcher_id'))
                         break
                     elif g['away'] == opp and is_home_current:
                         opp_pitcher_name = g.get('away_pitcher')
-                        opp_pitcher_era = get_pitcher_era(g.get('away_pitcher_id'))
+                        opp_pitcher_era  = get_pitcher_era(g.get('away_pitcher_id'))
                         break
+            # ───────────────────────────────────────────────────────
 
-            suppressed = get_suppressed_stats(league_key)
             new_results = []
             pb = st.progress(0, text="Analyzing stats...")
-            current_ledger = load_ledger()
-            graded_counts = current_ledger[current_ledger['Result'].isin(['Win','Loss'])].groupby(['Stat','Vote','League']).size().to_dict()
-            ledger_hash = str(hash(str(sorted(graded_counts.items()))))
-            COMBO_STATS = {"PRA", "PR", "PA", "RA", "HRR"}
 
             for qi, qs in enumerate(queued_stats):
                 stat_type = qs['stat_type']
-                line = qs['line']
-                odds = qs['odds']
+                line      = qs['line']
+                odds      = qs['odds']
                 pb.progress((qi + 1) / len(queued_stats), text=f"Analyzing {stat_type}...")
 
                 df_stat = df.copy()
-                s_col = S_MAP.get(stat_type, "PTS")
+                s_col   = S_MAP.get(stat_type, "PTS")
 
                 if league_key == "NBA":
                     if s_col == "A": s_col = "AST"
@@ -3851,14 +3855,14 @@ def render_syndicate_board(league_key):
                     continue
 
                 # Game script modifier
-                spread_val = st.session_state.get(f"{lk}.spread", 0.0)
+                spread_val     = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
                 if abs(spread_val) >= 10.0: blowout_penalty = 0.80
                 elif abs(spread_val) >= 6.5: blowout_penalty = 0.90
                 final_consensus = raw_consensus * blowout_penalty
 
                 # Skynet
-                skynet_data = apply_skynet(raw_vote, stat_type, league_key)
+                skynet_data     = apply_skynet(raw_vote, stat_type, league_key)
                 final_consensus = final_consensus * skynet_data["mod"]
 
                 # Injury boost
@@ -3877,20 +3881,19 @@ def render_syndicate_board(league_key):
                 df_ml['Residual'] = df_ml[s_col] - df_ml.get('AI_Proj', pd.Series([c_proj] * len(df_ml)))
                 residual_std = df_ml['Residual'].std()
                 if np.isnan(residual_std) or residual_std == 0: residual_std = max(df_ml[s_col].std(), 1.0)
-                sims = np.random.normal(loc=c_proj, scale=residual_std * (1.40 if s_col in COMBO_STATS else 1.0), size=5000)
+                sims     = np.random.normal(loc=c_proj, scale=residual_std * (1.40 if s_col in COMBO_STATS else 1.0), size=5000)
                 win_prob = np.sum(sims > line) / 5000.0 if c_vote == "OVER" else (np.sum(sims < line) / 5000.0 if c_vote == "UNDER" else 0.50)
 
                 implied_prob = abs(odds) / (abs(odds) + 100) if odds < 0 else 100 / (odds + 100)
-                profit = 100 / (abs(odds) / 100) if odds < 0 else odds
-                b_odds = 100 / abs(odds) if odds < 0 else odds / 100
-                ev_dollars = (win_prob * profit) - ((1 - win_prob) * 100)
-                edge_pct = (win_prob - implied_prob) * 100
+                profit       = 100 / (abs(odds) / 100) if odds < 0 else odds
+                b_odds       = 100 / abs(odds) if odds < 0 else odds / 100
+                ev_dollars   = (win_prob * profit) - ((1 - win_prob) * 100)
+                edge_pct     = (win_prob - implied_prob) * 100
 
-                liq_bal = get_liquid_balance()
-                kelly_pct = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
-                rec_stake = liq_bal * (kelly_pct * 0.5)
+                kelly_pct  = max(0.0, (b_odds * win_prob - (1 - win_prob)) / b_odds) if b_odds > 0 else 0.0
+                rec_stake  = liq_bal * (kelly_pct * 0.5)
 
-                votes = [m['vote'] for m in board]
+                votes       = [m['vote'] for m in board]
                 agree_count = max(votes.count("OVER"), votes.count("UNDER"), votes.count("PASS"))
                 if agree_count < 4:
                     c_vote = "PASS"; c_color = "#94a3b8"; rec_stake = 0.0
@@ -3900,7 +3903,7 @@ def render_syndicate_board(league_key):
                     c_vote = "SUPPRESSED"; c_color = "#ff0055"; rec_stake = 0.0
 
                 setup_score = calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type)
-                df_l10 = df_ml.tail(10).reset_index(drop=True)
+                df_l10      = df_ml.tail(10).reset_index(drop=True)
 
                 new_results.append({
                     "stat_type": stat_type, "s_col": s_col, "line": line, "odds": odds,
@@ -3913,13 +3916,12 @@ def render_syndicate_board(league_key):
                     "fatigue_desc": fatigue_desc, "skynet_msg": skynet_data["msg"],
                     "skynet_color": skynet_data["color"], "agree_count": agree_count,
                     "implied_prob": implied_prob, "opp": opp,
+                    "opp_pitcher_name": opp_pitcher_name, "opp_pitcher_era": opp_pitcher_era,
                     "l10_hits": int((df_l10[s_col] >= line).sum()),
                     "l5_hits": int((df_ml.tail(5)[s_col] >= line).sum()),
                     "s_avg": round(float(df_stat[s_col].mean()), 1),
                     "l10_avg": round(float(df_l10[s_col].mean()), 1),
                     "l5_avg_val": round(float(df_ml.tail(5)[s_col].mean()), 1),
-                    "opp_pitcher_name": opp_pitcher_name,
-                    "opp_pitcher_era": opp_pitcher_era,
                 })
 
             pb.empty()
