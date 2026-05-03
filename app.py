@@ -3424,17 +3424,28 @@ def render_syndicate_board(league_key):
     /* 💥 THE ACTUAL NUKE: Safely kill the radio circle without touching the text */
     div[data-testid="stRadio"] div[role="radiogroup"] label > div:not(:has(p)) {
         display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
 
-    /* 4. Center the text and format font (FIXED MISSING SELECTOR) */
-    div[data-testid="stRadio"] div[role="radiogroup"] label p {
-        color: #94a3b8 !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
+    /* Force the label to center just the text with no leftover space */
+    div[data-testid="stRadio"] div[role="radiogroup"] label {
+        width: 80px !important;    
+        height: 30px !important;
+        flex: none !important;     
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: center !important;
+        align-items: center !important;
+        background-color: transparent !important;
+        border: 1px solid transparent !important;
+        transition: all 0.2s ease-in-out !important;
+        border-radius: 8px !important;
+        padding: 0 !important;
         margin: 0 !important;
-        text-align: center !important;
-        width: 100% !important;
-        white-space: nowrap !important; /* 💥 FORCES TEXT TO STAY ON ONE LINE */
+        cursor: pointer !important;
     }
 
     /* 5. Option 1 (🟢 Rested) - GREEN TINT */
