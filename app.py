@@ -4040,11 +4040,6 @@ def render_syndicate_board(league_key):
                 st.session_state[f"{lk}.expanded_{ri}"] = not is_expanded
                 st.rerun()
 
-            exp_label = "▼ Hide" if is_expanded else "▶ Expand"
-            if st.button(exp_label, key=f"{lk}.expand_{ri}", use_container_width=True):
-                st.session_state[f"{lk}.expanded_{ri}"] = not is_expanded
-                st.rerun()
-
             # 💡 ALT LINE SUGGESTIONS — only shows on PASS
             if vote == "PASS":
                 thresh = PASS_THRESHOLDS.get(s_col, 0.5)
