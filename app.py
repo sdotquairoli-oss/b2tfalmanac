@@ -2955,6 +2955,8 @@ def run_mlb_heaters(stat_choice="Hits"):
                 if g['home'] == team_abbr: opp = g['away']; is_home = True; break
                 elif g['away'] == team_abbr: opp = g['home']; is_home = False; break
             ai_proj = 0.0
+            pitcher_era  = None
+            pitcher_name = None
             matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
             df, status, _ = get_mlb_stats(player_name)
             if status != 429 and not df.empty and len(df) >= 5:
@@ -2963,12 +2965,29 @@ def run_mlb_heaters(stat_choice="Hits"):
                 days_out = (today_est - last_played).days
                 if days_out >= 6: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                 dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
+                for g in sched:
+                    if g['home'] == team_abbr:
+                        pitcher_name = g.get('away_pitcher')
+                        pitcher_era  = get_pitcher_era(g.get('away_pitcher_id'))
+                        break
+                    elif g['away'] == team_abbr:
+                        pitcher_name = g.get('home_pitcher')
+                        pitcher_era  = get_pitcher_era(g.get('home_pitcher_id'))
+                        break
                 _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
-                    df, s_col, 0.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice, df_hash=dh
+                    df, s_col, 0.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice,
+                    df_hash=dh, opp_pitcher_era=pitcher_era, opp_pitcher_name=pitcher_name
                 )
                 ai_proj = round(c_proj, 2)
             time.sleep(0.2)
-            heaters.append({"Player": player_name, "Team": team_abbr, "Season Stat": season_val, "AI Proj": ai_proj, "Status": matchup_status})
+            heaters.append({
+                "Player":      player_name,
+                "Team":        team_abbr,
+                "Season Stat": season_val,
+                "AI Proj":     ai_proj,
+                "Status":      matchup_status,
+                "Pitcher":     f"{pitcher_name} ({pitcher_era:.2f} ERA)" if pitcher_name and pitcher_era else pitcher_name or "TBD"
+            })
         if not heaters: return None, f"No top {stat_choice} leaders playing today."
         return pd.DataFrame(heaters), f"✅ Deep Scan Complete: MLB {stat_choice} Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
@@ -3045,7 +3064,14 @@ def render_league_scanners(league_name):
         if f'{lk}.radar.heaters' in st.session_state:
             df_radar = st.session_state[f'{lk}.radar.heaters']
             st.dataframe(df_radar, use_container_width=True, hide_index=True,
-                column_config={"Player": st.column_config.TextColumn("🔥 Player", width="medium"), "Team": st.column_config.TextColumn("🛡️ Team", width="small"), "Season Stat": st.column_config.NumberColumn("🎯 Season Avg", format="%.1f", width="small"), "AI Proj": st.column_config.NumberColumn("🤖 AI Proj", format="%.1f", width="small"), "Status": st.column_config.TextColumn("⚡ Matchup", width="medium")})
+                column_config={
+                    "Player": st.column_config.TextColumn("🔥 Player", width="medium"),
+                    "Team": st.column_config.TextColumn("🛡️ Team", width="small"),
+                    "Season Stat": st.column_config.NumberColumn("🎯 Season Avg", format="%.1f", width="small"),
+                    "AI Proj": st.column_config.NumberColumn("🤖 AI Proj", format="%.1f", width="small"),
+                    "Status": st.column_config.TextColumn("⚡ Matchup", width="medium"),
+                    "Pitcher": st.column_config.TextColumn("⚾ Pitcher", width="medium")
+                })
             if 'Player' in df_radar.columns:
                 st.markdown("#### ⚡ Fast-Track to Analyzer")
                 ft_c1, ft_c2 = st.columns([3, 1])
