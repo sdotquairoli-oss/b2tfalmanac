@@ -4008,10 +4008,7 @@ def render_syndicate_board(league_key):
                 <div style="background:#0f172a;border-radius:6px;padding:8px 10px;">
                     <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:3px;">Energy</div>
                     <div style="font-size:12px;font-weight:700;color:#f8fafc;">{fatigue_desc.split("(")[0].strip() if "(" in fatigue_desc else fatigue_desc}</div>
-                </div>
-                {pitcher_box}
-            </div>
-        </div>
+                </div>{pitcher_box}</div></div>
         """, unsafe_allow_html=True)
 
         # RESULT CARDS
