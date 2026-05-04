@@ -3967,6 +3967,8 @@ def render_syndicate_board(league_key):
 
         def_color = "#ff5252" if mod_val <= 0.93 else ("#00c853" if mod_val >= 1.07 else "#FFD700")
         def_label = "Elite Def (-10%)" if mod_val <= 0.90 else ("Weak Def (+10%)" if mod_val >= 1.10 else "Average (Neutral)")
+        import html
+        archetype_safe = html.escape(str(archetype)) if archetype else "Unknown Profile"
 
         pitcher_box = ""
         if league_key == "MLB" and opp_pitcher_name and opp_pitcher_name != "TBD":
@@ -3993,7 +3995,7 @@ def render_syndicate_board(league_key):
             <div style="display:grid;grid-template-columns:{grid_cols};gap:8px;">
                 <div style="background:#0f172a;border-radius:6px;padding:8px 10px;">
                     <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:3px;">AI Archetype</div>
-                    <div style="font-size:11px;font-weight:700;color:#00E676;">{archetype}</div>
+                    <div style="font-size:11px;font-weight:700;color:#00E676;">{archetype_safe}</div>
                 </div>
                 <div style="background:#0f172a;border-radius:6px;padding:8px 10px;">
                     <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.7px;text-transform:uppercase;margin-bottom:3px;">Defense vs {opp}</div>
