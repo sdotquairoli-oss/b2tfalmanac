@@ -4099,11 +4099,16 @@ def render_syndicate_board(league_key):
                 vs_opp_hits  = result.get('vs_opp_hits', 0)
                 vs_opp_games = result.get('vs_opp_games', 0)
                 vs_opp_str   = f"{vs_opp_hits}/{vs_opp_games}" if vs_opp_games > 0 else "N/A"
-                vs_opp_color = "#00c853" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games >= 0.6 else ("#ff5252" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games <= 0.4 else "#94a3b8")
+                vs_opp_color = "#00c853" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games >= 0.6 else ("#ff5252" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games <= 0.4 else "#FFD700")
+
+                # 3-color system for L10
+                l10_rate = l10_hits / 10
+                l10_color = "#00c853" if l10_rate >= 0.6 else ("#ff5252" if l10_rate <= 0.4 else "#FFD700")
+
                 st.markdown(f"""
                 <div style='text-align:center;padding-top:2px;display:flex;justify-content:center;gap:12px;align-items:flex-start;'>
                     <div>
-                        <div style='font-size:14px;font-weight:900;color:#94a3b8;'>{l10_hits}/10</div>
+                        <div style='font-size:14px;font-weight:900;color:{l10_color};'>{l10_hits}/10</div>
                         <div style='font-size:9px;color:#94a3b8;'>L10</div>
                     </div>
                     <div style='width:1px;background:#334155;height:32px;margin-top:2px;'></div>
