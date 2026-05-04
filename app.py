@@ -4101,11 +4101,16 @@ def render_syndicate_board(league_key):
                 vs_opp_str   = f"{vs_opp_hits}/{vs_opp_games}" if vs_opp_games > 0 else "N/A"
                 vs_opp_color = "#00c853" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games >= 0.6 else ("#ff5252" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games <= 0.4 else "#94a3b8")
                 st.markdown(f"""
-                <div style='text-align:center;padding-top:2px;'>
-                    <div style='font-size:14px;font-weight:900;color:#94a3b8;'>{l10_hits}/10</div>
-                    <div style='font-size:9px;color:#94a3b8;'>L10 hit rate</div>
-                    <div style='font-size:12px;font-weight:900;color:{vs_opp_color};margin-top:3px;'>{vs_opp_str}</div>
-                    <div style='font-size:9px;color:#94a3b8;'>vs {opp}</div>
+                <div style='text-align:center;padding-top:2px;display:flex;justify-content:center;gap:12px;align-items:flex-start;'>
+                    <div>
+                        <div style='font-size:14px;font-weight:900;color:#94a3b8;'>{l10_hits}/10</div>
+                        <div style='font-size:9px;color:#94a3b8;'>L10</div>
+                    </div>
+                    <div style='width:1px;background:#334155;height:32px;margin-top:2px;'></div>
+                    <div>
+                        <div style='font-size:14px;font-weight:900;color:{vs_opp_color};'>{vs_opp_str}</div>
+                        <div style='font-size:9px;color:#94a3b8;'>vs {opp}</div>
+                    </div>
                 </div>""", unsafe_allow_html=True)
 
             with rh_c5:
