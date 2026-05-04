@@ -3937,6 +3937,8 @@ def render_syndicate_board(league_key):
                     "implied_prob": implied_prob, "opp": opp,
                     "opp_pitcher_name": opp_pitcher_name, "opp_pitcher_era": opp_pitcher_era,
                     "l10_hits": int((df_l10[s_col] >= line).sum()),
+                    "vs_opp_hits": int((df_ml[df_ml['MATCHUP'] == opp][s_col] >= line).sum()),
+                    "vs_opp_games": int((df_ml['MATCHUP'] == opp).sum()),
                     "l5_hits": int((df_ml.tail(5)[s_col] >= line).sum()),
                     "s_avg": round(float(df_stat[s_col].mean()), 1),
                     "l10_avg": round(float(df_l10[s_col].mean()), 1),
@@ -4094,7 +4096,17 @@ def render_syndicate_board(league_key):
                 st.markdown(f"<div style='text-align:center;padding-top:2px;'><div style='font-size:14px;font-weight:900;color:#00E5FF;'>{stake_str}</div><div style='font-size:9px;color:#94a3b8;'>stake</div></div>", unsafe_allow_html=True)
 
             with rh_c4:
-                st.markdown(f"<div style='text-align:center;padding-top:2px;'><div style='font-size:14px;font-weight:900;color:#94a3b8;'>{l10_hits}/10</div><div style='font-size:9px;color:#94a3b8;'>hit rate</div></div>", unsafe_allow_html=True)
+                vs_opp_hits  = result.get('vs_opp_hits', 0)
+                vs_opp_games = result.get('vs_opp_games', 0)
+                vs_opp_str   = f"{vs_opp_hits}/{vs_opp_games}" if vs_opp_games > 0 else "N/A"
+                vs_opp_color = "#00c853" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games >= 0.6 else ("#ff5252" if vs_opp_games > 0 and vs_opp_hits / vs_opp_games <= 0.4 else "#94a3b8")
+                st.markdown(f"""
+                <div style='text-align:center;padding-top:2px;'>
+                    <div style='font-size:14px;font-weight:900;color:#94a3b8;'>{l10_hits}/10</div>
+                    <div style='font-size:9px;color:#94a3b8;'>L10 hit rate</div>
+                    <div style='font-size:12px;font-weight:900;color:{vs_opp_color};margin-top:3px;'>{vs_opp_str}</div>
+                    <div style='font-size:9px;color:#94a3b8;'>vs {opp}</div>
+                </div>""", unsafe_allow_html=True)
 
             with rh_c5:
                 st.markdown(f"<div style='text-align:center;padding-top:4px;'><div style='font-size:11px;font-weight:900;padding:5px 6px;border-radius:4px;background:rgba({'0,200,83' if vote=='OVER' else ('213,0,0' if vote=='UNDER' else '148,163,184')},0.2);color:{vote_color};'>{vote}</div></div>", unsafe_allow_html=True)
