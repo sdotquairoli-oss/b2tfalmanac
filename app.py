@@ -1685,10 +1685,24 @@ def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
 
 def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, tonight_def_mod):
     y = df_ml[s_col].fillna(0).clip(lower=0).values
-
     df_ml['Rest_Days'] = df_ml['ValidDate'].diff().dt.days.fillna(3.0).clip(0, 7)
-    expected_mins = df_ml['MINS'].tail(5).mean()
-    mins_std = df_ml['MINS'].tail(10).std()
+    expected_mins   = df_ml['MINS'].tail(5).mean()
+    season_avg_mins = df_ml['MINS'].mean()
+    roll3_mins      = df_ml['MINS'].tail(3).mean()
+    mins_std        = df_ml['MINS'].tail(10).std()
+    mins_floor_note    = ""
+    mins_trend_warning = ""
+
+    if pd.notna(roll3_mins) and pd.notna(season_avg_mins) and season_avg_mins > 0:
+        mins_drop_pct = (season_avg_mins - roll3_mins) / season_avg_mins
+        if mins_drop_pct >= 0.15:
+            throttle_factor    = max(1.0 - (mins_drop_pct * 0.5), 0.75)
+            expected_mins      = expected_mins * throttle_factor
+            mins_trend_warning = (
+                f"⚠️ <b>MINUTES TREND ALERT:</b> L3 avg ({roll3_mins:.1f}m) is "
+                f"{mins_drop_pct*100:.0f}% below season avg ({season_avg_mins:.1f}m). "
+                f"Rotation may be tightening. Expected mins throttled to {expected_mins:.1f}.<br>"
+            )
     if pd.isna(mins_std) or mins_std == 0: mins_std = 2.0
 
     if pd.isna(expected_mins) or expected_mins == 0:
@@ -2381,8 +2395,8 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
     return (trend_proj, stat_proj, con_proj, base_proj,
             poi, rf, xgb, hgbr,
             X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train,
-            expected_mins, mins_std, mins_floor_note)
-    
+            expected_mins, mins_std, mins_floor_note + mins_trend_warning) 
+
 def apply_context_mods(df, s_col, league, opp, rest, is_home_current, archetype):
     mod_val, mod_desc = get_archetype_defense_modifier(league, opp, archetype)
     fatigue_val, fatigue_desc = get_fatigue_modifier(rest)
@@ -2660,7 +2674,8 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     if mins_std >= 4.5: vol_warning += f"⚠️ HIGH VOLATILITY (±{mins_std:.1f}m). Floor: {floor_proj:.1f} | Ceil: {ceil_proj:.1f}.<br>"
     elif mins_std <= 2.5: vol_warning += f"🟢 Stable Rotation (±{mins_std:.1f}m).<br>"
     if mins_floor_note: vol_warning += f"{mins_floor_note}<br>"
-    
+    # Pull minutes trend warning from build_models result
+    # Pass it through mins_floor_note slot since it serves same purpose
     mod_desc = vol_warning + low_sample_warning + f"<br>🎯 <b>{tier_label}</b><br>" + mod_desc
     
     COMBO_STATS = {"PRA", "PR", "PA", "RA", "HRR"}
@@ -3874,11 +3889,12 @@ def render_syndicate_board(league_key):
                     continue
 
                 # Game script modifier
-                spread_val     = st.session_state.get(f"{lk}.spread", 0.0)
+                spread_val      = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
-                if abs(spread_val) >= 10.0: blowout_penalty = 0.80
-                elif abs(spread_val) >= 6.5: blowout_penalty = 0.90
-                final_consensus = raw_consensus * blowout_penalty
+                if abs(spread_val) >= 14.0:   blowout_penalty = 0.70   # Massacre territory
+                elif abs(spread_val) >= 10.0: blowout_penalty = 0.78   # Heavy dog
+                elif abs(spread_val) >= 7.5:  blowout_penalty = 0.85   # Significant dog
+                elif abs(spread_val) >= 6.5:  blowout_penalty = 0.88   # Raised from 0.90
 
                 # Skynet
                 skynet_data     = apply_skynet(raw_vote, stat_type, league_key)
