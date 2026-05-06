@@ -4526,17 +4526,36 @@ with t_parlay:
                 def_prob = min(99.9, c_prob * 100) if selected_picks else 55.0
 
                 with st.expander("📘 Open Bankroll Advisor (Calculate Bet Size)", expanded=False):
-                    liq_bal = get_liquid_balance()
-                    st.markdown(f"**Live Bankroll:** ${liq_bal:.2f}")
-                    if "Micro" in st.radio("Select Strategy", ["🔥 Micro-Aggressor (Tiered)", "🤖 True Kelly (AI Math)"], horizontal=True, label_visibility="collapsed", key="parlay_strat"):
-                        s_rec, p_rec = (5.0, 2.0) if liq_bal < 100 else ((10.0, 4.0) if liq_bal <= 200 else ((15.0, 5.0) if liq_bal <= 500 else (liq_bal * 0.03, liq_bal * 0.01)))
-                        st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #ff0055; margin-top: 10px;"><div style="display: flex; justify-content: space-around; text-align: center;"><div><div style="font-size: 12px; color: #94a3b8;">Standard Single Wager</div><div style="font-size: 24px; font-weight: 900; color: #ff0055;">${s_rec:.2f}</div></div><div><div style="font-size: 12px; color: #94a3b8;">Standard Parlay Risk</div><div style="font-size: 24px; font-weight: 900; color: #00E5FF;">${p_rec:.2f}</div></div></div></div>""", unsafe_allow_html=True)
-                    else:
-                        kc1, kc2 = st.columns(2)
-                        k_prob, k_odds = kc1.number_input("Est. Win Prob (%)", min_value=0.1, max_value=99.9, value=float(def_prob), step=1.0, key="parlay_kprob"), kc2.number_input("Bet Odds", value=true_american, step=10, key="parlay_kodds")
-                        win_prob_dec, b_odds = k_prob / 100.0, (100 / abs(k_odds)) if k_odds < 0 else (k_odds / 100)
-                        s_rec = liq_bal * (max(0.0, (b_odds * win_prob_dec - (1 - win_prob_dec)) / b_odds if b_odds > 0 else 0) * 0.5)
-                        st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E676; margin-top: 10px; text-align: center;"><div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div><div style="font-size: 24px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div></div>""", unsafe_allow_html=True)
+    liq_bal = get_liquid_balance()
+    st.markdown(f"**Live Bankroll:** ${liq_bal:.2f}")
+    
+    strat = st.radio("Select Strategy", ["🔥 Micro-Aggressor (Tiered)", "🤖 True Kelly (AI Math)"], horizontal=True, label_visibility="collapsed", key="parlay_strat")
+    st.markdown("---")
+    
+    if "Micro" in strat:
+        s_rec, p_rec = (5.0, 2.0) if liq_bal < 100 else ((10.0, 4.0) if liq_bal <= 200 else ((15.0, 5.0) if liq_bal <= 500 else (liq_bal * 0.03, liq_bal * 0.01)))
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #ff0055; text-align:center;">
+                <div style="font-size: 12px; color: #94a3b8;">Standard Single Wager</div>
+                <div style="font-size: 28px; font-weight: 900; color: #ff0055;">${s_rec:.2f}</div>
+            </div>""", unsafe_allow_html=True)
+        with mc2:
+            st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E5FF; text-align:center;">
+                <div style="font-size: 12px; color: #94a3b8;">Standard Parlay Risk</div>
+                <div style="font-size: 28px; font-weight: 900; color: #00E5FF;">${p_rec:.2f}</div>
+            </div>""", unsafe_allow_html=True)
+    else:
+        kc1, kc2 = st.columns(2)
+        k_prob = kc1.number_input("Est. Win Prob (%)", min_value=0.1, max_value=99.9, value=float(def_prob), step=1.0, key="parlay_kprob")
+        k_odds = kc2.number_input("Bet Odds", value=true_american, step=10, key="parlay_kodds")
+        win_prob_dec = k_prob / 100.0
+        b_odds = (100 / abs(k_odds)) if k_odds < 0 else (k_odds / 100)
+        s_rec = liq_bal * (max(0.0, (b_odds * win_prob_dec - (1 - win_prob_dec)) / b_odds if b_odds > 0 else 0) * 0.5)
+        st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E676; margin-top: 10px; text-align: center;">
+            <div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div>
+            <div style="font-size: 28px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div>
+        </div>""", unsafe_allow_html=True)
 
                 p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
                 with p_col1:
