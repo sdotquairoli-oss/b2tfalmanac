@@ -3393,51 +3393,53 @@ def render_syndicate_board(league_key):
     }
     
     /* ───────────────────────────────────────────────────────── */
-    /* FOOLPROOF GLOWING PILLS (Using hijacked st.radio)         */
+    /* FOOLPROOF GLOWING PILLS (Scoped to the Top Row ONLY!)     */
     /* ───────────────────────────────────────────────────────── */
     
-    /* 1. Force both the widget AND Streamlit's invisible wrapper to 100% width and center */
-    div[data-testid="stElementContainer"]:has(div[data-testid="stRadio"]),
-    div[data-testid="stRadio"] {
+    /* 1. Force both the widget AND Streamlit's wrapper to 100% width and center */
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stElementContainer"]:has(div[data-testid="stRadio"]),
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] {
         display: flex !important;
         flex-direction: column !important;
-        align-items: center !important;    
+        align-items: center !important;
         width: 100% !important;
     }
 
     /* 2. Base track styling (Vertical Traffic Light) */
-    div[data-testid="stRadio"] div[role="radiogroup"] {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] {
         display: flex !important;
         flex-direction: column !important; /* 💥 Stack Vertically */
         justify-content: center !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
-        border-radius: 12px !important; /* 💥 Rounder edges for traffic light */
+        border-radius: 12px !important;
         padding: 4px !important;
         gap: 4px !important;
-        width: fit-content !important; 
+        width: fit-content !important;
         margin: 0 auto !important;
-        height: auto !important; /* 💥 Allows track to stretch and fit all 3 pills */
+        height: auto !important;
     }
 
-    /* 3. Unselected button styling (HARDCODED EQUAL WIDTH & HEIGHT) */
-    div[data-testid="stRadio"] div[role="radiogroup"] label {
-        width: 80px !important;    
-        height: 30px !important;   /* 💥 Fixed height per pill */
-        flex: none !important;     
+    /* 3. Unselected button styling */
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label {
+        width: 88px !important; 
+        height: 30px !important;
+        flex: none !important;
         display: flex !important;
-        justify-content: center !important;
+        flex-direction: row !important;
+        justify-content: flex-start !important; 
+        padding-left: 12px !important;          
         align-items: center !important;
         background-color: transparent !important;
         border: 1px solid transparent !important;
         transition: all 0.2s ease-in-out !important;
         border-radius: 8px !important;
-        padding: 0 !important;
         margin: 0 !important;
         cursor: pointer !important;
     }
+
     /* 💥 THE ACTUAL NUKE: Safely kill the radio circle without touching the text */
-    div[data-testid="stRadio"] div[role="radiogroup"] label > div:not(:has(p)) {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label > div:not(:has(p)) {
         display: none !important;
         width: 0 !important;
         height: 0 !important;
@@ -3445,80 +3447,104 @@ def render_syndicate_board(league_key):
         padding: 0 !important;
     }
 
-    /* 4. Force the label to align the emojis perfectly */
-    div[data-testid="stRadio"] div[role="radiogroup"] label {
-        width: 88px !important; /* Slightly widened to accommodate the text */
-        height: 30px !important;
-        flex: none !important;
-        display: flex !important;
-        flex-direction: row !important;
-        justify-content: flex-start !important; /* 💥 Forces emojis to form a perfect vertical line */
-        padding-left: 12px !important;          /* 💥 Pushes the aligned block into the center of the pill */
-        align-items: center !important;
-        background-color: transparent !important;
-        border: 1px solid transparent !important;
-        transition: all 0.2s ease-in-out !important;
-        border-radius: 8px !important;
-        margin: 0 !important;
-        cursor: pointer !important;
-    }
-
-    /* 💥 Revert font size to original and lock margins */
-    div[data-testid="stRadio"] div[role="radiogroup"] label p {
+    /* 4. Revert font size to original and lock margins */
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label p {
         font-size: 11px !important; 
         font-weight: 700 !important;
-        color: #94a3b8 !important; /* Base unselected color */
+        color: #94a3b8 !important; 
         margin: 0 !important;
         padding: 0 !important;
     }
+
     /* 5. Option 1 (🟢 Rested) - GREEN TINT */
-    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
         box-shadow: 0 0 8px rgba(0, 200, 83, 0.2) !important;
     }
-    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
         color: #00c853 !important;
     }
 
     /* 6. Option 2 (🟡 Tired) - YELLOW TINT */
-    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
         box-shadow: 0 0 8px rgba(245, 158, 11, 0.2) !important;
     }
-    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
         color: #f59e0b !important;
     }
 
     /* 7. Option 3 (🔴 B2B) - RED TINT */
-    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
         background-color: rgba(255, 82, 82, 0.15) !important;
         border: 1px solid rgba(255, 82, 82, 0.4) !important;
         box-shadow: 0 0 8px rgba(255, 82, 82, 0.2) !important;
     }
-    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
-        color: #ff5252 !important;
-    }
-    
-    div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
         color: #ff5252 !important;
     }
 
-    /* 💥 FIX: Align columns to the TOP so the headers share the exact same roof */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
-        align-items: flex-start !important; 
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div {
-        display: flex !important; 
-        flex-direction: column !important; 
-        justify-content: flex-start !important; 
-    }
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] > div {
+    /* ───────────────────────────────────────────────────────── */
+    /* STRATEGY HORIZONTAL PILLS (Bankroll Advisor)              */
+    /* ───────────────────────────────────────────────────────── */
+    
+    /* Target the specific key for the Strategy radio */
+    div.st-key-parlay_strat div[role="radiogroup"] {
         display: flex !important;
-        flex-direction: column !important;
+        flex-direction: row !important; /* 💥 Side by side! */
         justify-content: center !important;
+        background-color: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 8px !important;
+        padding: 4px !important;
+        gap: 8px !important;
+        width: 100% !important;
+    }
+
+    div.st-key-parlay_strat div[role="radiogroup"] label {
+        flex: 1 !important;
+        height: 36px !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        background-color: transparent !important;
+        border-radius: 6px !important;
+        margin: 0 !important;
+        padding: 0 10px !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+    }
+
+    /* Nuke the circles */
+    div.st-key-parlay_strat div[role="radiogroup"] label > div:not(:has(p)) {
+        display: none !important;
+    }
+
+    div.st-key-parlay_strat div[role="radiogroup"] label p {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        color: #94a3b8 !important;
+        margin: 0 !important;
+    }
+
+    /* Active State (Micro-Aggressor) */
+    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
+        background-color: rgba(255, 0, 85, 0.15) !important;
+        border: 1px solid rgba(255, 0, 85, 0.4) !important;
+    }
+    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
+        color: #ff0055 !important;
+    }
+
+    /* Active State (True Kelly) */
+    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
+        background-color: rgba(0, 229, 255, 0.15) !important;
+        border: 1px solid rgba(0, 229, 255, 0.4) !important;
+    }
+    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
+        color: #00E5FF !important;
     }
     /* ───────────────────────────────────────────────────────── */
     /* BULLETPROOF HORIZONTAL CENTERING (Toggles, Checkbox, Spread)*/
