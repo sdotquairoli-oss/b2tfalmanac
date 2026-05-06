@@ -4556,17 +4556,6 @@ with t_parlay:
                             <div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div>
                             <div style="font-size: 28px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div>
                         </div>""", unsafe_allow_html=True)
-                    else:
-                        kc1, kc2 = st.columns(2)
-                        k_prob = kc1.number_input("Est. Win Prob (%)", min_value=0.1, max_value=99.9, value=float(def_prob), step=1.0, key="parlay_kprob")
-                        k_odds = kc2.number_input("Bet Odds", value=true_american, step=10, key="parlay_kodds")
-                        win_prob_dec = k_prob / 100.0
-                        b_odds = (100 / abs(k_odds)) if k_odds < 0 else (k_odds / 100)
-                        s_rec = liq_bal * (max(0.0, (b_odds * win_prob_dec - (1 - win_prob_dec)) / b_odds if b_odds > 0 else 0) * 0.5)
-                        st.markdown(f"""<div style="background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00E676; margin-top: 10px; text-align: center;">
-                            <div style="font-size: 12px; color: #94a3b8;">Recommended Kelly Stake (Half-Kelly)</div>
-                            <div style="font-size: 28px; font-weight: 900; color: #00E676;">${s_rec:.2f}</div>
-                        </div>""", unsafe_allow_html=True)
 
                 p_col1, p_col2, p_col3, p_col4 = st.columns([2.5, 1, 1, 1.5])
                 with p_col1:
