@@ -3891,10 +3891,12 @@ def render_syndicate_board(league_key):
                 # Game script modifier
                 spread_val      = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
-                if abs(spread_val) >= 14.0:   blowout_penalty = 0.70   # Massacre territory
-                elif abs(spread_val) >= 10.0: blowout_penalty = 0.78   # Heavy dog
-                elif abs(spread_val) >= 7.5:  blowout_penalty = 0.85   # Significant dog
-                elif abs(spread_val) >= 6.5:  blowout_penalty = 0.88   # Raised from 0.90
+                if abs(spread_val) >= 14.0:   blowout_penalty = 0.70
+                elif abs(spread_val) >= 10.0: blowout_penalty = 0.78
+                elif abs(spread_val) >= 7.5:  blowout_penalty = 0.85
+                elif abs(spread_val) >= 6.5:  blowout_penalty = 0.88
+
+                final_consensus = raw_consensus * blowout_penalty
 
                 # Skynet
                 skynet_data     = apply_skynet(raw_vote, stat_type, league_key)
