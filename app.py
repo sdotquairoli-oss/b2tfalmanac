@@ -3393,12 +3393,11 @@ def render_syndicate_board(league_key):
     }
     
     /* ───────────────────────────────────────────────────────── */
-    /* FOOLPROOF GLOWING PILLS (Scoped to the Top Row ONLY!)     */
+    /* FOOLPROOF GLOWING PILLS (Energy Traffic Light ONLY)       */
     /* ───────────────────────────────────────────────────────── */
     
-    /* 1. Force both the widget AND Streamlit's wrapper to 100% width and center */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stElementContainer"]:has(div[data-testid="stRadio"]),
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] {
+    /* 1. Target the exact Streamlit key using a wildcard class match */
+    div[class*="fat_sel"] {
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -3406,7 +3405,7 @@ def render_syndicate_board(league_key):
     }
 
     /* 2. Base track styling (Vertical Traffic Light) */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] {
+    div[class*="fat_sel"] div[role="radiogroup"] {
         display: flex !important;
         flex-direction: column !important; /* 💥 Stack Vertically */
         justify-content: center !important;
@@ -3421,7 +3420,7 @@ def render_syndicate_board(league_key):
     }
 
     /* 3. Unselected button styling */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label {
+    div[class*="fat_sel"] div[role="radiogroup"] label {
         width: 88px !important; 
         height: 30px !important;
         flex: none !important;
@@ -3439,7 +3438,7 @@ def render_syndicate_board(league_key):
     }
 
     /* 💥 THE ACTUAL NUKE: Safely kill the radio circle without touching the text */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label > div:not(:has(p)) {
+    div[class*="fat_sel"] div[role="radiogroup"] label > div:not(:has(p)) {
         display: none !important;
         width: 0 !important;
         height: 0 !important;
@@ -3448,7 +3447,7 @@ def render_syndicate_board(league_key):
     }
 
     /* 4. Revert font size to original and lock margins */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label p {
+    div[class*="fat_sel"] div[role="radiogroup"] label p {
         font-size: 11px !important; 
         font-weight: 700 !important;
         color: #94a3b8 !important; 
@@ -3457,94 +3456,33 @@ def render_syndicate_board(league_key):
     }
 
     /* 5. Option 1 (🟢 Rested) - GREEN TINT */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
+    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
         background-color: rgba(0, 200, 83, 0.15) !important;
         border: 1px solid rgba(0, 200, 83, 0.4) !important;
         box-shadow: 0 0 8px rgba(0, 200, 83, 0.2) !important;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
+    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
         color: #00c853 !important;
     }
 
     /* 6. Option 2 (🟡 Tired) - YELLOW TINT */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
+    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
         background-color: rgba(245, 158, 11, 0.15) !important;
         border: 1px solid rgba(245, 158, 11, 0.4) !important;
         box-shadow: 0 0 8px rgba(245, 158, 11, 0.2) !important;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
+    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
         color: #f59e0b !important;
     }
 
     /* 7. Option 3 (🔴 B2B) - RED TINT */
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
+    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
         background-color: rgba(255, 82, 82, 0.15) !important;
         border: 1px solid rgba(255, 82, 82, 0.4) !important;
         box-shadow: 0 0 8px rgba(255, 82, 82, 0.2) !important;
     }
-    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stRadio"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
+    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
         color: #ff5252 !important;
-    }
-
-    /* ───────────────────────────────────────────────────────── */
-    /* STRATEGY HORIZONTAL PILLS (Bankroll Advisor)              */
-    /* ───────────────────────────────────────────────────────── */
-    
-    /* Target the specific key for the Strategy radio */
-    div.st-key-parlay_strat div[role="radiogroup"] {
-        display: flex !important;
-        flex-direction: row !important; /* 💥 Side by side! */
-        justify-content: center !important;
-        background-color: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-radius: 8px !important;
-        padding: 4px !important;
-        gap: 8px !important;
-        width: 100% !important;
-    }
-
-    div.st-key-parlay_strat div[role="radiogroup"] label {
-        flex: 1 !important;
-        height: 36px !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        background-color: transparent !important;
-        border-radius: 6px !important;
-        margin: 0 !important;
-        padding: 0 10px !important;
-        cursor: pointer !important;
-        transition: all 0.2s ease !important;
-    }
-
-    /* Nuke the circles */
-    div.st-key-parlay_strat div[role="radiogroup"] label > div:not(:has(p)) {
-        display: none !important;
-    }
-
-    div.st-key-parlay_strat div[role="radiogroup"] label p {
-        font-size: 13px !important;
-        font-weight: 700 !important;
-        color: #94a3b8 !important;
-        margin: 0 !important;
-    }
-
-    /* Active State (Micro-Aggressor) */
-    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
-        background-color: rgba(255, 0, 85, 0.15) !important;
-        border: 1px solid rgba(255, 0, 85, 0.4) !important;
-    }
-    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
-        color: #ff0055 !important;
-    }
-
-    /* Active State (True Kelly) */
-    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
-        background-color: rgba(0, 229, 255, 0.15) !important;
-        border: 1px solid rgba(0, 229, 255, 0.4) !important;
-    }
-    div.st-key-parlay_strat div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
-        color: #00E5FF !important;
     }
     /* ───────────────────────────────────────────────────────── */
     /* BULLETPROOF HORIZONTAL CENTERING (Toggles, Checkbox, Spread)*/
