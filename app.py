@@ -3396,18 +3396,18 @@ def render_syndicate_board(league_key):
     /* FOOLPROOF GLOWING PILLS (Energy Traffic Light ONLY)       */
     /* ───────────────────────────────────────────────────────── */
     
-    /* 1. Target the exact Streamlit key using a wildcard class match */
-    div[class*="fat_sel"] {
+    /* 1. Target the Radio Container sitting EXACTLY underneath the anchor */
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[data-testid="stRadio"] {
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
         width: 100% !important;
     }
 
-    /* 2. Base track styling (Vertical Traffic Light) */
-    div[class*="fat_sel"] div[role="radiogroup"] {
+    /* 2. Base track styling */
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] {
         display: flex !important;
-        flex-direction: column !important; /* 💥 Stack Vertically */
+        flex-direction: column !important; 
         justify-content: center !important;
         background-color: #1e293b !important;
         border: 1px solid #334155 !important;
@@ -3416,11 +3416,10 @@ def render_syndicate_board(league_key):
         gap: 4px !important;
         width: fit-content !important;
         margin: 0 auto !important;
-        height: auto !important;
     }
 
     /* 3. Unselected button styling */
-    div[class*="fat_sel"] div[role="radiogroup"] label {
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label {
         width: 88px !important; 
         height: 30px !important;
         flex: none !important;
@@ -3437,53 +3436,36 @@ def render_syndicate_board(league_key):
         cursor: pointer !important;
     }
 
-    /* 💥 THE ACTUAL NUKE: Safely kill the radio circle without touching the text */
-    div[class*="fat_sel"] div[role="radiogroup"] label > div:not(:has(p)) {
+    /* 💥 THE ACTUAL NUKE: Kill the radio circle */
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label > div:not(:has(p)) {
         display: none !important;
-        width: 0 !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
     }
 
-    /* 4. Revert font size to original and lock margins */
-    div[class*="fat_sel"] div[role="radiogroup"] label p {
+    /* 4. Font Reset */
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label p {
         font-size: 11px !important; 
         font-weight: 700 !important;
         color: #94a3b8 !important; 
         margin: 0 !important;
-        padding: 0 !important;
     }
 
     /* 5. Option 1 (🟢 Rested) - GREEN TINT */
-    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
-        background-color: rgba(0, 200, 83, 0.15) !important;
-        border: 1px solid rgba(0, 200, 83, 0.4) !important;
-        box-shadow: 0 0 8px rgba(0, 200, 83, 0.2) !important;
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) {
+        background-color: rgba(0, 200, 83, 0.15) !important; border: 1px solid rgba(0, 200, 83, 0.4) !important;
     }
-    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p {
-        color: #00c853 !important;
-    }
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label:nth-of-type(1):has(input:checked) p { color: #00c853 !important; }
 
     /* 6. Option 2 (🟡 Tired) - YELLOW TINT */
-    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
-        background-color: rgba(245, 158, 11, 0.15) !important;
-        border: 1px solid rgba(245, 158, 11, 0.4) !important;
-        box-shadow: 0 0 8px rgba(245, 158, 11, 0.2) !important;
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) {
+        background-color: rgba(245, 158, 11, 0.15) !important; border: 1px solid rgba(245, 158, 11, 0.4) !important;
     }
-    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p {
-        color: #f59e0b !important;
-    }
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label:nth-of-type(2):has(input:checked) p { color: #f59e0b !important; }
 
     /* 7. Option 3 (🔴 B2B) - RED TINT */
-    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
-        background-color: rgba(255, 82, 82, 0.15) !important;
-        border: 1px solid rgba(255, 82, 82, 0.4) !important;
-        box-shadow: 0 0 8px rgba(255, 82, 82, 0.2) !important;
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) {
+        background-color: rgba(255, 82, 82, 0.15) !important; border: 1px solid rgba(255, 82, 82, 0.4) !important;
     }
-    div[class*="fat_sel"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p {
-        color: #ff5252 !important;
-    }
+    div[data-testid="stElementContainer"]:has(.energy-anchor) + div[data-testid="stElementContainer"] div[role="radiogroup"] label:nth-of-type(3):has(input:checked) p { color: #ff5252 !important; }
     /* ───────────────────────────────────────────────────────── */
     /* BULLETPROOF HORIZONTAL CENTERING (Toggles, Checkbox, Spread)*/
     /* ───────────────────────────────────────────────────────── */
@@ -3666,7 +3648,8 @@ def render_syndicate_board(league_key):
             st.markdown(f"<div style='font-size:11px;font-weight:700;color:{sh_color};text-align:center;margin-top:2px;'>{sh_text}</div>", unsafe_allow_html=True)
 
         with tc5:
-            st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Energy</div>", unsafe_allow_html=True)
+            # 💥 Planted the 'energy-anchor' class in the title div
+            st.markdown("<div class='energy-anchor' style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Energy</div>", unsafe_allow_html=True)
             if league_key == "NFL":
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
