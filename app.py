@@ -723,6 +723,15 @@ def get_nhl_schedule():
         return matchups, "Success"
     except: return None, "Failed to connect to NHL API."
 
+@st.cache_data(ttl=3600)
+def get_pitcher_hand(pitcher_id):
+    """Fetches pitcher throwing hand — L or R."""
+    if not pitcher_id: return None
+    try:
+        r = requests.get(f"https://statsapi.mlb.com/api/v1/people/{pitcher_id}", timeout=5).json()
+        return r.get('people', [{}])[0].get('pitchHand', {}).get('code', None)
+    except: return None
+
 @st.cache_data(ttl=60)
 def get_mlb_schedule():
     try:
@@ -744,12 +753,16 @@ def get_mlb_schedule():
             away_p = g['teams']['away'].get('probablePitcher', {}).get('fullName', 'TBD')
             away_p_id = g['teams']['away'].get('probablePitcher', {}).get('id', None)
 
+            home_p_hand = get_pitcher_hand(home_p_id)
+            away_p_hand = get_pitcher_hand(away_p_id)
             matchups.append({"home": home, "away": away, "status": ds,
                              "home_score": g['teams']['home'].get('score', 0),
                              "away_score": g['teams']['away'].get('score', 0),
                              "is_live_or_final": il,
                              "home_pitcher": home_p, "home_pitcher_id": home_p_id,
-                             "away_pitcher": away_p, "away_pitcher_id": away_p_id})
+                             "away_pitcher": away_p, "away_pitcher_id": away_p_id,
+                             "home_pitcher_hand": home_p_hand,
+                             "away_pitcher_hand": away_p_hand})
         return matchups, "Success"
 
     except: return None, "Failed to connect to MLB API."
@@ -769,6 +782,58 @@ def get_pitcher_era(pitcher_id):
         return None
     except:
         return None
+
+@st.cache_data(ttl=3600)
+def get_platoon_splits(player_name, season=None):
+    """Fetches batter's hitting splits vs LHP and RHP from MLB API."""
+    if season is None: season = datetime.now().year
+    try:
+        sr = requests.get(f"https://statsapi.mlb.com/api/v1/people/search?names={requests.utils.quote(player_name)}", timeout=5).json()
+        if not sr.get('people'): return None, None
+        pid = sr['people'][0]['id']
+        r = requests.get(
+            f"https://statsapi.mlb.com/api/v1/people/{pid}/stats?stats=statSplits&group=hitting&season={season}&sitCodes=vl,vr",
+            timeout=5
+        ).json()
+        avg_vs_l, avg_vs_r = None, None
+        for stat_group in r.get('stats', []):
+            for split in stat_group.get('splits', []):
+                code = split.get('split', {}).get('code', '')
+                avg = float(split.get('stat', {}).get('avg', 0) or 0)
+                if code == 'vl': avg_vs_l = avg
+                elif code == 'vr': avg_vs_r = avg
+        return avg_vs_l, avg_vs_r
+    except: return None, None
+
+@st.cache_data(ttl=3600)
+def get_head_to_head_vs_pitcher(player_name, pitcher_name, df_player_log):
+    """Cross-references player game log against pitcher's start dates."""
+    if not pitcher_name or pitcher_name == "TBD" or df_player_log.empty:
+        return None, 0
+    try:
+        sr = requests.get(f"https://statsapi.mlb.com/api/v1/people/search?names={requests.utils.quote(pitcher_name)}", timeout=5).json()
+        if not sr.get('people'): return None, 0
+        pid = sr['people'][0]['id']
+        curr_year = datetime.now().year
+        start_dates = set()
+        for season in [str(curr_year), str(curr_year - 1), str(curr_year - 2)]:
+            try:
+                log = requests.get(
+                    f"https://statsapi.mlb.com/api/v1/people/{pid}/stats?stats=gameLog&group=pitching&season={season}",
+                    timeout=5
+                ).json()
+                for sg in log.get('stats', []):
+                    for split in sg.get('splits', []):
+                        d = split.get('date', '')
+                        if d: start_dates.add(d)
+            except: pass
+        if not start_dates: return None, 0
+        df = df_player_log.copy()
+        df['date_str'] = pd.to_datetime(df['ValidDate']).dt.strftime('%Y-%m-%d')
+        h2h = df[df['date_str'].isin(start_dates)]
+        if len(h2h) == 0: return None, 0
+        return h2h, len(h2h)
+    except: return None, 0
 
 @st.cache_data(ttl=600)
 def get_live_line(player_label, stat_type, api_key, sport_path):
@@ -3761,15 +3826,18 @@ def render_syndicate_board(league_key):
 
             # Pre-fetch pitcher once for MLB
             opp_pitcher_era, opp_pitcher_name = None, None
+            opp_pitcher_hand = None
             if league_key == "MLB" and sched:
                 for g in sched:
                     if g['home'] == opp and not is_home_current:
                         opp_pitcher_name = g.get('home_pitcher')
                         opp_pitcher_era  = get_pitcher_era(g.get('home_pitcher_id'))
+                        opp_pitcher_hand = g.get('home_pitcher_hand')
                         break
                     elif g['away'] == opp and is_home_current:
                         opp_pitcher_name = g.get('away_pitcher')
                         opp_pitcher_era  = get_pitcher_era(g.get('away_pitcher_id'))
+                        opp_pitcher_hand = g.get('away_pitcher_hand')
                         break
             # ───────────────────────────────────────────────────────
 
@@ -3817,6 +3885,45 @@ def render_syndicate_board(league_key):
                 if not board:
                     continue
 
+                # ── MLB PLATOON + H2H MODIFIER ─────────────────────
+                platoon_mod = 1.0
+                platoon_note = ""
+                h2h_mod = 1.0
+                h2h_note = ""
+
+                if league_key == "MLB" and s_col in {"H", "HR", "TB", "HRR"}:
+                    player_clean = target_player.split('(')[0].strip()
+
+                    if opp_pitcher_hand in ["L", "R"]:
+                        avg_vs_l, avg_vs_r = get_platoon_splits(player_clean)
+                        if avg_vs_l and avg_vs_r and (avg_vs_l + avg_vs_r) > 0:
+                            season_avg_ba = (avg_vs_l + avg_vs_r) / 2
+                            relevant_avg  = avg_vs_l if opp_pitcher_hand == "L" else avg_vs_r
+                            if season_avg_ba > 0:
+                                platoon_mod = float(np.clip(relevant_avg / season_avg_ba, 0.75, 1.25))
+                                hand_label  = "LHP" if opp_pitcher_hand == "L" else "RHP"
+                                direction   = f"+{((platoon_mod-1)*100):.0f}%" if platoon_mod > 1 else f"{((platoon_mod-1)*100):.0f}%"
+                                platoon_note = (f"🖐️ Platoon: {player_clean} hits "
+                                               f".{int(relevant_avg*1000):03d} vs {hand_label} "
+                                               f"({direction} vs his avg).<br>")
+
+                    if opp_pitcher_name and opp_pitcher_name != "TBD":
+                        h2h_log, h2h_games = get_head_to_head_vs_pitcher(
+                            player_clean, opp_pitcher_name, df_ml
+                        )
+                        if h2h_log is not None and h2h_games >= 3 and s_col in h2h_log.columns:
+                            h2h_avg    = float(h2h_log[s_col].mean())
+                            season_avg = float(df_ml[s_col].mean())
+                            if season_avg > 0:
+                                h2h_mod = float(np.clip(h2h_avg / season_avg, 0.70, 1.30))
+                                direction = f"+{((h2h_mod-1)*100):.0f}%" if h2h_mod > 1 else f"{((h2h_mod-1)*100):.0f}%"
+                                h2h_note = (f"🔁 H2H vs {opp_pitcher_name}: "
+                                           f"{h2h_games}G avg = {h2h_avg:.2f} "
+                                           f"({direction} vs season avg).<br>")
+
+                    if platoon_note or h2h_note:
+                        mod_desc = platoon_note + h2h_note + mod_desc
+
                 # Game script modifier
                 spread_val      = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
@@ -3825,7 +3932,7 @@ def render_syndicate_board(league_key):
                 elif abs(spread_val) >= 7.5:  blowout_penalty = 0.85
                 elif abs(spread_val) >= 6.5:  blowout_penalty = 0.88
 
-                final_consensus = raw_consensus * blowout_penalty
+                final_consensus = raw_consensus * blowout_penalty * platoon_mod * h2h_mod
 
                 # Skynet
                 skynet_data     = apply_skynet(raw_vote, stat_type, league_key)
@@ -3844,11 +3951,28 @@ def render_syndicate_board(league_key):
                 c_color = "#00c853" if c_vote == "OVER" else ("#d50000" if c_vote == "UNDER" else "#94a3b8")
 
                 # Win prob
+                MLB_POISSON_STATS = {"H", "HR", "TB", "RBI"}
                 df_ml['Residual'] = df_ml[s_col] - df_ml.get('AI_Proj', pd.Series([c_proj] * len(df_ml)))
                 residual_std = df_ml['Residual'].std()
                 if np.isnan(residual_std) or residual_std == 0: residual_std = max(df_ml[s_col].std(), 1.0)
-                sims     = np.random.normal(loc=c_proj, scale=residual_std * (1.40 if s_col in COMBO_STATS else 1.0), size=5000)
-                win_prob = np.sum(sims > line) / 5000.0 if c_vote == "OVER" else (np.sum(sims < line) / 5000.0 if c_vote == "UNDER" else 0.50)
+
+                if league_key == "MLB" and s_col in MLB_POISSON_STATS:
+                    # Poisson simulation for discrete count stats
+                    # Clamp lambda to a safe floor to avoid division issues
+                    lam = max(float(c_proj), 0.05)
+                    sims = np.random.poisson(lam=lam, size=5000).astype(float)
+                    if c_vote == "OVER":
+                        win_prob = float(np.sum(sims > line) / 5000.0)
+                    elif c_vote == "UNDER":
+                        win_prob = float(np.sum(sims < line) / 5000.0)
+                    else:
+                        win_prob = 0.50
+                    # Hard cap — no discrete stat vs a 0.5 line should ever exceed 85%
+                    win_prob = min(win_prob, 0.85)
+                    win_prob = min(win_prob, 0.85)
+                else:
+                    sims     = np.random.normal(loc=c_proj, scale=residual_std * (1.40 if s_col in COMBO_STATS else 1.0), size=5000)
+                    win_prob = np.sum(sims > line) / 5000.0 if c_vote == "OVER" else (np.sum(sims < line) / 5000.0 if c_vote == "UNDER" else 0.50)
 
                 implied_prob = abs(odds) / (abs(odds) + 100) if odds < 0 else 100 / (odds + 100)
                 profit       = 100 / (abs(odds) / 100) if odds < 0 else odds
