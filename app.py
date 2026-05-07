@@ -3012,7 +3012,43 @@ def run_mlb_heaters(stat_choice="Hits"):
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
         curr_year = datetime.now().year
         if stat_choice == "Pitcher Strikeouts":
-            group = "pitching"; sort_stat = "strikeOuts"; s_col = "K"
+            s_col = "K"
+            # Pull tonight's starters directly from schedule instead of leaderboard
+            starters = []
+            for g in sched:
+                if g.get('home_pitcher') and g['home_pitcher'] != 'TBD':
+                    starters.append((g['home_pitcher'], g['home_pitcher_id'], g['away'], True, g.get('home_pitcher_hand')))
+                if g.get('away_pitcher') and g['away_pitcher'] != 'TBD':
+                    starters.append((g['away_pitcher'], g['away_pitcher_id'], g['home'], False, g.get('away_pitcher_hand')))
+
+            heaters = []
+            for pitcher_name, pitcher_id, opp, is_home, hand in starters:
+                pitcher_era = get_pitcher_era(pitcher_id)
+                matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
+                hand_label = f" ({'LHP' if hand == 'L' else 'RHP'})" if hand else ""
+                ai_proj = 0.0
+                df, status, _ = get_mlb_stats(pitcher_name)
+                if status != 429 and not df.empty and len(df) >= 3:
+                    last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
+                    today_est = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
+                    days_out = (today_est - last_played).days
+                    if days_out >= 10: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
+                    dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
+                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                        df, s_col, 5.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice,
+                        df_hash=dh, opp_pitcher_era=pitcher_era, opp_pitcher_name=pitcher_name
+                    )
+                    ai_proj = round(c_proj, 2)
+                time.sleep(0.2)
+                heaters.append({
+                    "Pitcher":   f"{pitcher_name}{hand_label}",
+                    "Opp":       matchup_status,
+                    "ERA":       f"{pitcher_era:.2f}" if pitcher_era else "N/A",
+                    "AI Proj K": ai_proj,
+                })
+
+            if not heaters: return None, "No confirmed starters found for today."
+            return pd.DataFrame(heaters), f"✅ Tonight's {len(heaters)} Starters loaded."
         else:
             group = "hitting"
             sort_stat = {"Hits": "hits", "Home Runs": "homeRuns", "Total Bases": "totalBases"}.get(stat_choice, "hits")
