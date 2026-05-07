@@ -3011,22 +3011,65 @@ def run_mlb_heaters(stat_choice="Hits"):
         if not sched: return None, "No MLB games scheduled today."
         teams_today = [g['home'] for g in sched] + [g['away'] for g in sched]
         curr_year = datetime.now().year
+        
+        # 💥 Moved mapping to the top so both Pitching and Hitting blocks can use it!
+        m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
+
         if stat_choice == "Pitcher Strikeouts":
             s_col = "K"
-            # Pull tonight's starters directly from schedule instead of leaderboard
+            
+            # 💥 1. Fetch Official Live Starters from MLB API (Bypasses schedule lag)
+            today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d")
+            live_starters = {}
+            try:
+                mlb_url = f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={today_str}&hydrate=probablePitcher"
+                mlb_data = requests.get(mlb_url, timeout=5).json()
+                if 'dates' in mlb_data and mlb_data['dates']:
+                    for game in mlb_data['dates'][0].get('games', []):
+                        away_team = game.get('teams', {}).get('away', {}).get('team', {}).get('name', '')
+                        home_team = game.get('teams', {}).get('home', {}).get('team', {}).get('name', '')
+                        away_abbr = m_t.get(away_team, away_team.split()[-1][:3].upper() if away_team else "")
+                        home_abbr = m_t.get(home_team, home_team.split()[-1][:3].upper() if home_team else "")
+                        
+                        away_p = game.get('teams', {}).get('away', {}).get('probablePitcher', {}).get('fullName', 'TBD')
+                        home_p = game.get('teams', {}).get('home', {}).get('probablePitcher', {}).get('fullName', 'TBD')
+                        
+                        if away_abbr: live_starters[away_abbr] = away_p
+                        if home_abbr: live_starters[home_abbr] = home_p
+            except:
+                pass
+
+            # 💥 2. Build the list of starters ensuring NO teams are skipped
             starters = []
             for g in sched:
-                if g.get('home_pitcher') and g['home_pitcher'] != 'TBD':
-                    starters.append((g['home_pitcher'], g['home_pitcher_id'], g['away'], True, g.get('home_pitcher_hand')))
-                if g.get('away_pitcher') and g['away_pitcher'] != 'TBD':
-                    starters.append((g['away_pitcher'], g['away_pitcher_id'], g['home'], False, g.get('away_pitcher_hand')))
+                home_abbr = g['home']
+                away_abbr = g['away']
+                
+                # Cross-reference official MLB starters with the local schedule data
+                home_p = live_starters.get(home_abbr, g.get('home_pitcher', 'TBD'))
+                away_p = live_starters.get(away_abbr, g.get('away_pitcher', 'TBD'))
+                
+                starters.append((home_p, g.get('home_pitcher_id'), away_abbr, True, g.get('home_pitcher_hand')))
+                starters.append((away_p, g.get('away_pitcher_id'), home_abbr, False, g.get('away_pitcher_hand')))
 
             heaters = []
             for pitcher_name, pitcher_id, opp, is_home, hand in starters:
-                pitcher_era = get_pitcher_era(pitcher_id)
                 matchup_status = f"vs {opp}" if is_home else f"@ {opp}"
+                
+                # 💥 3. If TBD, add them to the board anyway so the matchup isn't ghosted
+                if not pitcher_name or pitcher_name == 'TBD':
+                    heaters.append({
+                        "Pitcher":   "TBD",
+                        "Opp":       matchup_status,
+                        "ERA":       "N/A",
+                        "AI Proj K": 0.0,
+                    })
+                    continue
+                    
+                pitcher_era = get_pitcher_era(pitcher_id) if pitcher_id else None
                 hand_label = f" ({'LHP' if hand == 'L' else 'RHP'})" if hand else ""
                 ai_proj = 0.0
+                
                 df, status, _ = get_mlb_stats(pitcher_name)
                 if status != 429 and not df.empty and len(df) >= 3:
                     last_played = pd.to_datetime(df['ValidDate'].max()).tz_localize(None)
@@ -3034,11 +3077,15 @@ def run_mlb_heaters(stat_choice="Hits"):
                     days_out = (today_est - last_played).days
                     if days_out >= 10: matchup_status = f"⚠️ CHECK STATUS (Out {days_out} days)"
                     dh = f"{len(df)}_{str(df['ValidDate'].iloc[-1])}_{df[s_col].sum():.1f}" if s_col in df.columns else str(len(df))
-                    _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                    
+                    # 💥 4. Bulletproof unpacking (prevents crashes if variable counts ever change)
+                    ml_res = run_ml_board(
                         df, s_col, 5.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice,
                         df_hash=dh, opp_pitcher_era=pitcher_era, opp_pitcher_name=pitcher_name
                     )
+                    c_proj = ml_res[2] # Projection is safely always index 2
                     ai_proj = round(c_proj, 2)
+                    
                 time.sleep(0.2)
                 heaters.append({
                     "Pitcher":   f"{pitcher_name}{hand_label}",
@@ -3047,15 +3094,17 @@ def run_mlb_heaters(stat_choice="Hits"):
                     "AI Proj K": ai_proj,
                 })
 
-            if not heaters: return None, "No confirmed starters found for today."
+            if not heaters: return None, "No games found for today."
             return pd.DataFrame(heaters), f"✅ Tonight's {len(heaters)} Starters loaded."
+            
         else:
             group = "hitting"
             sort_stat = {"Hits": "hits", "Home Runs": "homeRuns", "Total Bases": "totalBases"}.get(stat_choice, "hits")
             s_col = {"Hits": "H", "Home Runs": "HR", "Total Bases": "TB"}.get(stat_choice, "H")
+            
         r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group={group}&playerPool=ALL&season={curr_year}&limit=50", timeout=5).json()
         if not r.get('stats'): r = requests.get(f"https://statsapi.mlb.com/api/v1/stats?stats=season&group={group}&playerPool=ALL&season={curr_year-1}&limit=50", timeout=5).json()
-        m_t = {"Arizona Diamondbacks": "ARI", "Atlanta Braves": "ATL", "Baltimore Orioles": "BAL", "Boston Red Sox": "BOS", "Chicago Cubs": "CHC", "Chicago White Sox": "CHW", "Cincinnati Reds": "CIN", "Cleveland Guardians": "CLE", "Colorado Rockies": "COL", "Detroit Tigers": "DET", "Houston Astros": "HOU", "Kansas City Royals": "KC", "Los Angeles Angels": "LAA", "Los Angeles Dodgers": "LAD", "Miami Marlins": "MIA", "Milwaukee Brewers": "MIL", "Minnesota Twins": "MIN", "New York Mets": "NYM", "New York Yankees": "NYY", "Oakland Athletics": "OAK", "Philadelphia Phillies": "PHI", "Pittsburgh Pirates": "PIT", "San Diego Padres": "SD", "Seattle Mariners": "SEA", "San Francisco Giants": "SF", "St. Louis Cardinals": "STL", "Tampa Bay Rays": "TB", "Texas Rangers": "TEX", "Toronto Blue Jays": "TOR", "Washington Nationals": "WSH"}
+        
         raw_leaders = []
         for s in r.get('stats', []):
             for p in s.get('splits', []):
@@ -3063,6 +3112,7 @@ def run_mlb_heaters(stat_choice="Hits"):
                 team_abbr = m_t.get(team_full, team_full.split()[-1][:3].upper() if team_full else "")
                 if team_abbr in teams_today: raw_leaders.append((p, team_abbr))
         raw_leaders = sorted(raw_leaders, key=lambda x: x[0].get('stat', {}).get(sort_stat, 0), reverse=True)
+        
         heaters = []
         for p, team_abbr in raw_leaders:
             player_name = p.get('player', {}).get('fullName', '')
@@ -3091,11 +3141,14 @@ def run_mlb_heaters(stat_choice="Hits"):
                         pitcher_name = g.get('home_pitcher')
                         pitcher_era  = get_pitcher_era(g.get('home_pitcher_id'))
                         break
-                _, _, c_proj, _, _, _, _, _, _, _, _, _, _, _ = run_ml_board(
+                        
+                # 💥 5. Apply the bulletproof unpacking to the hitting section too
+                ml_res = run_ml_board(
                     df, s_col, 0.5, opp, "MLB", "Rested (1+ Days)", is_home, stat_choice,
                     df_hash=dh, opp_pitcher_era=pitcher_era, opp_pitcher_name=pitcher_name
                 )
-                ai_proj = round(c_proj, 2)
+                ai_proj = round(ml_res[2], 2)
+                
             time.sleep(0.2)
             heaters.append({
                 "Player":      player_name,
@@ -3105,6 +3158,7 @@ def run_mlb_heaters(stat_choice="Hits"):
                 "Status":      matchup_status,
                 "Pitcher":     f"{pitcher_name} ({pitcher_era:.2f} ERA)" if pitcher_name and pitcher_era else pitcher_name or "TBD"
             })
+            
         if not heaters: return None, f"No top {stat_choice} leaders playing today."
         return pd.DataFrame(heaters), f"✅ Deep Scan Complete: MLB {stat_choice} Projections loaded."
     except Exception as e: return None, f"API Error: {str(e)}"
@@ -3180,28 +3234,38 @@ def render_league_scanners(league_name):
 
         if f'{lk}.radar.heaters' in st.session_state:
             df_radar = st.session_state[f'{lk}.radar.heaters']
-            st.dataframe(df_radar, use_container_width=True, hide_index=True,
-                column_config={
-                    "Player": st.column_config.TextColumn("🔥 Player", width="medium"),
-                    "Team": st.column_config.TextColumn("🛡️ Team", width="small"),
-                    "Season Stat": st.column_config.NumberColumn("🎯 Season Avg", format="%.1f", width="small"),
-                    "AI Proj": st.column_config.NumberColumn("🤖 AI Proj", format="%.1f", width="small"),
-                    "Status": st.column_config.TextColumn("⚡ Matchup", width="medium"),
-                    "Pitcher": st.column_config.TextColumn("⚾ Pitcher", width="medium")
-                })
-            if 'Player' in df_radar.columns:
-                st.markdown("#### ⚡ Fast-Track to Analyzer")
-                ft_c1, ft_c2 = st.columns([3, 1])
-                with ft_c1:
-                    formatted_options = ["-- Select --"] + [f"{row['Player']} ({row['Team']})" if 'Team' in row else row['Player'] for _, row in df_radar.iterrows()]
-                    selected_heater = st.selectbox("Select a target from the radar:", formatted_options, key=f"{lk}.ft_sel")
-                with ft_c2:
-                    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
-                    if st.button("SEND TO BOARD 🚀", type="primary", use_container_width=True, key=f"{lk}.ft_btn"):
-                        if selected_heater != "-- Select --":
-                            st.session_state[f"{lk}.search_query"] = selected_heater.split('(')[0].strip()
-                            st.session_state[f"{lk}.target_player"] = selected_heater
-                            st.rerun()
+            
+            if league_name == "MLB" and st.session_state.get(f'{lk}.scan_stat') == "Pitcher Strikeouts":
+                st.dataframe(df_radar, use_container_width=True, hide_index=True,
+                    column_config={
+                        "Pitcher":   st.column_config.TextColumn("⚾ Starter", width="medium"),
+                        "Opp":       st.column_config.TextColumn("⚡ Matchup", width="medium"),
+                        "ERA":       st.column_config.TextColumn("📊 ERA", width="small"),
+                        "AI Proj K": st.column_config.NumberColumn("🤖 Proj K", format="%.1f", width="small"),
+                    })
+            else:
+                st.dataframe(df_radar, use_container_width=True, hide_index=True,
+                    column_config={
+                        "Player":      st.column_config.TextColumn("🔥 Player", width="medium"),
+                        "Team":        st.column_config.TextColumn("🛡️ Team", width="small"),
+                        "Season Stat": st.column_config.NumberColumn("🎯 Season Avg", format="%.1f", width="small"),
+                        "AI Proj":     st.column_config.NumberColumn("🤖 AI Proj", format="%.1f", width="small"),
+                        "Status":      st.column_config.TextColumn("⚡ Matchup", width="medium"),
+                        "Pitcher":     st.column_config.TextColumn("⚾ Pitcher", width="medium")
+                    })
+                if 'Player' in df_radar.columns:
+                    st.markdown("#### ⚡ Fast-Track to Analyzer")
+                    ft_c1, ft_c2 = st.columns([3, 1])
+                    with ft_c1:
+                        formatted_options = ["-- Select --"] + [f"{row['Player']} ({row['Team']})" if 'Team' in row else row['Player'] for _, row in df_radar.iterrows()]
+                        selected_heater = st.selectbox("Select a target from the radar:", formatted_options, key=f"{lk}.ft_sel")
+                    with ft_c2:
+                        st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+                        if st.button("SEND TO BOARD 🚀", type="primary", use_container_width=True, key=f"{lk}.ft_btn"):
+                            if selected_heater != "-- Select --":
+                                st.session_state[f"{lk}.search_query"] = selected_heater.split('(')[0].strip()
+                                st.session_state[f"{lk}.target_player"] = selected_heater
+                                st.rerun()
 
         if f'{lk}.radar.bb' in st.session_state:
             st.markdown("#### 🚨 Weak Defenses Detected")
