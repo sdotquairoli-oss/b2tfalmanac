@@ -35,13 +35,14 @@ NBA_TEAMS = sorted(["ATL", "BOS", "BKN", "CHA", "CHI", "CLE", "DAL", "DEN", "DET
 NHL_TEAMS = sorted(["ANA", "BOS", "BUF", "CGY", "CAR", "CHI", "COL", "CBJ", "DAL", "DET", "EDM", "FLA", "LAK", "MIN", "MTL", "NSH", "NJD", "NYI", "NYR", "OTT", "PHI", "PIT", "SJS", "SEA", "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WSH", "WPG"])
 MLB_TEAMS = sorted(["ARI", "ATH", "ATL", "BAL", "BOS", "CHC", "CHW", "CIN", "CLE", "COL", "DET", "HOU", "KC", "LAA", "LAD", "MIA", "MIL", "MIN", "NYM", "NYY", "PHI", "PIT", "SD", "SEA", "SF", "STL", "TB", "TEX", "TOR", "WSH"])
 NFL_TEAMS = sorted(["ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE","DAL", "DEN", "DET", "GB", "HOU", "IND", "JAX", "KC","LAC", "LAR", "LV", "MIA", "MIN", "NE", "NO", "NYG", "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WSH"])
-SPORTSBOOKS = ["FanDuel", "Fanatics", "DraftKings", "BetMGM", "Caesars", "ESPN Bet", "Hard Rock", "bet365", "Other"]
+SPORTSBOOKS = ["FanDuel", "Fanatics", "BetRivers", "DraftKings", "BetMGM", "Caesars", "ESPN Bet", "Hard Rock", "bet365", "Other"]
 BOOK_LOGOS = {
     "FanDuel": "https://www.google.com/s2/favicons?domain=fanduel.com&sz=128",
     "DraftKings": "https://www.google.com/s2/favicons?domain=draftkings.com&sz=128",
     "BetMGM": "https://www.google.com/s2/favicons?domain=betmgm.com&sz=128",
     "Caesars": "https://www.google.com/s2/favicons?domain=caesars.com&sz=128",
     "Fanatics": "https://www.google.com/s2/favicons?domain=sportsbook.fanatics.com&sz=128",
+    "BetRivers": "https://www.google.com/s2/favicons?domain=betrivers.com&sz=128",
     "ESPN Bet": "https://www.google.com/s2/favicons?domain=espnbet.com&sz=128",
     "Hard Rock": "https://www.google.com/s2/favicons?domain=hardrock.bet&sz=128",
     "bet365": "https://www.google.com/s2/favicons?domain=bet365.com&sz=128"
