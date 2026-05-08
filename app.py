@@ -122,21 +122,23 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date, is_ove
         ]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
-        
         sheet = client.open("B2TF_Vault").sheet1
-        existing_data = sheet.get_all_records()
-        game_date_str = str(game_date)[:10]
-        
-        # Strip team abbreviation before saving
+
         clean_name = str(player_name).split('(')[0].strip()
+        game_date_str = str(game_date)[:10]
+
+        # Use raw values instead of get_all_records to avoid header mismatch crashes
+        all_values = sheet.get_all_values()
         
+        # Check for duplicate by scanning raw rows directly
         is_duplicate = any(
-            str(r.get('Player', '')) == clean_name and 
-            str(r.get('Stat', '')) == str(stat_type) and 
-            str(r.get('Game_Date', '')) == game_date_str 
-            for r in existing_data
+            len(row) >= 3 and
+            str(row[0]).strip() == clean_name and
+            str(row[1]).strip() == str(stat_type) and
+            str(row[2]).strip() == game_date_str
+            for row in all_values[1:]  # Skip header row
         )
-        
+
         if not is_duplicate:
             new_row = [
                 clean_name,
@@ -146,16 +148,13 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date, is_ove
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "OVERRIDE" if is_override else "AI"
             ]
-            sheet.append_row(new_row)
-            st.toast(f"✅ GOOGLE API CONFIRMED WRITE!", icon="🔥")
+            sheet.append_row(new_row, value_input_option='USER_ENTERED')
+            st.toast("✅ Vault receipt saved!", icon="🔥")
         else:
-            st.warning("⚠️ Vault skipped: Duplicate entry detected for today.")
+            st.toast("⚠️ Vault: Duplicate skipped.", icon="⚠️")
+
     except Exception as e:
-        err_str = str(e)
-        if "502" in err_str or "html" in err_str.lower():
-            st.warning("🟡 Vault skipped: Google's servers are temporarily busy (Error 502).")
-        else:
-            st.error(f"🚨 GOOGLE API ERROR: {err_str}")
+        st.error(f"🚨 VAULT ERROR: {str(e)}")
 
 def get_team_logo(league, abbr):
     """Pulls high-res transparent PNGs from ESPN's hidden CDN."""
