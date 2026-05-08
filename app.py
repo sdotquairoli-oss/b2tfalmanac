@@ -127,17 +127,13 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date, is_ove
         clean_name = str(player_name).split('(')[0].strip()
         game_date_str = str(game_date)[:10]
 
-        # Use raw values instead of get_all_records to avoid header mismatch crashes
         all_values = sheet.get_all_values()
         
-        # Check for duplicate by scanning raw rows directly
-        is_duplicate = any(
-            len(row) >= 3 and
-            str(row[0]).strip() == clean_name and
-            str(row[1]).strip() == str(stat_type) and
-            str(row[2]).strip() == game_date_str
-            for row in all_values[1:]  # Skip header row
-        )
+        # Debug — show what we're checking against
+        existing_entries = [(str(row[0]).strip(), str(row[1]).strip(), str(row[2]).strip()) 
+                           for row in all_values[1:] if len(row) >= 3]
+        
+        is_duplicate = (clean_name, str(stat_type), game_date_str) in existing_entries
 
         if not is_duplicate:
             new_row = [
@@ -149,9 +145,9 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date, is_ove
                 "OVERRIDE" if is_override else "AI"
             ]
             sheet.append_row(new_row, value_input_option='USER_ENTERED')
-            st.toast("✅ Vault receipt saved!", icon="🔥")
+            st.success(f"✅ Vault saved: {clean_name} — {stat_type}")
         else:
-            st.toast("⚠️ Vault: Duplicate skipped.", icon="⚠️")
+            st.warning(f"⚠️ Vault duplicate skipped: {clean_name} — {stat_type} — {game_date_str}")
 
     except Exception as e:
         st.error(f"🚨 VAULT ERROR: {str(e)}")
