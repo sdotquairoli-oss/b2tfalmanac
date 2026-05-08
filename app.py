@@ -127,8 +127,11 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date, is_ove
         existing_data = sheet.get_all_records()
         game_date_str = str(game_date)[:10]
         
+        # Strip team abbreviation before saving
+        clean_name = str(player_name).split('(')[0].strip()
+        
         is_duplicate = any(
-            str(r.get('Player', '')) == str(player_name) and 
+            str(r.get('Player', '')) == clean_name and 
             str(r.get('Stat', '')) == str(stat_type) and 
             str(r.get('Game_Date', '')) == game_date_str 
             for r in existing_data
@@ -136,7 +139,7 @@ def log_prediction_receipt(player_name, stat_type, proj_value, game_date, is_ove
         
         if not is_duplicate:
             new_row = [
-                player_name,
+                clean_name,
                 stat_type,
                 game_date_str,
                 round(float(proj_value), 2),
