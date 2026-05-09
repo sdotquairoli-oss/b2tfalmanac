@@ -4907,9 +4907,15 @@ with t_roi:
         # 🤖 vs 👤 MAN VS MACHINE SPLIT
             def is_aligned(row):
                 try:
-                    proj = float(row['Proj'])
-                    line = float(row['Line'])
-                    vote = str(row['Vote']).strip().upper()
+                    proj      = float(row['Proj'])
+                    line      = float(row['Line'])
+                    vote      = str(row['Vote']).strip().upper()
+                    win_prob  = float(row.get('Win_Prob', 0))
+                    setup_score = float(row.get('Setup_Score', 0))
+            
+                    if win_prob < 0.55 or setup_score < 35:
+                        return False
+            
                     if vote == "OVER":
                         return proj >= line
                     elif vote == "UNDER":
