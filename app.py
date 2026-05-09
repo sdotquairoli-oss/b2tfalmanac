@@ -4555,8 +4555,9 @@ def render_syndicate_board(league_key):
                     for ri in targets:
                         if ri >= len(stat_results): continue
                         r = stat_results[ri]
-                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r['win_prob'], False, r['setup_score'], r['win_prob'], r['line'])
-                    st.success("Override pick saved!"); time.sleep(1); st.rerun()
+                        implied = abs(r['odds']) / (abs(r['odds']) + 100) if r['odds'] < 0 else 100 / (r['odds'] + 100)
+                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r['win_prob'], False, r['setup_score'], implied, r['line'])
+                    st.success("🚨 The Man takes responsibility!"); time.sleep(1); st.rerun()
             else:
                 if st.button("🔒 Lock Selected", type="primary", use_container_width=True, key=f"{lk}.lock_selected"):
                     if not selected_for_lock:
@@ -4571,7 +4572,12 @@ def render_syndicate_board(league_key):
                             stat_proj_v    = r['board'][1]['proj'] if len(r['board']) > 1 else 0.0
                             contrarian_v   = r['board'][2]['proj'] if len(r['board']) > 2 else 0.0
                             context_v      = r['board'][4]['proj'] if len(r['board']) > 4 else 0.0
-                            save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], r['vote'], r['win_prob'], False, r['setup_score'], r['win_prob'], r['line'], min_max_proj, stat_proj_v, contrarian_v, context_v)
+                            implied        = abs(r['odds']) / (abs(r['odds']) + 100) if r['odds'] < 0 else 100 / (r['odds'] + 100)
+                            save_to_ledger(
+                                league_key, target_player, r['stat_type'], r['line'], r['odds'],
+                                r['proj'], r['vote'], r['win_prob'], False, r['setup_score'],
+                                implied, r['line'], min_max_proj, stat_proj_v, contrarian_v, context_v
+                            )
                             log_prediction_receipt(target_player, r['stat_type'], r['proj'], datetime.now().strftime("%Y-%m-%d"))
                             locked += 1
                         st.success(f"✅ {locked} pick(s) locked to ledger!")
