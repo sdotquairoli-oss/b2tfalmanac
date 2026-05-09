@@ -4557,6 +4557,7 @@ def render_syndicate_board(league_key):
                         r = stat_results[ri]
                         implied = abs(r['odds']) / (abs(r['odds']) + 100) if r['odds'] < 0 else 100 / (r['odds'] + 100)
                         save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r['win_prob'], False, r['setup_score'], implied, r['line'])
+                        log_prediction_receipt(target_player, r['stat_type'], r['proj'], datetime.now().strftime("%Y-%m-%d"), is_override=True)
                     st.success("🚨 The Man takes responsibility!"); time.sleep(1); st.rerun()
             else:
                 if st.button("🔒 Lock Selected", type="primary", use_container_width=True, key=f"{lk}.lock_selected"):
