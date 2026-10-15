@@ -1109,7 +1109,7 @@ def get_nfl_stats(player_label):
         cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
         athlete_id = None
 
-        # 🟢 1. PRIMARY: SEARCH API
+        # 🟢 1. PRIMARY: SEARCH API (Bypasses outdated rosters)
         try:
             search_url = f"https://site.web.api.espn.com/apis/search/v2?region=us&lang=en&query={requests.utils.quote(cn)}&limit=3"
             sr = requests.get(search_url, timeout=5).json()
@@ -1137,116 +1137,123 @@ def get_nfl_stats(player_label):
         if not athlete_id:
             return pd.DataFrame(), 404, fetch_errors or [f"Could not locate ESPN ID for {cn}"]
 
-        # 🟢 3. GAMELOG FETCH
+        # 🟢 3. HTML TABLE FETCH (The Indestructible Web Scraper)
         curr_year = datetime.now().year
-        urls = [
-            f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
-            f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog?season={curr_year - 1}"
-        ]
+        if datetime.now().month < 3: seasons = [curr_year - 1, curr_year - 2]
+        else: seasons = [curr_year, curr_year - 1]
 
         all_rows = []
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-        for url in urls:
+        for season_year in seasons:
             try:
-                gl_r = requests.get(url, timeout=10)
-                if gl_r.status_code != 200:
-                    fetch_errors.append(f"HTTP {gl_r.status_code} on {url}")
-                    continue
-
-                gl_data      = gl_r.json()
-                events_meta  = gl_data.get('events', {})
-                season_types = gl_data.get('seasonTypes', [])
-
-                game_stats = {}
-                for stype in season_types:
-                    for cat in stype.get('categories', []):
-                        raw_cat = str(cat.get('name', '')).upper()
-                        if 'PASS' in raw_cat: cat_name = 'PASSING'
-                        elif 'RUSH' in raw_cat: cat_name = 'RUSHING'
-                        elif 'REC' in raw_cat: cat_name = 'RECEIVING'
-                        else: cat_name = raw_cat
-                        
-                        cat_labels = [str(L).upper().strip() for L in cat.get('labels', [])]
-                        
-                        for ev in cat.get('events', []):
-                            eid  = str(ev.get('eventId', ''))
-                            vals = ev.get('stats', [])
-                            if eid not in game_stats:
-                                game_stats[eid] = {}
-                            for label, val in zip(cat_labels, vals):
-                                game_stats[eid][f"{cat_name}_{label}"] = val
-
-                def safe_float(val, default=0.0):
-                    try: return float(str(val).replace('--', '0').strip() or default)
-                    except: return default
-
-                for eid, stats in game_stats.items():
-                    meta = events_meta.get(eid, {})
-                    if not meta: continue
+                # Rip the HTML table directly from the player's web page
+                url = f"https://www.espn.com/nfl/player/gamelog/_/id/{athlete_id}/type/nfl/year/{season_year}"
+                r = requests.get(url, headers=headers, timeout=10)
+                if r.status_code != 200: continue
+                
+                try: tables = pd.read_html(StringIO(r.text))
+                except: continue
                     
-                    date_str = meta.get('gameDate', meta.get('date', ''))
-                    try: game_date = pd.to_datetime(date_str)
-                    except: continue
+                if not tables: continue
+                
+                df_html = None
+                for t in tables:
+                    # Find the actual game log table (always has an 'OPP' column)
+                    if len(t) > 1 and any('OPP' in str(c).upper() for c in t.columns):
+                        df_html = t
+                        break
                         
-                    at_vs = str(meta.get('atVs', '')).lower().strip()
-                    game_loc = str(meta.get('gameLocation', '')).lower().strip()
-                    is_home = 1 if (at_vs in ['vs', 'vs.'] or game_loc == 'home' or meta.get('homeAway', '') == 'home') else 0
+                if df_html is None: continue
+                
+                # Flatten MultiIndex headers (e.g. 'Passing' + 'YDS' becomes 'PASSING_YDS')
+                if isinstance(df_html.columns, pd.MultiIndex):
+                    new_cols = []
+                    for col in df_html.columns.values:
+                        valid_parts = [str(p).upper() for p in col if 'UNNAMED' not in str(p).upper()]
+                        new_cols.append("_".join(valid_parts).strip())
+                    df_html.columns = new_cols
+                else:
+                    df_html.columns = [str(c).upper().strip() for c in df_html.columns]
                     
-                    opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
-
-                    # 💥 INDESTRUCTIBLE STAT PARSER
-                    comp, pass_att, pass_yds, pass_tds, pass_int = 0,0,0,0,0
-                    carries, rush_yds, rush_tds = 0,0,0
-                    rec, targets, rec_yds, rec_tds = 0,0,0,0
-
-                    for k, v in stats.items():
-                        k_upper = k.upper()
-                        v_str = str(v).strip()
-                        
-                        # PASSING
-                        if 'PASSING' in k_upper:
-                            if 'C/ATT' in k_upper or 'CMP/ATT' in k_upper:
-                                if '/' in v_str:
-                                    comp = safe_float(v_str.split('/')[0])
-                                    pass_att = safe_float(v_str.split('/')[1])
-                            elif 'CMP' in k_upper or 'COMP' in k_upper: comp = safe_float(v)
-                            elif 'ATT' in k_upper and not 'C/ATT' in k_upper: pass_att = safe_float(v)
-                            elif 'YDS' in k_upper: pass_yds = safe_float(v)
-                            elif 'TD' in k_upper: pass_tds = safe_float(v)
-                            elif 'INT' in k_upper: pass_int = safe_float(v)
-                            
-                        # RUSHING
-                        elif 'RUSHING' in k_upper:
-                            if 'CAR' in k_upper or 'ATT' in k_upper: carries = safe_float(v)
-                            elif 'YDS' in k_upper: rush_yds = safe_float(v)
-                            elif 'TD' in k_upper: rush_tds = safe_float(v)
-                            
-                        # RECEIVING
-                        elif 'RECEIVING' in k_upper:
-                            if 'REC' in k_upper and not 'REC_YDS' in k_upper: rec = safe_float(v)
-                            elif 'TGT' in k_upper or 'TAR' in k_upper: targets = safe_float(v)
-                            elif 'YDS' in k_upper: rec_yds = safe_float(v)
-                            elif 'TD' in k_upper: rec_tds = safe_float(v)
-
-                    total_activity = pass_att + carries + targets + rec + abs(rush_yds) + abs(rec_yds)
-                    if total_activity == 0:
+                # Process the table row by row
+                for _, row in df_html.iterrows():
+                    date_key = next((k for k in df_html.columns if 'DATE' in k), None)
+                    if not date_key: continue
+                    
+                    date_str = str(row[date_key]).strip()
+                    if not date_str or date_str.lower() in ['date', 'regular season stats', 'postseason stats', 'nan']:
                         continue
+                        
+                    opp_key = next((k for k in df_html.columns if 'OPP' in k), None)
+                    opp_str = str(row[opp_key]).upper()
+                    
+                    if 'VS' in opp_str:
+                        is_home = 1
+                        opp = opp_str.replace('VS', '').strip()
+                    elif '@' in opp_str:
+                        is_home = 0
+                        opp = opp_str.replace('@', '').strip()
+                    else:
+                        continue 
+                        
+                    # ESPN Date Format: 'Thu 9/5'
+                    try:
+                        clean_date = date_str.split(' ')[-1]
+                        game_date = pd.to_datetime(f"{season_year}-{clean_date}")
+                    except: continue
+
+                    # Smart column extractor
+                    def get_stat(keywords, split_idx=None):
+                        for k in df_html.columns:
+                            if any(kw in k for kw in keywords):
+                                val = str(row[k]).replace('--', '0').strip()
+                                if split_idx is not None and '/' in val: 
+                                    val = val.split('/')[split_idx]
+                                try: return float(val)
+                                except: pass
+                        return 0.0
+
+                    # Passing
+                    comp     = get_stat(['PASSING_C/ATT', 'PASSING_CMP/ATT'], split_idx=0)
+                    if comp == 0: comp = get_stat(['PASSING_CMP', 'PASSING_COMP'])
+                    
+                    pass_att = get_stat(['PASSING_C/ATT', 'PASSING_CMP/ATT'], split_idx=1)
+                    if pass_att == 0: pass_att = get_stat(['PASSING_ATT'])
+                    
+                    pass_yds = get_stat(['PASSING_YDS'])
+                    pass_td  = get_stat(['PASSING_TD'])
+                    pass_int = get_stat(['PASSING_INT'])
+                    
+                    # Rushing
+                    carries  = get_stat(['RUSHING_ATT', 'RUSHING_CAR'])
+                    rush_yds = get_stat(['RUSHING_YDS'])
+                    rush_td  = get_stat(['RUSHING_TD'])
+                    
+                    # Receiving
+                    rec      = get_stat(['RECEIVING_REC'])
+                    targets  = get_stat(['RECEIVING_TGT', 'RECEIVING_TAR'])
+                    rec_yds  = get_stat(['RECEIVING_YDS'])
+                    rec_td   = get_stat(['RECEIVING_TD'])
+
+                    total_act = pass_att + carries + targets + rec + abs(rush_yds) + abs(rec_yds)
+                    if total_act < 1: continue
 
                     all_rows.append({
                         'ValidDate': game_date, 'MATCHUP': opp, 'Is_Home': is_home,
                         'PASS_ATT': pass_att, 'CARRIES': carries, 'TARGETS': targets, 'TOUCHES': carries + targets,
-                        'PASS_YDS': pass_yds, 'PASS_TDS': pass_tds, 'COMP': comp, 'INT': pass_int,
-                        'RUSH_YDS': rush_yds, 'RUSH_TDS': rush_tds,
-                        'REC': rec, 'REC_YDS': rec_yds, 'REC_TDS': rec_tds,
+                        'PASS_YDS': pass_yds, 'PASS_TDS': pass_td, 'COMP': comp, 'INT': pass_int,
+                        'RUSH_YDS': rush_yds, 'RUSH_TDS': rush_td,
+                        'REC': rec, 'REC_YDS': rec_yds, 'REC_TDS': rec_td,
                         'MINS': max(pass_att, carries + targets),
                         'RUSH_REC': rush_yds + rec_yds
                     })
-
+                    
             except Exception as e:
-                fetch_errors.append(f"URL fetch error: {str(e)}")
+                fetch_errors.append(f"HTML Error {season_year}: {e}")
 
         if not all_rows:
-            return pd.DataFrame(), 404, fetch_errors or ["All parsed stats resulted in 0 activity."]
+            return pd.DataFrame(), 404, fetch_errors or ["All scraped stats resulted in 0 activity."]
 
         df = pd.DataFrame(all_rows)
         df = df.sort_values('ValidDate').drop_duplicates(subset=['ValidDate'], keep='last')
