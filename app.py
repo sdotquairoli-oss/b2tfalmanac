@@ -1105,53 +1105,53 @@ def get_nfl_stats(player_label):
     fetch_errors = []
 
     try:
+        team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
+        cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
         athlete_id = None
-        
-        # 🟢 1. BULLETPROOF SEARCH API LOOKUP
+
+        # 🟢 1. PRIMARY: SEARCH API (Most accurate, immune to outdated rosters)
         try:
             search_url = f"https://site.web.api.espn.com/apis/search/v2?region=us&lang=en&query={requests.utils.quote(cn)}&limit=3"
             sr = requests.get(search_url, timeout=5).json()
             for res in sr.get('results', []):
+                if 'nfl' in str(res.get('url', '')) and res.get('id'):
+                    athlete_id = str(res.get('id'))
+                    break
                 for content in res.get('contents', []):
-                    if 'nfl' in content.get('url', '') and content.get('id'):
+                    if 'nfl' in str(content.get('url', '')) and content.get('id'):
                         athlete_id = str(content.get('id'))
                         break
                 if athlete_id: break
         except Exception as e:
             fetch_errors.append(f"Search API error: {e}")
 
-        if not athlete_id:
-            # 🟢 2. FALLBACK ROSTER LOOKUP
-            team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
-            cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
-            
-            if team_abbr in ESPN_NFL_TEAM_IDS:
-                roster = get_espn_nfl_roster(team_abbr)
-                for name, aid in roster.items():
-                    name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
-                    if name_clean == cn_clean or cn_clean in name_clean:
-                        athlete_id = aid
-                        break
+        # 🟢 2. FALLBACK: ROSTER LOOKUP
+        if not athlete_id and team_abbr in ESPN_NFL_TEAM_IDS:
+            roster = get_espn_nfl_roster(team_abbr)
+            for name, aid in roster.items():
+                name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
+                if name_clean == cn_clean or cn_clean in name_clean:
+                    athlete_id = aid
+                    break
 
         if not athlete_id:
             return pd.DataFrame(), 404, fetch_errors or [f"Could not locate ESPN ID for {cn}"]
 
-        # 🟢 3. GAMELOG FETCH
+        # 🟢 3. GAMELOG FETCH (Current Season & Previous Season Fallbacks)
         curr_year = datetime.now().year
-        if datetime.now().month < 3: seasons = [curr_year - 1, curr_year - 2]
-        else: seasons = [curr_year, curr_year - 1]
+        urls = [
+            # Drop the season parameter so ESPN naturally returns the active week's logs
+            f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
+            f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog?season={curr_year - 1}"
+        ]
 
         all_rows = []
 
-        for season_year in seasons:
+        for url in urls:
             try:
-                gl_r = requests.get(
-                    f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
-                    params={"season": season_year},
-                    timeout=10
-                )
+                gl_r = requests.get(url, timeout=10)
                 if gl_r.status_code != 200:
-                    fetch_errors.append(f"Season {season_year}: HTTP {gl_r.status_code}")
+                    fetch_errors.append(f"HTTP {gl_r.status_code} on {url}")
                     continue
 
                 gl_data      = gl_r.json()
@@ -1161,8 +1161,15 @@ def get_nfl_stats(player_label):
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        cat_name = cat.get('name', '').upper()
+                        # Force normalization so ESPN's shifting category names don't break the code
+                        raw_cat_name = cat.get('name', '').lower()
+                        if 'pass' in raw_cat_name: cat_name = 'passing'
+                        elif 'rush' in raw_cat_name: cat_name = 'rushing'
+                        elif 'rec' in raw_cat_name: cat_name = 'receiving'
+                        else: cat_name = raw_cat_name
+
                         cat_labels = [str(L).upper() for L in cat.get('labels', [])]
+                        
                         for ev in cat.get('events', []):
                             eid  = str(ev.get('eventId', ''))
                             vals = ev.get('stats', [])
@@ -1190,28 +1197,28 @@ def get_nfl_stats(player_label):
                     opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
 
                     # Passing extraction
-                    pass_att = safe_float(stats.get('PASSING_ATT', 0))
-                    comp     = safe_float(stats.get('PASSING_CMP', stats.get('PASSING_COMP', 0)))
-                    if 'PASSING_C/ATT' in stats:
+                    pass_att = safe_float(stats.get('passing_ATT', 0))
+                    comp     = safe_float(stats.get('passing_CMP', stats.get('passing_COMP', 0)))
+                    if 'passing_C/ATT' in stats:
                         try:
-                            comp = float(str(stats['PASSING_C/ATT']).split('/')[0])
-                            pass_att = float(str(stats['PASSING_C/ATT']).split('/')[1])
+                            comp = float(str(stats['passing_C/ATT']).split('/')[0])
+                            pass_att = float(str(stats['passing_C/ATT']).split('/')[1])
                         except: pass
                         
-                    pass_yds = safe_float(stats.get('PASSING_YDS', 0))
-                    pass_tds = safe_float(stats.get('PASSING_TD',  0))
-                    pass_int = safe_float(stats.get('PASSING_INT', 0))
+                    pass_yds = safe_float(stats.get('passing_YDS', 0))
+                    pass_tds = safe_float(stats.get('passing_TD',  0))
+                    pass_int = safe_float(stats.get('passing_INT', 0))
 
                     # Rushing extraction
-                    carries  = safe_float(stats.get('RUSHING_ATT', stats.get('RUSHING_CAR', 0)))
-                    rush_yds = safe_float(stats.get('RUSHING_YDS', 0))
-                    rush_tds = safe_float(stats.get('RUSHING_TD',  0))
+                    carries  = safe_float(stats.get('rushing_ATT', stats.get('rushing_CAR', 0)))
+                    rush_yds = safe_float(stats.get('rushing_YDS', 0))
+                    rush_tds = safe_float(stats.get('rushing_TD',  0))
 
                     # Receiving extraction
-                    targets  = safe_float(stats.get('RECEIVING_TGT', stats.get('RECEIVING_TGTS', stats.get('RECEIVING_TAR', 0))))
-                    rec      = safe_float(stats.get('RECEIVING_REC', 0))
-                    rec_yds  = safe_float(stats.get('RECEIVING_YDS', 0))
-                    rec_tds  = safe_float(stats.get('RECEIVING_TD',  0))
+                    targets  = safe_float(stats.get('receiving_TGT', stats.get('receiving_TGTS', stats.get('receiving_TAR', 0))))
+                    rec      = safe_float(stats.get('receiving_REC', 0))
+                    rec_yds  = safe_float(stats.get('receiving_YDS', 0))
+                    rec_tds  = safe_float(stats.get('receiving_TD',  0))
 
                     # Failsafe activity check
                     if (pass_att + carries + targets + rec + abs(rush_yds) + abs(rec_yds)) == 0:
@@ -1228,12 +1235,15 @@ def get_nfl_stats(player_label):
                     })
 
             except Exception as e:
-                fetch_errors.append(f"Season {season_year}: {str(e)}")
+                fetch_errors.append(f"URL fetch error: {str(e)}")
 
         if not all_rows:
             return pd.DataFrame(), 404, fetch_errors or ["No valid stats found in gamelogs"]
 
         df = pd.DataFrame(all_rows)
+        # Sort by date so we don't duplicate games if they overlap between fetches
+        df = df.sort_values('ValidDate').drop_duplicates(subset=['ValidDate'], keep='last')
+
         df['ValidDate'] = pd.to_datetime(df['ValidDate'], utc=True).dt.tz_convert('America/New_York').dt.normalize().dt.tz_localize(None)
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         
@@ -1242,7 +1252,7 @@ def get_nfl_stats(player_label):
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 600)]
         df['Weight'] = np.exp(-0.001155 * df['Days_Ago'])
 
-        return df.sort_values('ValidDate').reset_index(drop=True), 200, []
+        return df.reset_index(drop=True), 200, []
 
     except Exception as e:
         return pd.DataFrame(), 500, [str(e)]
