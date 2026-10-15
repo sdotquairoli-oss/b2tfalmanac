@@ -1061,30 +1061,37 @@ def search_nfl_players(query):
 @st.cache_data(ttl=60)
 def get_nfl_schedule():
     try:
-        today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y%m%d")
-        url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates={today_str}"
+        # 💥 FIX 1: Removed the '?dates=' parameter to fetch the full NFL week
+        url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
         r = requests.get(url, timeout=10).json()
         events = r.get('events', [])
-        if not events: return None, "No NFL games today."
+        
+        if not events: return None, "No NFL games scheduled this week."
+        
         matchups = []
         for e in events:
             c = e['competitions'][0]
             status_dict = e['status']
             status_name = status_dict['type']['name']
             is_live_or_final = status_name in ['STATUS_IN_PROGRESS', 'STATUS_FINAL', 'STATUS_HALFTIME']
+            
             home_team = next(t for t in c['competitors'] if t['homeAway'] == 'home')
             away_team = next(t for t in c['competitors'] if t['homeAway'] == 'away')
             home_abbrev = home_team['team']['abbreviation'].upper()
             away_abbrev = away_team['team']['abbreviation'].upper()
+            
             home_score = int(home_team.get('score', 0)) if home_team.get('score') else 0
             away_score = int(away_team.get('score', 0)) if away_team.get('score') else 0
+            
             if status_name == 'STATUS_SCHEDULED':
                 dt = pd.to_datetime(e['date']).tz_convert('America/New_York')
-                ds = f"Today - {dt.strftime('%I:%M %p').lstrip('0')}"
+                # 💥 FIX 2: Replaced "Today" with the day of the week (e.g., "Thu" or "Sun")
+                ds = f"{dt.strftime('%a')} - {dt.strftime('%I:%M %p').lstrip('0')}"
             elif status_name == 'STATUS_FINAL':
                 ds = "Final"
             else:
                 ds = f"LIVE Q{status_dict.get('period', '')} ({status_dict.get('displayClock', '')})"
+                
             matchups.append({
                 "home": home_abbrev, "away": away_abbrev,
                 "status": ds, "home_score": home_score,
@@ -1093,7 +1100,6 @@ def get_nfl_schedule():
         return matchups, "Success"
     except Exception as e:
         return None, f"Failed to connect to NFL API: {str(e)}"
-
 @st.cache_data(ttl=300)
 def get_nfl_stats(player_label):
     cn = player_label.split("(")[0].strip()
