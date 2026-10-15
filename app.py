@@ -1101,15 +1101,43 @@ def get_nfl_schedule():
         return None, f"Failed to connect to NFL API: {str(e)}"
 @st.cache_data(ttl=300)
 def get_nfl_stats(player_label):
+    import re
     cn = player_label.split("(")[0].strip()
     fetch_errors = []
+
+    # ---------- helpers (kept inside so this block pastes in on its own) ----------
+    def _norm(k):
+        # 'passingYards' / 'passing_YDS' / 'CMP%' -> lowercase alphanumerics only
+        return re.sub(r'[^a-z0-9]', '', str(k).replace('%', 'pct').lower())
+
+    def _scan_keys(labels):
+        # ESPN reuses short labels (YDS, TD, AVG, LNG) across passing/rushing/receiving.
+        # Walk the label list and tag each one with the stat group it belongs to.
+        group, out = '', []
+        for L in labels:
+            u = str(L).upper().strip()
+            if u in ('CMP', 'C/ATT'):            group = 'passing'
+            elif u == 'CAR':                     group = 'rushing'
+            elif u in ('REC', 'TGTS', 'TGT'):    group = 'receiving'
+            out.append(f"{group}_{u}" if group else u)
+        return out
+
+    def safe_float(val, default=0.0):
+        try: return float(str(val).replace('--', '0').replace(',', '').strip() or default)
+        except: return default
+
+    def pick(stats, *cands):
+        for c in cands:
+            if c in stats: return safe_float(stats[c])
+        return 0.0
+    # -----------------------------------------------------------------------------
 
     try:
         team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
         cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
         athlete_id = None
 
-        # 🟢 1. PRIMARY: SEARCH API (Bypasses outdated rosters)
+        # 1. PRIMARY: SEARCH API (bypasses outdated rosters)
         try:
             search_url = f"https://site.web.api.espn.com/apis/search/v2?region=us&lang=en&query={requests.utils.quote(cn)}&limit=3"
             sr = requests.get(search_url, timeout=5).json()
@@ -1125,7 +1153,7 @@ def get_nfl_stats(player_label):
         except Exception as e:
             fetch_errors.append(f"Search API error: {e}")
 
-        # 🟢 2. FALLBACK: ROSTER LOOKUP
+        # 2. FALLBACK: ROSTER LOOKUP
         if not athlete_id and team_abbr in ESPN_NFL_TEAM_IDS:
             roster = get_espn_nfl_roster(team_abbr)
             for name, aid in roster.items():
@@ -1137,7 +1165,7 @@ def get_nfl_stats(player_label):
         if not athlete_id:
             return pd.DataFrame(), 404, fetch_errors or [f"Could not locate ESPN ID for {cn}"]
 
-        # 🟢 3. GAMELOG FETCH
+        # 3. GAMELOG FETCH (no season param = current season, then last season)
         curr_year = datetime.now().year
         urls = [
             f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
@@ -1145,6 +1173,7 @@ def get_nfl_stats(player_label):
         ]
 
         all_rows = []
+        diag = ""   # structure snapshot, only shown if parsing fails
 
         for url in urls:
             try:
@@ -1156,71 +1185,89 @@ def get_nfl_stats(player_label):
                 gl_data      = gl_r.json()
                 events_meta  = gl_data.get('events', {})
                 season_types = gl_data.get('seasonTypes', [])
+                top_names    = list(gl_data.get('names', []) or [])
+                top_labels   = list(gl_data.get('labels', []) or [])
+
+                # Real ESPN layout: top-level `categories` give each group's stat count, and each category's
+                # events carry ONLY that group's slice of the top-level names/labels (e.g. passing=11, rushing=5)
+                offsets, _pos = {}, 0
+                for _c in (gl_data.get('categories', []) or []):
+                    try: _n = int(_c.get('count', 0))
+                    except Exception: _n = 0
+                    offsets[str(_c.get('name', '')).lower()] = (_pos, _n)
+                    _pos += _n
 
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        # Force normalization of category names
-                        raw_cat = str(cat.get('name', '')).lower()
-                        if 'pass' in raw_cat: cat_name = 'passing'
-                        elif 'rush' in raw_cat: cat_name = 'rushing'
-                        elif 'rec' in raw_cat: cat_name = 'receiving'
-                        else: cat_name = raw_cat
-                        
-                        # Force all ESPN labels to uppercase
-                        cat_labels = [str(L).upper().strip() for L in cat.get('labels', [])]
-                        
+                        raw_cat = str(cat.get('name') or cat.get('displayName') or '').lower()
+                        grp = ('passing' if 'pass' in raw_cat else
+                               'rushing' if 'rush' in raw_cat else
+                               'receiving' if 'receiv' in raw_cat else '')
+
+                        # Use the category's own names/labels if it has them, otherwise the top-level arrays
+                        c_names  = list(cat.get('names') or top_names)
+                        c_labels = list(cat.get('labels') or top_labels)
+                        if grp and cat.get('labels'):
+                            label_keys = [f"{grp}_{str(L).upper().strip()}" for L in c_labels]
+                        else:
+                            label_keys = _scan_keys(c_labels)
+
                         for ev in cat.get('events', []):
                             eid  = str(ev.get('eventId', ''))
                             vals = ev.get('stats', [])
-                            if eid not in game_stats:
-                                game_stats[eid] = {}
-                            for label, val in zip(cat_labels, vals):
-                                game_stats[eid][f"{cat_name}_{label}"] = val
+                            d = game_stats.setdefault(eid, {})
+                            n_use, l_use = c_names, label_keys
+                            if not cat.get('names') and raw_cat in offsets:
+                                st_i, cnt = offsets[raw_cat]
+                                if cnt and len(vals) == cnt and cnt != len(c_names):
+                                    n_use = c_names[st_i:st_i + cnt]
+                                    l_use = label_keys[st_i:st_i + cnt]
+                            for k, v in zip(n_use, vals):       d[_norm(k)] = v
+                            for k, v in zip(l_use, vals):       d[_norm(k)] = v
 
-                def safe_float(val, default=0.0):
-                    try: return float(str(val).replace('--', '0').strip() or default)
-                    except: return default
+                        if not diag and cat.get('events'):
+                            diag = (f"top-level keys={list(gl_data.keys())[:12]} | top names={top_names[:20]} | "
+                                    f"top labels={top_labels[:20]} | category keys={list(cat.keys())} | "
+                                    f"category name='{raw_cat}' | cat labels={list(cat.get('labels') or [])[:15]} | "
+                                    f"sample event stats={cat['events'][0].get('stats', [])[:20]} | "
+                                    f"parsed keys={list(game_stats.get(str(cat['events'][0].get('eventId','')), {}).keys())[:25]}")
 
                 for eid, stats in game_stats.items():
+                    if not stats: continue                      # nothing parsed for this game
                     meta = events_meta.get(eid, {})
                     if not meta: continue
-                    
+
                     date_str = meta.get('gameDate', meta.get('date', ''))
                     try: game_date = pd.to_datetime(date_str)
                     except: continue
-                        
-                    at_vs = str(meta.get('atVs', '')).lower().strip()
+
+                    at_vs    = str(meta.get('atVs', '')).lower().strip()
                     game_loc = str(meta.get('gameLocation', '')).lower().strip()
-                    is_home = 1 if (at_vs in ['vs', 'vs.'] or game_loc == 'home' or meta.get('homeAway', '') == 'home') else 0
-                    
-                    opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
+                    is_home  = 1 if (at_vs in ['vs', 'vs.'] or game_loc == 'home' or meta.get('homeAway', '') == 'home') else 0
+                    opp      = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
 
-                    # Passing extraction
-                    pass_att = safe_float(stats.get('passing_ATT', 0))
-                    comp     = safe_float(stats.get('passing_CMP', stats.get('passing_COMP', 0)))
-                    if 'passing_C/ATT' in stats:
-                        try:
-                            comp = float(str(stats['passing_C/ATT']).split('/')[0])
-                            pass_att = float(str(stats['passing_C/ATT']).split('/')[1])
-                        except: pass
-                        
-                    pass_yds = safe_float(stats.get('passing_YDS', 0))
-                    pass_tds = safe_float(stats.get('passing_TD',  0))
-                    pass_int = safe_float(stats.get('passing_INT', 0))
+                    # Passing
+                    pass_att = pick(stats, 'passingattempts', 'passingatt')
+                    comp     = pick(stats, 'completions', 'passingcompletions', 'passingcmp')
+                    if pass_att == 0 and comp == 0:
+                        ca = next((stats[k] for k in ('passingcatt', 'catt', 'completionspassingattempts') if k in stats), None)
+                        if ca is not None and '/' in str(ca):
+                            comp, pass_att = safe_float(str(ca).split('/')[0]), safe_float(str(ca).split('/')[1])
+                    pass_yds = pick(stats, 'passingyards', 'passingyds')
+                    pass_tds = pick(stats, 'passingtouchdowns', 'passingtd')
+                    pass_int = pick(stats, 'interceptions', 'passinginterceptions', 'passingint')
 
-                    # Rushing extraction
-                    carries  = safe_float(stats.get('rushing_ATT', stats.get('rushing_CAR', 0)))
-                    rush_yds = safe_float(stats.get('rushing_YDS', 0))
-                    rush_tds = safe_float(stats.get('rushing_TD',  0))
+                    # Rushing
+                    carries  = pick(stats, 'rushingattempts', 'rushingcar', 'rushingatt')
+                    rush_yds = pick(stats, 'rushingyards', 'rushingyds')
+                    rush_tds = pick(stats, 'rushingtouchdowns', 'rushingtd')
 
-                    # Receiving extraction
-                    targets  = safe_float(stats.get('receiving_TGT', stats.get('receiving_TGTS', stats.get('receiving_TAR', 0))))
-                    rec      = safe_float(stats.get('receiving_REC', 0))
-                    rec_yds  = safe_float(stats.get('receiving_YDS', 0))
-                    rec_tds  = safe_float(stats.get('receiving_TD',  0))
-
-                    # 💥 ACTIVITY FILTER REMOVED SO TABLE RENDERS
+                    # Receiving
+                    targets  = pick(stats, 'receivingtargets', 'receivingtgts', 'receivingtgt', 'targets')
+                    rec      = pick(stats, 'receptions', 'receivingrec', 'receivingreceptions')
+                    rec_yds  = pick(stats, 'receivingyards', 'receivingyds')
+                    rec_tds  = pick(stats, 'receivingtouchdowns', 'receivingtd')
 
                     all_rows.append({
                         'ValidDate': game_date, 'MATCHUP': opp, 'Is_Home': is_home,
@@ -1228,9 +1275,7 @@ def get_nfl_stats(player_label):
                         'PASS_YDS': pass_yds, 'PASS_TDS': pass_tds, 'COMP': comp, 'INT': pass_int,
                         'RUSH_YDS': rush_yds, 'RUSH_TDS': rush_tds,
                         'REC': rec, 'REC_YDS': rec_yds, 'REC_TDS': rec_tds,
-                        # 💥 THE DEBUG INJECTOR: Overwrites MINS so you can see ESPN's hidden keys in the tooltip
-                        'MINS': float(len(stats.keys())), 
-                        'DEBUG_KEYS': str(list(stats.keys())[:5]),
+                        'MINS': max(pass_att, carries + targets),
                         'RUSH_REC': rush_yds + rec_yds
                     })
 
@@ -1238,24 +1283,29 @@ def get_nfl_stats(player_label):
                 fetch_errors.append(f"URL fetch error: {str(e)}")
 
         if not all_rows:
+            if diag:   # ESPN returned game data but nothing could be mapped -> show the structure
+                st.warning("NFL parser got game data from ESPN but couldn't map any stat names. "
+                           "Paste this to Claude: " + diag)
+                return pd.DataFrame(), 404, ["Game data found but no stat keys matched", diag]
             return pd.DataFrame(), 404, fetch_errors or ["No valid stats found in gamelogs"]
 
         df = pd.DataFrame(all_rows)
-        # Sort by date so we don't duplicate games if they overlap between fetches
-        df = df.sort_values('ValidDate').drop_duplicates(subset=['ValidDate'], keep='last')
 
+        # FAIL LOUDLY: games found but every stat parsed as zero means the key names didn't match
+        stat_cols = ['PASS_ATT', 'PASS_YDS', 'CARRIES', 'RUSH_YDS', 'TARGETS', 'REC', 'REC_YDS']
+        if float(df[stat_cols].to_numpy().sum()) == 0.0:
+            st.warning("NFL parser found games but every stat was 0, so ESPN's key names didn't match. "
+                       "Paste this to Claude: " + diag)
+            return pd.DataFrame(), 404, ["Parsed games but all stats were zero (key mismatch)", diag]
+
+        df = df.sort_values('ValidDate').drop_duplicates(subset=['ValidDate'], keep='last')
         df['ValidDate'] = pd.to_datetime(df['ValidDate'], utc=True).dt.tz_convert('America/New_York').dt.normalize().dt.tz_localize(None)
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
-        
+
         today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
         df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 600)]
         df['Weight'] = np.exp(-0.001155 * df['Days_Ago'])
-
-        # Print the keys straight to Streamlit to tell us exactly what ESPN named the stats
-        try:
-            st.error(f"DEBUG - ESPN API KEYS: {df['DEBUG_KEYS'].iloc[-1]}")
-        except: pass
 
         return df.reset_index(drop=True), 200, []
 
