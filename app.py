@@ -1109,7 +1109,7 @@ def get_nfl_stats(player_label):
         cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
         athlete_id = None
 
-        # 🟢 1. PRIMARY: SEARCH API (Bypasses outdated rosters)
+        # 🟢 1. PRIMARY: SEARCH API
         try:
             search_url = f"https://site.web.api.espn.com/apis/search/v2?region=us&lang=en&query={requests.utils.quote(cn)}&limit=3"
             sr = requests.get(search_url, timeout=5).json()
@@ -1137,7 +1137,7 @@ def get_nfl_stats(player_label):
         if not athlete_id:
             return pd.DataFrame(), 404, fetch_errors or [f"Could not locate ESPN ID for {cn}"]
 
-        # 🟢 3. GAMELOG FETCH (Drops explicit season param to force active week)
+        # 🟢 3. GAMELOG FETCH
         curr_year = datetime.now().year
         urls = [
             f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
@@ -1157,21 +1157,15 @@ def get_nfl_stats(player_label):
                 events_meta  = gl_data.get('events', {})
                 season_types = gl_data.get('seasonTypes', [])
 
-                gl_data      = gl_r.json()
-                events_meta  = gl_data.get('events', {})
-                season_types = gl_data.get('seasonTypes', [])
-
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        # Force normalization of category names
-                        raw_cat = str(cat.get('name', '')).lower()
-                        if 'pass' in raw_cat: cat_name = 'passing'
-                        elif 'rush' in raw_cat: cat_name = 'rushing'
-                        elif 'rec' in raw_cat: cat_name = 'receiving'
+                        raw_cat = str(cat.get('name', '')).upper()
+                        if 'PASS' in raw_cat: cat_name = 'PASSING'
+                        elif 'RUSH' in raw_cat: cat_name = 'RUSHING'
+                        elif 'REC' in raw_cat: cat_name = 'RECEIVING'
                         else: cat_name = raw_cat
                         
-                        # 💥 THE FIX: Force all ESPN labels to uppercase so 'Yds' safely matches 'YDS'
                         cat_labels = [str(L).upper().strip() for L in cat.get('labels', [])]
                         
                         for ev in cat.get('events', []):
@@ -1200,31 +1194,43 @@ def get_nfl_stats(player_label):
                     
                     opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
 
-                    # Passing extraction
-                    pass_att = safe_float(stats.get('passing_ATT', 0))
-                    comp     = safe_float(stats.get('passing_CMP', stats.get('passing_COMP', 0)))
-                    if 'passing_C/ATT' in stats:
-                        try:
-                            comp = float(str(stats['passing_C/ATT']).split('/')[0])
-                            pass_att = float(str(stats['passing_C/ATT']).split('/')[1])
-                        except: pass
+                    # 💥 INDESTRUCTIBLE STAT PARSER
+                    comp, pass_att, pass_yds, pass_tds, pass_int = 0,0,0,0,0
+                    carries, rush_yds, rush_tds = 0,0,0
+                    rec, targets, rec_yds, rec_tds = 0,0,0,0
+
+                    for k, v in stats.items():
+                        k_upper = k.upper()
+                        v_str = str(v).strip()
                         
-                    pass_yds = safe_float(stats.get('passing_YDS', 0))
-                    pass_tds = safe_float(stats.get('passing_TD',  0))
-                    pass_int = safe_float(stats.get('passing_INT', 0))
+                        # PASSING
+                        if 'PASSING' in k_upper:
+                            if 'C/ATT' in k_upper or 'CMP/ATT' in k_upper:
+                                if '/' in v_str:
+                                    comp = safe_float(v_str.split('/')[0])
+                                    pass_att = safe_float(v_str.split('/')[1])
+                            elif 'CMP' in k_upper or 'COMP' in k_upper: comp = safe_float(v)
+                            elif 'ATT' in k_upper and not 'C/ATT' in k_upper: pass_att = safe_float(v)
+                            elif 'YDS' in k_upper: pass_yds = safe_float(v)
+                            elif 'TD' in k_upper: pass_tds = safe_float(v)
+                            elif 'INT' in k_upper: pass_int = safe_float(v)
+                            
+                        # RUSHING
+                        elif 'RUSHING' in k_upper:
+                            if 'CAR' in k_upper or 'ATT' in k_upper: carries = safe_float(v)
+                            elif 'YDS' in k_upper: rush_yds = safe_float(v)
+                            elif 'TD' in k_upper: rush_tds = safe_float(v)
+                            
+                        # RECEIVING
+                        elif 'RECEIVING' in k_upper:
+                            if 'REC' in k_upper and not 'REC_YDS' in k_upper: rec = safe_float(v)
+                            elif 'TGT' in k_upper or 'TAR' in k_upper: targets = safe_float(v)
+                            elif 'YDS' in k_upper: rec_yds = safe_float(v)
+                            elif 'TD' in k_upper: rec_tds = safe_float(v)
 
-                    # Rushing extraction
-                    carries  = safe_float(stats.get('rushing_ATT', stats.get('rushing_CAR', 0)))
-                    rush_yds = safe_float(stats.get('rushing_YDS', 0))
-                    rush_tds = safe_float(stats.get('rushing_TD',  0))
-
-                    # Receiving extraction
-                    targets  = safe_float(stats.get('receiving_TGT', stats.get('receiving_TGTS', stats.get('receiving_TAR', 0))))
-                    rec      = safe_float(stats.get('receiving_REC', 0))
-                    rec_yds  = safe_float(stats.get('receiving_YDS', 0))
-                    rec_tds  = safe_float(stats.get('receiving_TD',  0))
-
-                    # 💥 THE FIX: Removed the total_activity < 1 filter so bad games aren't thrown out
+                    total_activity = pass_att + carries + targets + rec + abs(rush_yds) + abs(rec_yds)
+                    if total_activity == 0:
+                        continue
 
                     all_rows.append({
                         'ValidDate': game_date, 'MATCHUP': opp, 'Is_Home': is_home,
@@ -1240,10 +1246,9 @@ def get_nfl_stats(player_label):
                 fetch_errors.append(f"URL fetch error: {str(e)}")
 
         if not all_rows:
-            return pd.DataFrame(), 404, fetch_errors or ["No valid stats found in gamelogs"]
+            return pd.DataFrame(), 404, fetch_errors or ["All parsed stats resulted in 0 activity."]
 
         df = pd.DataFrame(all_rows)
-        # Sort by date so we don't duplicate games if they overlap between fetches
         df = df.sort_values('ValidDate').drop_duplicates(subset=['ValidDate'], keep='last')
 
         df['ValidDate'] = pd.to_datetime(df['ValidDate'], utc=True).dt.tz_convert('America/New_York').dt.normalize().dt.tz_localize(None)
