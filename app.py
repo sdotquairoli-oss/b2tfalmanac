@@ -3889,7 +3889,7 @@ def render_syndicate_board(league_key):
         if status_code == 429:
             st.error("🚨 Rate limited. Wait 60 seconds."); st.stop()
         elif df.empty:
-            st.error(f"⚠️ No data found for {target_player}."); st.stop()
+            st.error(f"⚠️ No data found for {target_player}. Debug Info: {fetch_errors}"); st.stop()
         else:
             # ── PRE-FETCH EVERYTHING ONCE BEFORE THE LOOP ──────────
             suppressed     = get_suppressed_stats(league_key)
