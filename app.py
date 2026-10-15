@@ -1105,33 +1105,36 @@ def get_nfl_stats(player_label):
     fetch_errors = []
 
     try:
-        team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
-        cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
         athlete_id = None
+        
+        # 🟢 1. BULLETPROOF SEARCH API LOOKUP
+        try:
+            search_url = f"https://site.web.api.espn.com/apis/search/v2?region=us&lang=en&query={requests.utils.quote(cn)}&limit=3"
+            sr = requests.get(search_url, timeout=5).json()
+            for res in sr.get('results', []):
+                for content in res.get('contents', []):
+                    if 'nfl' in content.get('url', '') and content.get('id'):
+                        athlete_id = str(content.get('id'))
+                        break
+                if athlete_id: break
+        except Exception as e:
+            fetch_errors.append(f"Search API error: {e}")
 
-        # 🟢 1. PRIMARY ROSTER LOOKUP
-        if team_abbr in ESPN_NFL_TEAM_IDS:
-            roster = get_espn_nfl_roster(team_abbr)
-            for name, aid in roster.items():
-                name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
-                if name_clean == cn_clean or cn_clean in name_clean:
-                    athlete_id = aid
-                    break
-
-        # 🟢 2. FALLBACK ROSTER LOOKUP
         if not athlete_id:
-            for fallback_abbr in ["KC", "SF", "PHI", "DAL", "BUF", "MIA", "BAL", "CIN", "DET", "GB", "DEN", "SEA"]:
-                roster = get_espn_nfl_roster(fallback_abbr)
+            # 🟢 2. FALLBACK ROSTER LOOKUP
+            team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
+            cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
+            
+            if team_abbr in ESPN_NFL_TEAM_IDS:
+                roster = get_espn_nfl_roster(team_abbr)
                 for name, aid in roster.items():
                     name_clean = name.replace('.', '').replace("'", '').replace('-', ' ')
                     if name_clean == cn_clean or cn_clean in name_clean:
                         athlete_id = aid
                         break
-                if athlete_id:
-                    break
 
         if not athlete_id:
-            return pd.DataFrame(), 404, [f"'{cn}' not found in any NFL roster"]
+            return pd.DataFrame(), 404, fetch_errors or [f"Could not locate ESPN ID for {cn}"]
 
         # 🟢 3. GAMELOG FETCH
         curr_year = datetime.now().year
@@ -1158,8 +1161,8 @@ def get_nfl_stats(player_label):
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        cat_name = cat.get('name', '').lower()
-                        cat_labels = cat.get('labels', [])
+                        cat_name = cat.get('name', '').upper()
+                        cat_labels = [str(L).upper() for L in cat.get('labels', [])]
                         for ev in cat.get('events', []):
                             eid  = str(ev.get('eventId', ''))
                             vals = ev.get('stats', [])
@@ -1187,31 +1190,31 @@ def get_nfl_stats(player_label):
                     opp = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
 
                     # Passing extraction
-                    pass_att = safe_float(stats.get('passing_ATT', 0))
-                    comp     = safe_float(stats.get('passing_CMP', stats.get('passing_COMP', 0)))
-                    if 'passing_C/ATT' in stats:
+                    pass_att = safe_float(stats.get('PASSING_ATT', 0))
+                    comp     = safe_float(stats.get('PASSING_CMP', stats.get('PASSING_COMP', 0)))
+                    if 'PASSING_C/ATT' in stats:
                         try:
-                            comp = float(str(stats['passing_C/ATT']).split('/')[0])
-                            pass_att = float(str(stats['passing_C/ATT']).split('/')[1])
+                            comp = float(str(stats['PASSING_C/ATT']).split('/')[0])
+                            pass_att = float(str(stats['PASSING_C/ATT']).split('/')[1])
                         except: pass
                         
-                    pass_yds = safe_float(stats.get('passing_YDS', 0))
-                    pass_tds = safe_float(stats.get('passing_TD',  0))
-                    pass_int = safe_float(stats.get('passing_INT', 0))
+                    pass_yds = safe_float(stats.get('PASSING_YDS', 0))
+                    pass_tds = safe_float(stats.get('PASSING_TD',  0))
+                    pass_int = safe_float(stats.get('PASSING_INT', 0))
 
                     # Rushing extraction
-                    carries  = safe_float(stats.get('rushing_ATT', stats.get('rushing_CAR', 0)))
-                    rush_yds = safe_float(stats.get('rushing_YDS', 0))
-                    rush_tds = safe_float(stats.get('rushing_TD',  0))
+                    carries  = safe_float(stats.get('RUSHING_ATT', stats.get('RUSHING_CAR', 0)))
+                    rush_yds = safe_float(stats.get('RUSHING_YDS', 0))
+                    rush_tds = safe_float(stats.get('RUSHING_TD',  0))
 
                     # Receiving extraction
-                    targets  = safe_float(stats.get('receiving_TGT', stats.get('receiving_TGTS', 0)))
-                    rec      = safe_float(stats.get('receiving_REC', 0))
-                    rec_yds  = safe_float(stats.get('receiving_YDS', 0))
-                    rec_tds  = safe_float(stats.get('receiving_TD',  0))
+                    targets  = safe_float(stats.get('RECEIVING_TGT', stats.get('RECEIVING_TGTS', stats.get('RECEIVING_TAR', 0))))
+                    rec      = safe_float(stats.get('RECEIVING_REC', 0))
+                    rec_yds  = safe_float(stats.get('RECEIVING_YDS', 0))
+                    rec_tds  = safe_float(stats.get('RECEIVING_TD',  0))
 
-                    total_activity = pass_att + carries + targets + rec
-                    if total_activity < 1:
+                    # Failsafe activity check
+                    if (pass_att + carries + targets + rec + abs(rush_yds) + abs(rec_yds)) == 0:
                         continue
 
                     all_rows.append({
