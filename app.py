@@ -1109,7 +1109,7 @@ def get_nfl_stats(player_label):
         cn_clean  = cn.lower().replace('.', '').replace("'", '').replace('-', ' ')
         athlete_id = None
 
-        # 🟢 1. PRIMARY: SEARCH API (Most accurate, immune to outdated rosters)
+        # 🟢 1. PRIMARY: SEARCH API (Bypasses outdated rosters)
         try:
             search_url = f"https://site.web.api.espn.com/apis/search/v2?region=us&lang=en&query={requests.utils.quote(cn)}&limit=3"
             sr = requests.get(search_url, timeout=5).json()
@@ -1137,10 +1137,9 @@ def get_nfl_stats(player_label):
         if not athlete_id:
             return pd.DataFrame(), 404, fetch_errors or [f"Could not locate ESPN ID for {cn}"]
 
-        # 🟢 3. GAMELOG FETCH (Current Season & Previous Season Fallbacks)
+        # 🟢 3. GAMELOG FETCH (Drops explicit season param to force active week)
         curr_year = datetime.now().year
         urls = [
-            # Drop the season parameter so ESPN naturally returns the active week's logs
             f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
             f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog?season={curr_year - 1}"
         ]
@@ -1161,14 +1160,15 @@ def get_nfl_stats(player_label):
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        # Force normalization so ESPN's shifting category names don't break the code
-                        raw_cat_name = cat.get('name', '').lower()
-                        if 'pass' in raw_cat_name: cat_name = 'passing'
-                        elif 'rush' in raw_cat_name: cat_name = 'rushing'
-                        elif 'rec' in raw_cat_name: cat_name = 'receiving'
-                        else: cat_name = raw_cat_name
-
-                        cat_labels = [str(L).upper() for L in cat.get('labels', [])]
+                        # Force normalization of category names
+                        raw_cat = str(cat.get('name', '')).lower()
+                        if 'pass' in raw_cat: cat_name = 'passing'
+                        elif 'rush' in raw_cat: cat_name = 'rushing'
+                        elif 'rec' in raw_cat: cat_name = 'receiving'
+                        else: cat_name = raw_cat
+                        
+                        # 💥 THE FIX: Force all labels to uppercase to prevent case mismatches
+                        cat_labels = [str(L).upper().strip() for L in cat.get('labels', [])]
                         
                         for ev in cat.get('events', []):
                             eid  = str(ev.get('eventId', ''))
@@ -1220,9 +1220,7 @@ def get_nfl_stats(player_label):
                     rec_yds  = safe_float(stats.get('receiving_YDS', 0))
                     rec_tds  = safe_float(stats.get('receiving_TD',  0))
 
-                    # Failsafe activity check
-                    if (pass_att + carries + targets + rec + abs(rush_yds) + abs(rec_yds)) == 0:
-                        continue
+                    # 💥 THE FIX: Removed the total_activity < 1 filter so bad games aren't thrown out
 
                     all_rows.append({
                         'ValidDate': game_date, 'MATCHUP': opp, 'Is_Home': is_home,
