@@ -2270,16 +2270,13 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
             opp_col = 'TARGETS'
 
         if opp_col in df_ml.columns:
-            df_ml['Opp_Roll4'] = df_ml[opp_col].rolling(4).mean().fillna(
-                df_ml[opp_col].mean()).fillna(0)
+            df_ml['Opp_Roll4'] = df_ml[opp_col].rolling(4).mean().fillna(df_ml[opp_col].mean()).fillna(0)
             tonight_opp = float(df_ml['Opp_Roll4'].iloc[-1])
-            # Reset MINS to correct opportunity metric
             expected_mins = float(np.clip(df_ml[opp_col].tail(4).mean(), 1.0, 100.0))
         else:
             df_ml['Opp_Roll4'] = 0.0
             tonight_opp = 0.0
 
-        # ── Poisson ────────────────────────────────────
         X_poi_train = df_ml[['MINS']].copy()
         X_poi_train['Trend'] = np.arange(len(df_ml))
 
@@ -2300,17 +2297,14 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 'Is_Short_Week', 'Stadium_Factor', 'Opp_Roll4'
             ]].fillna(0).values
 
-            df_ml['EWMA']     = df_ml[s_col].ewm(span=4, adjust=False).mean().fillna(s_mean)
-            df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(
-                tonight_opp) if opp_col in df_ml.columns else 0.0
+            df_ml['EWMA']      = df_ml[s_col].ewm(span=4, adjust=False).mean().fillna(s_mean)
+            df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(tonight_opp) if opp_col in df_ml.columns else 0.0
             X_hgbr_train = df_ml[[
                 'EWMA', 'MINS', 'EWMA_OPP', 'Stadium_Factor', 'Is_Post_Bye'
             ]].fillna(0).values
 
             def train_rf():
-                return RandomForestRegressor(n_estimators=100, max_depth=5,
-                    min_samples_leaf=2, random_state=42).fit(
-                    X_rf_train, y, sample_weight=weights)
+                return RandomForestRegressor(n_estimators=100, max_depth=5, min_samples_leaf=2, random_state=42).fit(X_rf_train, y, sample_weight=weights)
 
             rf_pred_vec = [
                 df_ml['Roll2'].iloc[-1], df_ml['Roll4'].iloc[-1],
@@ -2349,16 +2343,13 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
             ]].fillna(0).values
 
             df_ml['EWMA']     = df_ml[s_col].ewm(span=4, adjust=False).mean().fillna(s_mean)
-            df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(
-                tonight_opp) if opp_col in df_ml.columns else 0.0
+            df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(tonight_opp) if opp_col in df_ml.columns else 0.0
             X_hgbr_train = df_ml[[
                 'EWMA', 'MINS', 'EWMA_OPP', 'Hot_Cold', 'Stadium_Factor'
             ]].fillna(0).values
 
             def train_rf():
-                return RandomForestRegressor(n_estimators=100, max_depth=5,
-                    min_samples_leaf=2, random_state=42).fit(
-                    X_rf_train, y, sample_weight=weights)
+                return RandomForestRegressor(n_estimators=100, max_depth=5, min_samples_leaf=2, random_state=42).fit(X_rf_train, y, sample_weight=weights)
 
             rf_pred_vec = [
                 df_ml['Roll2'].iloc[-1], df_ml['Roll4'].iloc[-1],
@@ -2378,19 +2369,12 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 ewma_opp, hot_cold, tonight_stadium
             ]
 
-        # ── Shared trainers ────────────────────────────
         def train_poisson():
-            return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
-                X_poi_train.values, y, sample_weight=weights)
+            return PoissonRegressor(alpha=1e-3, max_iter=500).fit(X_poi_train.values, y, sample_weight=weights)
         def train_xgb():
-            return XGBRegressor(n_estimators=100, learning_rate=0.03,
-                max_depth=4, subsample=0.8, random_state=42,
-                objective='reg:squarederror').fit(
-                X_xgb_train, y, sample_weight=weights)
+            return XGBRegressor(n_estimators=100, learning_rate=0.03, max_depth=4, subsample=0.8, random_state=42, objective='reg:squarederror').fit(X_xgb_train, y, sample_weight=weights)
         def train_hgbr():
-            return HistGradientBoostingRegressor(
-                max_iter=100, max_depth=4, random_state=42).fit(
-                X_hgbr_train, y, sample_weight=weights)
+            return HistGradientBoostingRegressor(max_iter=100, max_depth=4, random_state=42).fit(X_hgbr_train, y, sample_weight=weights)
 
         try:
             with ThreadPoolExecutor(max_workers=4) as executor:
