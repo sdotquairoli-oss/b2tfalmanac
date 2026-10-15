@@ -72,14 +72,16 @@ S_MAP = {
     "Passing Yards": "PASS_YDS", "Passing TDs": "PASS_TDS",
     "Completions": "COMP", "Interceptions": "INT",
     "Rushing Yards": "RUSH_YDS", "Receiving Yards": "REC_YDS",
-    "Receptions": "REC", "Carries": "CARRIES"
+    "Receptions": "REC", "Carries": "CARRIES", "Rush+Rec Yards": "RUSH_REC"
 }
 
 PASS_THRESHOLDS = {
-    "PTS": 1.5, "TRB": 0.8, "AST": 0.8, "FG3M": 0.6, "PRA": 2.0, "PR": 1.5,
+    "PTS": 2.5, "TRB": 0.8, "AST": 0.8, "FG3M": 0.6, "PRA": 2.0, "PR": 1.5,
     "PA": 1.5, "RA": 1.0, "SOG": 0.75, "G": 0.3, "A": 0.4, "H": 0.5,
     "HR": 0.25, "TB": 0.75, "K": 1.0, "ER": 0.5, "DD": 0.10, "TD": 0.08,
-    "MINS": 2.0, "PPP": 0.3, "BLK": 0.35, "STL": 0.35 
+    "MINS": 2.0, "PPP": 0.3, "BLK": 0.35, "STL": 0.35,
+    "PASS_YDS": 8.0, "PASS_TDS": 0.4, "COMP": 1.0, "INT": 0.3,
+    "RUSH_YDS": 4.0, "REC_YDS": 4.0, "REC": 0.5, "CARRIES": 1.0, "RUSH_REC": 5.0
 }
 
 # --- THEME CSS ---
@@ -517,6 +519,11 @@ def auto_grade_ledger():
                         stats['DD'] = (tens >= 2).astype(int)
                         stats['TD'] = (tens >= 3).astype(int)
 
+            # 🟢 NEW: NFL Rush + Receiving combo builder
+            if league == "NFL" and s_col == "RUSH_REC":
+                if 'RUSH_YDS' in stats.columns and 'REC_YDS' in stats.columns:
+                    stats['RUSH_REC'] = stats['RUSH_YDS'] + stats['REC_YDS']
+
             stats['td'] = pd.to_datetime(stats[d_col]).dt.date
             bet_date = pd.to_datetime(r['Date']).date()
             
@@ -842,69 +849,63 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
         "Rebounds": "player_rebounds", "PRA (Pts+Reb+Ast)": "player_points_rebounds_assists", 
         "Threes Made": "player_threes", "Hits": "batter_hits", "Home Runs": "batter_home_runs", 
         "Pitcher Strikeouts": "pitcher_strikeouts", "Double Double": "player_double_double", 
-        "Triple Double": "player_triple_double", 
-        "Blocks": "player_blocks", "Steals": "player_steals"
+        "Triple Double": "player_triple_double", "Blocks": "player_blocks", "Steals": "player_steals",
+        "Passing Yards": "player_passing_yards", "Passing TDs": "player_passing_tds",
+        "Completions": "player_pass_completions", "Interceptions": "player_interceptions",
+        "Rushing Yards": "player_rushing_yards", "Receiving Yards": "player_receiving_yards", 
+        "Receptions": "player_receptions", "Rush+Rec Yards": "player_rushing_receiving_yards"
     }
     market = m_map.get(stat_type, "player_points")
-    
+
     raw_name = player_label.split("(")[0].strip().lower()
-    
+
     # 🟢 THE IRONCLAD OVERRIDE DICTIONARY
     KNOWN_ALIASES = {
-        "nicolas claxton": "nic claxton",
-        "nicholas claxton": "nic claxton",
-        "stephen curry": "steph curry",
-        "cameron thomas": "cam thomas",
-        "michael porter": "michael porter jr",
-        "timothy hardaway": "tim hardaway jr",
-        "robert williams": "robert williams iii",
-        "p.j. washington": "pj washington",
-        "karl-anthony towns": "karl anthony towns",
-        "shai gilgeous-alexander": "shai gilgeous alexander",
-        "bub carrington": "carlton carrington",
-        "og anunoby": "o.g. anunoby",
-        "gg jackson": "gregory jackson ii",
-        "bones hyland": "nah'shon hyland",
-        "nah'shon hyland": "bones hyland",
-        "tj mcconnell": "t.j. mcconnell",
-        "cj mccollum": "c.j. mccollum",
-        "scoot henderson": "Scoot Henderson",
-        "scooter henderson": "Scoot Henderson",
-        "jrue holiday": "Jrue Holiday",
-        "de'aaron fox": "deaaron fox",
-        "deaaron fox": "de'aaron fox",
+        "nicolas claxton": "nic claxton", "nicholas claxton": "nic claxton",
+        "stephen curry": "steph curry", "cameron thomas": "cam thomas",
+        "michael porter": "michael porter jr", "timothy hardaway": "tim hardaway jr",
+        "robert williams": "robert williams iii", "p.j. washington": "pj washington",
+        "karl-anthony towns": "karl anthony towns", "shai gilgeous-alexander": "shai gilgeous alexander",
+        "bub carrington": "carlton carrington", "og anunoby": "o.g. anunoby",
+        "gg jackson": "gregory jackson ii", "bones hyland": "nah'shon hyland",
+        "nah'shon hyland": "bones hyland", "tj mcconnell": "t.j. mcconnell",
+        "cj mccollum": "c.j. mccollum", "scoot henderson": "Scoot Henderson",
+        "scooter henderson": "Scoot Henderson", "jrue holiday": "Jrue Holiday",
+        "de'aaron fox": "deaaron fox", "deaaron fox": "de'aaron fox",
     }
-    
+
     clean_name = raw_name.replace(" jr.", "").replace(" sr.", "").replace(" iii", "").replace(" jr", "").replace(" sr", "")
     if raw_name in KNOWN_ALIASES:
         clean_name = KNOWN_ALIASES[raw_name]
     elif clean_name in KNOWN_ALIASES:
         clean_name = KNOWN_ALIASES[clean_name]
-        
+
     name_parts = clean_name.split()
     first_name = name_parts[0] if len(name_parts) > 0 else ""
     last_name = name_parts[-1] if len(name_parts) > 1 else clean_name
-    
+
     team_abbr = player_label.split("(")[1].split(")")[0].strip().upper() if "(" in player_label else ""
     used, rem = None, None
-    
+
+    nfl_map = {"ARI": "Arizona Cardinals", "ATL": "Atlanta Falcons", "BAL": "Baltimore Ravens", "BUF": "Buffalo Bills", "CAR": "Carolina Panthers", "CHI": "Chicago Bears", "CIN": "Cincinnati Bengals", "CLE": "Cleveland Browns", "DAL": "Dallas Cowboys", "DEN": "Denver Broncos", "DET": "Detroit Lions", "GB": "Green Bay Packers", "HOU": "Houston Texans", "IND": "Indianapolis Colts", "JAX": "Jacksonville Jaguars", "KC": "Kansas City Chiefs", "LV": "Las Vegas Raiders", "LAC": "Los Angeles Chargers", "LAR": "Los Angeles Rams", "MIA": "Miami Dolphins", "MIN": "Minnesota Vikings", "NE": "New England Patriots", "NO": "New Orleans Saints", "NYG": "New York Giants", "NYJ": "New York Jets", "PHI": "Philadelphia Eagles", "PIT": "Pittsburgh Steelers", "SF": "San Francisco 49ers", "SEA": "Seattle Seahawks", "TB": "Tampa Bay Buccaneers", "TEN": "Tennessee Titans", "WAS": "Washington Commanders"}
+
     try:
         events_resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{sport_path}/events?apiKey={api_key}", timeout=10)
         events_data = events_resp.json()
         used, rem = events_resp.headers.get('x-requests-used'), events_resp.headers.get('x-requests-remaining')
         if not isinstance(events_data, list) or len(events_data) == 0: return None, None, "No active events", used, rem
-        
-        target_team_name = ODDS_MEGA_MAP.get(team_abbr)
+
+        target_team_name = nfl_map.get(team_abbr) if "nfl" in sport_path else ODDS_MEGA_MAP.get(team_abbr)
         events_to_check = []
         if target_team_name:
             events_to_check = [e for e in events_data if target_team_name in e.get('home_team', '') or target_team_name in e.get('away_team', '')]
         if not events_to_check: events_to_check = events_data[:2]
-        
+
         for event in events_to_check:
             odds_resp = requests.get(f"https://api.the-odds-api.com/v4/sports/{sport_path}/events/{event['id']}/odds?apiKey={api_key}&regions=us&markets={market}&oddsFormat=american", timeout=10)
             odds_data = odds_resp.json()
             used, rem = odds_resp.headers.get('x-requests-used', used), odds_resp.headers.get('x-requests-remaining', rem)
-            
+
             for b in odds_data.get('bookmakers', []):
                 for m in b.get('markets', []):
                     for o in m.get('outcomes', []):
@@ -912,14 +913,14 @@ def get_live_line(player_label, stat_type, api_key, sport_path):
                             return str(name).lower().replace("'", "").replace("-", "").replace(".", "").replace(" ", "")
 
                         desc = o.get('name', '') or o.get('description', '')
-                        # SMART MATCH — scrubbed comparison handles apostrophes, hyphens, casing
+                        # SMART MATCH
                         if (scrub_name(clean_name) in scrub_name(desc) or
                             scrub_name(desc) in scrub_name(clean_name) or
                             (scrub_name(last_name) in scrub_name(desc) and
                              scrub_name(first_name)[:3] in scrub_name(desc))):
                             if 'point' in o and 'price' in o: return float(o['point']), int(o['price']), f"Synced: {b.get('title')}", used, rem
                             elif 'price' in o: return None, int(o['price']), f"Synced Odds: {b.get('title')}", used, rem
-                            
+
         return None, None, "Props not posted yet.", used, rem
     except Exception as e: return None, None, f"API Error", used, rem
 
@@ -2720,7 +2721,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     # ✅ TIER BLEND
     raw_consensus_base = (smart_base * 0.50) + (guru_proj * 0.50)
     raw_consensus = (raw_consensus_base * 0.80) + (tier_baseline * 0.20)
-    raw_consensus = float(np.clip(raw_consensus * 0.95, 0.0, 200.0))
+    raw_consensus = float(np.clip(raw_consensus * 0.95, 0.0, 600.0))
     
     floor_proj = max(0.0, raw_consensus * (max(1.0, expected_mins - mins_std) / max(1.0, expected_mins)))
     ceil_proj = raw_consensus * ((expected_mins + mins_std) / max(1.0, expected_mins))
@@ -3523,7 +3524,7 @@ def render_syndicate_board(league_key):
         ["Hits", "Home Runs", "Total Bases", "Pitcher Strikeouts", "Pitcher Earned Runs", "Hits + Runs + RBIs"]
         if league_key == "MLB" else
         ["Passing Yards", "Passing TDs", "Completions", "Interceptions",
-         "Rushing Yards", "Receiving Yards", "Receptions", "Carries"]
+         "Rushing Yards", "Receiving Yards", "Receptions", "Carries", "Rush+Rec Yards"]
         if league_key == "NFL" else
         ["Points", "Goals", "Assists", "Shots on Goal"]
     )
@@ -3966,7 +3967,10 @@ def render_syndicate_board(league_key):
                         df_stat['HRR'] = df_stat['H'] + df_stat['R'] + df_stat['RBI']
                     elif 'H' in df_stat.columns:
                         df_stat['HRR'] = df_stat['H']
-
+                if league_key == "NFL" and s_col == "RUSH_REC":
+                    if 'RUSH_YDS' in df_stat.columns and 'REC_YDS' in df_stat.columns:
+                        df_stat['RUSH_REC'] = df_stat['RUSH_YDS'] + df_stat['REC_YDS']
+                        
                 if s_col not in df_stat.columns:
                     continue
 
