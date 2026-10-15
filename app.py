@@ -1159,17 +1159,17 @@ def get_nfl_stats(player_label):
                 gl_data      = gl_r.json()
                 events_meta  = gl_data.get('events', {})
                 season_types = gl_data.get('seasonTypes', [])
-                labels       = gl_data.get('labels', [])
 
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
+                        cat_labels = cat.get('labels', [])
                         for ev in cat.get('events', []):
                             eid  = str(ev.get('eventId', ''))
                             vals = ev.get('stats', [])
                             if eid not in game_stats:
                                 game_stats[eid] = {}
-                            for label, val in zip(labels, vals):
+                            for label, val in zip(cat_labels, vals):
                                 game_stats[eid][label] = val
 
                 def safe_float(val, default=0.0):
@@ -1754,7 +1754,7 @@ def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
         score += min(15, max(0, ((gap / thresh) - 1.0) * 15))
     return max(0, min(100, int(score)))
 
-def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, tonight_def_mod):
+def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, tonight_def_mod, opp):
     y = df_ml[s_col].fillna(0).clip(lower=0).values
     df_ml['Rest_Days'] = df_ml['ValidDate'].diff().dt.days.fillna(3.0).clip(0, 7)
     expected_mins   = df_ml['MINS'].tail(5).mean()
@@ -2631,7 +2631,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     else: fatigue_val, fatigue_desc = 1.0, "🟢 Standard Rest."
     
     trend_proj, stat_proj, con_proj, base_proj, poi, rf, xgb, hgbr, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train, expected_mins, mins_std, mins_floor_note = build_models(
-        df_ml, s_col, weights, league, is_home_current, rest, mod_val
+        df_ml, s_col, weights, league, is_home_current, rest, mod_val, opp
     )
     
     is_blowout_risk = False
