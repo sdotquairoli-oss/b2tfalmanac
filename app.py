@@ -1160,14 +1160,9 @@ def get_nfl_stats(player_label):
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        # Force normalization of category names
-                        raw_cat = str(cat.get('name', '')).lower()
-                        if 'pass' in raw_cat: cat_name = 'passing'
-                        elif 'rush' in raw_cat: cat_name = 'rushing'
-                        elif 'rec' in raw_cat: cat_name = 'receiving'
-                        else: cat_name = raw_cat
+                        cat_name = cat.get('name', '').lower()
                         
-                        # 💥 THE FIX: Force all labels to uppercase to prevent case mismatches
+                        # 💥 THE FIX: Force all ESPN labels to uppercase so 'Yds' safely matches 'YDS'
                         cat_labels = [str(L).upper().strip() for L in cat.get('labels', [])]
                         
                         for ev in cat.get('events', []):
