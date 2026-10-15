@@ -1157,10 +1157,19 @@ def get_nfl_stats(player_label):
                 events_meta  = gl_data.get('events', {})
                 season_types = gl_data.get('seasonTypes', [])
 
+                gl_data      = gl_r.json()
+                events_meta  = gl_data.get('events', {})
+                season_types = gl_data.get('seasonTypes', [])
+
                 game_stats = {}
                 for stype in season_types:
                     for cat in stype.get('categories', []):
-                        cat_name = cat.get('name', '').lower()
+                        # Force normalization of category names
+                        raw_cat = str(cat.get('name', '')).lower()
+                        if 'pass' in raw_cat: cat_name = 'passing'
+                        elif 'rush' in raw_cat: cat_name = 'rushing'
+                        elif 'rec' in raw_cat: cat_name = 'receiving'
+                        else: cat_name = raw_cat
                         
                         # 💥 THE FIX: Force all ESPN labels to uppercase so 'Yds' safely matches 'YDS'
                         cat_labels = [str(L).upper().strip() for L in cat.get('labels', [])]
