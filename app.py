@@ -949,6 +949,9 @@ ESPN_NFL_TEAM_IDS = {
     "SF": 25,  "TB": 27,  "TEN": 10, "WSH": 28
 }
 
+# Neutral-site games (v3.5): pairs of team abbreviations. The NFL tab shows a reminder to tick "Neutral site" for these.
+NFL_NEUTRAL_SITE_GAMES = [("PIT", "NO")]   # Week 7, Stade de France, Paris
+
 # Dome/Environment factor — impacts passing volume and kicking props
 # 1.05 = dome boost (no weather suppression)
 # 0.92 = known bad weather venues in cold climates
@@ -2058,6 +2061,18 @@ def estimate_alt_odds(orig_line, orig_odds, new_line, stat_type):
     new_odds = int(round((-100*p_new)/(1-p_new))) if p_new > 0.50 else int(round((100*(1-p_new))/p_new))
     return 5 * round(new_odds/5)
 
+def price_edge_fmt(ai_prob, user_prob):
+    # v3.6: AI win prob minus the book's implied prob, in points. Returns (text, color). No cutoff, display only.
+    try:
+        if str(user_prob).strip() in ("", "nan", "None"):
+            return "N/A", "#94a3b8"
+        pe = (float(ai_prob) - float(user_prob)) * 100
+    except Exception:
+        return "N/A", "#94a3b8"
+    color = "#00c853" if pe >= 3.0 else ("#f59e0b" if pe >= 0 else "#ff5252")
+    return f"{pe:+.1f}%", color
+
+
 def calculate_setup_score(win_prob, edge_pct, board, c_proj, line, stat_type):
     score = 0
     score += min(35, max(0, (win_prob - 0.50) * 200))
@@ -2603,6 +2618,8 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
 
         df_ml['Stadium_Factor'] = df_ml.apply(get_nfl_stadium_factor, axis=1)
         _venue = (venue_team if is_home_current == 1 else opp) or ""
+        if venue_team == "NEUTRAL":
+            _venue = "NEUTRAL"   # v3.5: neutral site, no dome / cold-weather factor for either team
         tonight_stadium = NFL_STADIUM_FACTORS.get(str(_venue).upper(), 1.0)
 
         # ── Hot/Cold flag ──────────────────────────────
@@ -2935,6 +2952,10 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         current_split_mod = home_mod if is_home_current == 1 else away_mod
         split_text = "Home" if is_home_current == 1 else "Away"
         split_desc = f"{split_text} Split: {current_split_mod:.2f}x production."
+        if venue_team == "NEUTRAL":
+            # v3.5: neutral site, no home/road split (history uses 1.00x too, so the two stay consistent)
+            home_mod, away_mod, current_split_mod = 1.0, 1.0, 1.0
+            split_text, split_desc = "Neutral", "Neutral site: no home/road split applied."
     
     rest_str = str(rest)
     if league == "NFL":
@@ -4736,6 +4757,11 @@ def render_syndicate_board(league_key):
             if league_key == "NFL":
                 st.checkbox("⚠️ Role Risk", key=f"{lk}.role_risk",
                             help="Returning from injury, snap share falling, or a new committee. Over legs for this player fail the gate.")
+                st.checkbox("🌍 Neutral site", key=f"{lk}.neutral_site",
+                            help="International / neutral-site game (e.g. Paris). Turns off the dome factor and the home/road split for this player. Tick it for every player in the game.")
+                _ns_team = str(player_name).split("(")[1].split(")")[0].strip().upper() if (player_name and "(" in str(player_name)) else ""
+                if (not st.session_state.get(f"{lk}.neutral_site", False)) and any(set(_g) == {_ns_team, str(opp).upper()} for _g in NFL_NEUTRAL_SITE_GAMES):
+                    st.caption("🌍 Neutral-site game. Tick Neutral site.")
 
         with tc4:
             st.markdown("<div style='font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;text-align:center;'>Spread</div>", unsafe_allow_html=True)
@@ -4939,8 +4965,10 @@ def render_syndicate_board(league_key):
 
                 try:
                     df_ml, board, raw_consensus, raw_vote_from_board, c_color, mod_val, mod_desc, current_split_mod, split_text, split_desc, fatigue_val, fatigue_desc, archetype, raw_vote = run_ml_board(
-                        df_stat, s_col, line, opp, league_key, rest, is_home_current, stat_type,
-                        False, df_hash, ledger_hash, opp_pitcher_era, opp_pitcher_name, venue_team=player_team_abbr
+                        df_stat, s_col, line, opp, league_key, rest,
+                        (0 if (league_key == "NFL" and st.session_state.get(f"{lk}.neutral_site", False)) else is_home_current), stat_type,
+                        False, df_hash, ledger_hash, opp_pitcher_era, opp_pitcher_name,
+                        venue_team=("NEUTRAL" if (league_key == "NFL" and st.session_state.get(f"{lk}.neutral_site", False)) else player_team_abbr)
                     )
                 except:
                     continue
@@ -5234,10 +5262,11 @@ def render_syndicate_board(league_key):
                     f"<div style='width:8px;height:8px;border-radius:50%;background:{'#00c853' if m['vote']=='OVER' else ('#ff5252' if m['vote']=='UNDER' else '#94a3b8')};display:inline-block;margin-right:2px;'></div>"
                     for m in result['board'][:5]
                 ])
+                _pe_col = "#00c853" if result['edge_pct'] >= 3.0 else ("#f59e0b" if result['edge_pct'] >= 0 else "#ff5252")
                 st.markdown(f"""
                 <div style='padding:4px 0;'>
                     <div style='font-size:13px;font-weight:700;color:{'#FFD700' if is_top else '#f8fafc'};'>{stat_type}{top_badge}</div>
-                    <div style='font-size:10px;color:#94a3b8;margin-top:1px;'>Proj {proj:.2f} &nbsp;|&nbsp; Edge {result['edge_pct']:+.1f}% &nbsp;|&nbsp; Win Prob {result['win_prob']*100:.1f}%</div>{gate_html}
+                    <div style='font-size:10px;color:#94a3b8;margin-top:1px;'>Proj {proj:.2f} &nbsp;|&nbsp; <span style='color:{_pe_col};font-weight:700;'>Price Edge {result['edge_pct']:+.1f}%</span> &nbsp;|&nbsp; Win Prob {result['win_prob']*100:.1f}%</div>{gate_html}
                     <div style='margin-top:3px;'>{dots_html}<span style='font-size:9px;color:#94a3b8;margin-left:3px;'>{agree}/5</span></div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -6635,6 +6664,7 @@ with t_roi:
                     except: ai_prob_str = "N/A"
                     try: user_prob_str = f"{float(raw_user if str(raw_user).strip() != '' else raw_ai)*100:.1f}%"
                     except: user_prob_str = "N/A"
+                    pe_str, pe_color = price_edge_fmt(raw_ai, raw_user)
     
                     st.markdown(f"""
                     <div style="background-color: #0f172a; border: 1px solid #1e293b; border-left: 4px solid {b_color}; border-radius: 6px; padding: 15px; margin-bottom: 12px; height: 90%;">
@@ -6649,7 +6679,8 @@ with t_roi:
                             <div style="line-height: 1.5;">{proj_html}</div> 
                             <div style="font-size: 11px; text-align: right; line-height: 1.5;">
                                 🤖 AI Prob: <span style="color: #94a3b8;">{ai_prob_str}</span><br>
-                                👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span>
+                                👤 User Prob: <span style="color: #00E5FF; font-weight: bold;">{user_prob_str}</span><br>
+                                💲 Price Edge: <span style="color: {pe_color}; font-weight: bold;">{pe_str}</span>
                            </div>
                        </div>
                         <div style="font-size: 12px; color: #94a3b8; text-align: right; margin-top: 6px;">🔮 Final Edge: <span style="color: #FFD700; font-weight: bold;">{score_html}</span></div>
