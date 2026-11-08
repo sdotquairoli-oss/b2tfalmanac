@@ -3721,13 +3721,106 @@ def nba_gate_safe(*a, **k):
         return None
 
 
+# ===== NFL calibration + gate additions + anytime-TD lotto (v4.3). PROVISIONAL values: refit from Raw_Prob once 50+ clean NFL legs are logged. =====
+NFL_PROB_CAP      = 0.85    # calibrated win prob is never above this (unless the book's own price is higher)
+NFL_MARKET_K      = 0.30    # weight on the model when blending toward the book's implied probability
+                            # (31-leg sample: raw avg 84%, hit 77%, implied 73%. A fit through those legs lands between 0 and 0.4.)
+NFL_TOO_GOOD_GAP  = 25.0    # raw model prob minus book implied prob, in points. Set to 99.0 to turn this check off
+NFL_CUSHION_FLOOR = 0.70    # Over yardage lines above this fraction of the projection get a warning (your 0.55-0.70x floor rule)
+# Anytime-TD lotto. Prior = TDs per game (rush + receiving) for a typical starter at the position. An assumption, not a fit.
+NFL_TD_PRIOR         = {"RB": 0.45, "WR": 0.30, "TE": 0.28, "QB": 0.20}
+NFL_TD_PRIOR_DEFAULT = 0.30
+NFL_TD_PRIOR_GAMES   = 6      # the prior counts as this many games of evidence
+NFL_TD_MAX_P         = 0.75   # never show a higher chance than this
+
+
+def nfl_calibrated_prob(raw, implied):
+    # Shrinks the raw simulated probability toward the book's implied probability, then caps it.
+    try:
+        raw, imp = float(raw), float(implied)
+    except Exception:
+        return raw
+    if raw != raw or imp != imp:
+        return raw
+    cap = max(NFL_PROB_CAP, imp)      # a very short price keeps its own implied probability as the ceiling
+    return float(max(0.01, min(imp + NFL_MARKET_K * (raw - imp), cap)))
+
+
+def _prob_to_american(p):
+    p = float(max(0.01, min(0.99, p)))
+    return int(round(-100.0 * p / (1.0 - p))) if p >= 0.5 else int(round(100.0 * (1.0 - p) / p))
+
+
+def nfl_anytime_td_lotto(df, archetype="", matchup_mod=1.0):
+    # P(1+ rushing or receiving TD) with a Poisson rate. Returns None when the log has no TD columns.
+    import math as _m
+    if df is None or len(df) == 0:
+        return None
+    if 'RUSH_TDS' not in df.columns and 'REC_TDS' not in df.columns:
+        return None
+
+    def _col(c):
+        return pd.to_numeric(df[c], errors='coerce').fillna(0.0) if c in df.columns else pd.Series(0.0, index=df.index)
+
+    tds = (_col('RUSH_TDS') + _col('REC_TDS')).tail(10)
+    n = int(len(tds))
+    if n == 0:
+        return None
+    pos = _nfl_pos(archetype)
+    prior = NFL_TD_PRIOR.get(pos, NFL_TD_PRIOR_DEFAULT)
+    emp = float(tds.mean())
+    lam0 = (n * emp + NFL_TD_PRIOR_GAMES * prior) / (n + NFL_TD_PRIOR_GAMES)
+    try:
+        mm = float(matchup_mod)
+    except Exception:
+        mm = 1.0
+    adj = max(0.8, min(1.2, 1.0 + 0.5 * (mm - 1.0)))      # half of the matchup modifier, kept within +/-20%
+    lam = lam0 * adj
+    p1 = min(1.0 - _m.exp(-lam), NFL_TD_MAX_P)
+    p2 = max(0.0, 1.0 - _m.exp(-lam) * (1.0 + lam))
+    return {"lam": lam, "lam_emp": emp, "n": n, "games_with_td": int((tds > 0).sum()), "td_total": float(tds.sum()),
+            "prior": prior, "pos": pos, "adj": adj, "p1": p1, "p2": p2}
+
+
+def render_nfl_td_lotto(target_player, first, lk):
+    # Lotto panel. Reads the game log saved at analysis time. Never feeds the gate, the board or the ledger.
+    df = st.session_state.get("nfl.td_log")
+    if df is None or st.session_state.get("nfl.td_player") != target_player:
+        return
+    res = nfl_anytime_td_lotto(df, first.get('archetype', ''), first.get('mod_val', 1.0))
+    with st.expander("🎰 Anytime TD - LOTTO ONLY (never a floor leg)", expanded=False):
+        if not res:
+            st.caption("No touchdown columns in this player's game log.")
+            return
+        st.caption(f"Last {res['n']} games: {res['td_total']:.0f} rush+rec TD in {res['games_with_td']} game(s). "
+                   f"Rate {res['lam_emp']:.2f}/game, blended with a {res['pos'] or 'generic'} prior of {res['prior']:.2f} "
+                   f"and the matchup x{res['adj']:.2f} = {res['lam']:.2f} expected TDs.")
+        odds = st.number_input("Book odds for Anytime TD (American)", min_value=-2000, max_value=5000, value=150, step=5, key=f"{lk}.td_odds")
+        p1 = res['p1']
+        fair = _prob_to_american(p1)
+        try:
+            dec = _am_to_dec(odds if abs(odds) >= 100 else 150)
+            ev = p1 * dec - 1.0
+            be = 1.0 / dec
+        except Exception:
+            ev, be = 0.0, 0.0
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("P(1+ TD)", f"{p1*100:.0f}%")
+        c2.metric("Fair odds", f"{fair:+d}")
+        c3.metric("Break-even", f"{be*100:.0f}%")
+        c4.metric("EV per $1", f"{ev:+.2f}")
+        st.caption(f"P(2+ TD) {res['p2']*100:.0f}%. Lotto rules: one lotto leg per slip, small stake, never inside a floor parlay. "
+                   "The rate is a simple Poisson estimate with an assumed position prior. Treat EV under +0.10 as noise.")
+
+
 def _nfl_pos(archetype):
     import re as _re
     m = _re.search(r'\b(QB|RB|WR|TE)\b', str(archetype or ""))
     return m.group(1) if m else ""
 
 
-def nfl_leg_gate(df_ml, s_col, line, vote, win_prob, archetype="", role_risk=False, total=None, total_open=None):
+def nfl_leg_gate(df_ml, s_col, line, vote, win_prob, archetype="", role_risk=False, total=None, total_open=None,
+                 raw_prob=None, implied_prob=None, proj=None):
     # Returns None when the gate does not apply (not an OVER/UNDER leg).
     if vote not in ("OVER", "UNDER") or s_col not in df_ml.columns:
         return None
@@ -3763,6 +3856,18 @@ def nfl_leg_gate(df_ml, s_col, line, vote, win_prob, archetype="", role_risk=Fal
                     prior = float(oc.iloc[-5:-2].mean())
                     if prior >= 3 and l2 < 0.70 * prior:
                         reasons.append(f"usage falling: L2 {col.lower()} {l2:.1f} vs {prior:.1f} before")
+
+    try:
+        if raw_prob is not None and implied_prob is not None:
+            gap = (float(raw_prob) - float(implied_prob)) * 100.0
+            if gap > NFL_TOO_GOOD_GAP:
+                reasons.append(f"too good to be true: raw model {float(raw_prob)*100:.0f}% is {gap:.0f} pts over the book ({float(implied_prob)*100:.0f}%). Ledger: gaps over 25 pts hit 2 of 4. Check role, script, injuries")
+        if vote == "OVER" and proj is not None and s_col in NFL_YARDAGE_STATS and float(proj) > 0:
+            _ratio = float(line) / float(proj)
+            if _ratio > NFL_CUSHION_FLOOR:
+                warns.append(f"thin cushion: line is {_ratio:.2f}x the projection (your floor rule is 0.55-0.70x)")
+    except Exception:
+        pass
 
     if role_risk:
         reasons.append("role risk flagged (committee shift / returning starter)")
@@ -3958,10 +4063,16 @@ def log_gate_row(league, player_label, result, opp, forced_vote=None):
                                   float(result.get(_side + "_raw", prob)), float(result.get('implied_prob', 0.5)),
                                   result.get('odds'), result.get('proj'), bool(st.session_state.get("nba.role_risk", False)))
             else:
-                prob = nfl_prob_for_vote(result, forced_vote)
+                _side = "p_over" if forced_vote == "OVER" else "p_under"
+                if result.get(_side) is not None and result.get(_side + "_raw") is not None:
+                    prob, _raw = float(result[_side]), float(result[_side + "_raw"])
+                else:
+                    _raw = nfl_prob_for_vote(result, forced_vote)
+                    prob = nfl_calibrated_prob(_raw, result.get('implied_prob', 0.5))
                 g = nfl_gate_safe(result['df_ml'], result['s_col'], result['line'], forced_vote, prob, result.get('archetype', ''),
                                   bool(st.session_state.get("nfl.role_risk", False)),
-                                  st.session_state.get("nfl.game_total"), st.session_state.get("nfl.game_total_open"))
+                                  st.session_state.get("nfl.game_total"), st.session_state.get("nfl.game_total_open"),
+                                  raw_prob=_raw, implied_prob=float(result.get('implied_prob', 0.5)), proj=result.get('proj'))
             note = f"OVERRIDE of model {vote or 'n/a'}. "
             vote = forced_vote
         except Exception:
@@ -5333,6 +5444,9 @@ def render_syndicate_board(league_key):
         elif df.empty:
             st.error(f"⚠️ No data found for {target_player}. Debug Info: {fetch_errors}"); st.stop()
         else:
+            if league_key == "NFL":
+                st.session_state["nfl.td_log"] = df.copy()
+                st.session_state["nfl.td_player"] = target_player
             # ── PRE-FETCH EVERYTHING ONCE BEFORE THE LOOP ──────────
             suppressed     = get_suppressed_stats(league_key)
             current_ledger = load_ledger()
@@ -5525,6 +5639,12 @@ def render_syndicate_board(league_key):
                     p_under_v = nba_calibrated_prob(p_under_raw, implied_prob)
                     if c_vote in ("OVER", "UNDER"):
                         win_prob = nba_calibrated_prob(win_prob_raw, implied_prob)
+                if league_key == "NFL":
+                    # v4.3: shrink toward the book price (provisional constants; raw is kept in win_prob_raw / Raw_Prob)
+                    p_over_v  = nfl_calibrated_prob(p_over_raw, implied_prob)
+                    p_under_v = nfl_calibrated_prob(p_under_raw, implied_prob)
+                    if c_vote in ("OVER", "UNDER"):
+                        win_prob = nfl_calibrated_prob(win_prob_raw, implied_prob)
                 ev_dollars   = (win_prob * profit) - ((1 - win_prob) * 100)
                 edge_pct     = (win_prob - implied_prob) * 100
 
@@ -5566,7 +5686,8 @@ def render_syndicate_board(league_key):
                     "l5_avg_val": round(float(df_ml.tail(5)[s_col].mean()), 1),
                     "gate": (nfl_gate_safe(df_ml, s_col, line, c_vote, win_prob, archetype,
                                            bool(st.session_state.get(f"{lk}.role_risk", False)),
-                                           st.session_state.get("nfl.game_total"), st.session_state.get("nfl.game_total_open"))
+                                           st.session_state.get("nfl.game_total"), st.session_state.get("nfl.game_total_open"),
+                                           raw_prob=win_prob_raw, implied_prob=implied_prob, proj=c_proj)
                              if league_key == "NFL" else
                              (nba_gate_safe(df_ml, s_col, line, c_vote, win_prob, win_prob_raw, implied_prob, odds, c_proj,
                                             bool(st.session_state.get(f"{lk}.role_risk", False)))
@@ -5644,6 +5765,12 @@ def render_syndicate_board(league_key):
                 </div>{pitcher_box}</div></div>
         """, unsafe_allow_html=True)
 
+        if league_key == "NFL":
+            try:
+                render_nfl_td_lotto(target_player, first, lk)
+            except Exception as _td_err:
+                st.caption(f"TD lotto unavailable: {_td_err}")
+
         # RESULT CARDS
         selected_for_lock = set(st.session_state.get(f"{lk}.selected_for_lock", set()))
         rc1, rc2 = st.columns([3, 1])
@@ -5714,7 +5841,7 @@ def render_syndicate_board(league_key):
                 ])
                 _pe_col = "#00c853" if result['edge_pct'] >= 3.0 else ("#f59e0b" if result['edge_pct'] >= 0 else "#ff5252")
                 _raw_txt = (f" <span style='color:#64748b;'>(raw {result['win_prob_raw']*100:.0f}%)</span>"
-                            if (league_key == "NBA" and result.get('win_prob_raw') is not None) else "")
+                            if (league_key in ("NBA", "NFL") and result.get('win_prob_raw') is not None) else "")
                 st.markdown(f"""
                 <div style='padding:4px 0;'>
                     <div style='font-size:13px;font-weight:700;color:{'#FFD700' if is_top else '#f8fafc'};'>{stat_type}{top_badge}</div>
