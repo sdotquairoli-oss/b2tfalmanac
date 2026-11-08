@@ -4346,9 +4346,139 @@ def nfl_calibration_table(ledger_df, league="NFL"):
                              'Gap_pts': 'Gap (pts)'})
 
 
+# ══════════════════════════════════════════════════════════════════
+# 🏀 NBA GAME GRADES (v4.1): slate screen -> IDEAL / GOOD / AVOID per game (same idea as the NFL grades)
+# ══════════════════════════════════════════════════════════════════
+# Provisional, conventional thresholds. Screens on total, spread size and line movement ONLY.
+NBA_GRADE_AVOID_TOTAL = 220.0        # at or below: slow game, fewer possessions for Overs
+NBA_GRADE_AVOID_SPREAD = 10.0        # at or above: starters sit the 4th quarter
+NBA_GRADE_AVOID_DROP = 3.0           # total fell this much since the open (news the logs can't see)
+NBA_GRADE_AVOID_SPREAD_MOVE = 3.0    # spread widened this much since the open
+NBA_GRADE_IDEAL_TOTAL = 229.0        # at or above (with a tight spread) = ideal
+NBA_GRADE_IDEAL_SPREAD = 6.5
+
+
+@st.cache_data(ttl=300)
+def get_nba_game_odds_map():
+    # {TEAM: {spread (that team's perspective), spread_open, total, total_open, opp, home}} from ESPN's NBA scoreboard.
+    # Team codes are normalized the same way get_nba_schedule does so they match the slate cards.
+    out = {}
+    try:
+        today_str = datetime.now(pytz.timezone('America/New_York')).strftime("%Y%m%d")
+        r = requests.get(f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={today_str}", timeout=10).json()
+        espn_fix = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA"}
+        for e in r.get('events', []):
+            c = (e.get('competitions') or [{}])[0]
+            odds = (c.get('odds') or [None])[0]
+            if not odds:
+                continue
+            comps = c.get('competitors', [])
+            home = next((t for t in comps if t.get('homeAway') == 'home'), None)
+            away = next((t for t in comps if t.get('homeAway') == 'away'), None)
+            if not home or not away:
+                continue
+            h = str(home.get('team', {}).get('abbreviation', '')).upper()
+            a = str(away.get('team', {}).get('abbreviation', '')).upper()
+            h, a = espn_fix.get(h, h), espn_fix.get(a, a)
+
+            home_spread = None
+            details = str(odds.get('details', '') or '').strip()
+            if details.upper() in ("EVEN", "PK", "PICK", "PICK'EM"):
+                home_spread = 0.0
+            elif details:
+                parts = details.split()
+                num = _first_num(parts[-1]) if len(parts) >= 2 else None
+                fav = espn_fix.get(parts[0].upper(), parts[0].upper()) if parts else ""
+                if num is not None:
+                    home_spread = num if fav == h else (-num if fav == a else None)
+            if home_spread is None:
+                home_spread = _first_num(odds.get('spread'))
+            open_home = _first_num((((odds.get('pointSpread') or {}).get('home') or {}).get('open') or {}).get('line'))
+            total = _first_num(odds.get('overUnder'))
+            total_open = _first_num(((((odds.get('total') or {}).get('over') or {}).get('open')) or {}).get('line'))
+
+            for team, opp, sign, is_home in ((h, a, 1, True), (a, h, -1, False)):
+                out[team] = {
+                    "spread": None if home_spread is None else sign * home_spread,
+                    "spread_open": None if open_home is None else sign * open_home,
+                    "total": total, "total_open": total_open, "opp": opp, "home": is_home,
+                }
+    except Exception:
+        pass
+    return out
+
+
+def nba_game_grade(info):
+    # info = one team's entry from get_nba_game_odds_map(). Returns (tier, reason).
+    if not info or info.get('total') is None:
+        return "none", "odds not posted yet"
+    total, t_open = float(info['total']), info.get('total_open')
+    sp = None if info.get('spread') is None else abs(float(info['spread']))
+    sp_open = None if info.get('spread_open') is None else abs(float(info['spread_open']))
+    move = 0.0 if t_open is None else total - float(t_open)          # + = total went up
+    sp_move = 0.0 if (sp is None or sp_open is None) else sp - sp_open   # + = spread widened
+    avoid = []
+    if total <= NBA_GRADE_AVOID_TOTAL:
+        avoid.append(f"low total {total:g}")
+    if sp is not None and sp >= NBA_GRADE_AVOID_SPREAD:
+        avoid.append(f"blowout spread {sp:g}")
+    if move <= -NBA_GRADE_AVOID_DROP:
+        avoid.append(f"total dropped {abs(move):g} (open {float(t_open):g})")
+    if sp_move >= NBA_GRADE_AVOID_SPREAD_MOVE:
+        avoid.append(f"spread widened {sp_move:g} (open {sp_open:g})")
+    if avoid:
+        return "avoid", "; ".join(avoid)
+    if total >= NBA_GRADE_IDEAL_TOTAL and sp is not None and sp <= NBA_GRADE_IDEAL_SPREAD and move > -2.0:
+        up = f", total up {move:g} from open" if move >= 2.0 else ""
+        return "ideal", f"total {total:g}, spread {sp:g}{up}"
+    notes = [f"total {total:g}"]
+    if sp is not None:
+        notes.append(f"spread {sp:g}" + (" (bigger spread)" if sp >= 7.0 else ""))
+    if move <= -2.0:
+        notes.append(f"total down {abs(move):g}")
+    if sp_move >= 2.0:
+        notes.append(f"spread widened {sp_move:g}")
+    return "good", ", ".join(notes)
+
+
+def nba_game_badge_html(g, odds_map):
+    import html as _html
+    if g.get('is_live_or_final'):
+        return ""
+    info = (odds_map or {}).get(g.get('home'))
+    tier, reason = nba_game_grade(info)
+    label, color = NFL_GRADE_TIERS[tier]
+    line = _html.escape(_nfl_game_line_text(g, info))
+    line_html = f"<div style='font-size:10px;color:#94a3b8;margin-top:2px;'>{line}</div>" if line else ""
+    return (f"<div title='{_html.escape(reason)}' style='margin-top:6px;'>"
+            f"<span style='font-size:11px;font-weight:900;color:{color};border:1px solid {color};border-radius:4px;padding:1px 8px;'>{label}</span>"
+            f"<div style='font-size:10px;color:{color};margin-top:3px;'>{_html.escape(reason)}</div>{line_html}</div>")
+
+
+def render_nba_slate_summary(games, odds_map):
+    groups = {"ideal": [], "good": [], "avoid": []}
+    for g in games:
+        if g.get('is_live_or_final'):
+            continue
+        tier, _ = nba_game_grade((odds_map or {}).get(g.get('home')))
+        if tier in groups:
+            groups[tier].append(f"{g['away']}@{g['home']}")
+    if not any(groups.values()):
+        return
+    parts = []
+    for tier in ("ideal", "good", "avoid"):
+        label, color = NFL_GRADE_TIERS[tier]
+        games_txt = ", ".join(groups[tier]) if groups[tier] else "none"
+        parts.append(f"<span style='color:{color};font-weight:900;'>{label}</span> <span style='color:#cbd5e1;'>{games_txt}</span>")
+    st.markdown("<div style='background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;'>"
+                + " &nbsp;│&nbsp; ".join(parts) + "</div>", unsafe_allow_html=True)
+    st.caption("Game grades screen on total, spread size and line movement only. They don't know injuries, rest or who's sitting - check the injury report. "
+               "Thresholds are provisional (not yet fit to your NBA results).")
+
+
 def render_scoreboard(sd, league_name):
     if not sd: return
-    _odds_map = get_nfl_game_odds_map() if league_name == "NFL" else {}
+    _odds_map = get_nfl_game_odds_map() if league_name == "NFL" else (get_nba_game_odds_map() if league_name == "NBA" else {})
     unique_sd = []
     seen_matchups = set()
     for g in sd:
@@ -4358,11 +4488,14 @@ def render_scoreboard(sd, league_name):
             unique_sd.append(g)
     if league_name == "NFL":
         render_nfl_slate_summary(unique_sd, _odds_map)
+    elif league_name == "NBA":
+        render_nba_slate_summary(unique_sd, _odds_map)
     for i in range(0, len(unique_sd), 5):
         cols = st.columns(5)
         for j, g in enumerate(unique_sd[i:i+5]):
             with cols[j]:
-                _gb = nfl_game_badge_html(g, _odds_map) if league_name == "NFL" else ""
+                _gb = (nfl_game_badge_html(g, _odds_map) if league_name == "NFL"
+                       else (nba_game_badge_html(g, _odds_map) if league_name == "NBA" else ""))
                 away_logo = get_team_logo(league_name, g['away'])
                 home_logo = get_team_logo(league_name, g['home'])
                 if g.get('is_live_or_final', False):
