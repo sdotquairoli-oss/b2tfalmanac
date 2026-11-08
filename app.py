@@ -1054,6 +1054,74 @@ def get_nfl_defense_tiers(min_games=3, tier_size=8):
     except Exception:
         return fallback
 
+NBA_ELITE_DEF_FALLBACK = ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]   # legacy hand-typed (fallback only)
+NBA_WEAK_DEF_FALLBACK  = ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]
+NHL_ELITE_DEF_FALLBACK = ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"]
+_NBA_ABBR_ALIASES = {"GS": "GSW", "NY": "NYK", "SA": "SAS", "NO": "NOP", "UTAH": "UTA", "WSH": "WAS"}
+_NHL_ABBR_ALIASES = {"NJ": "NJD", "TB": "TBL", "SJ": "SJS", "LA": "LAK"}
+
+
+def _espn_allowed_per_game(url, aliases, min_games):
+    # {TEAM: allowed per game} from an ESPN standings feed. Each team is stored under its ESPN code AND the app's code.
+    r = requests.get(url, timeout=8).json()
+    out = {}
+
+    def walk(node):
+        for ent in (node.get('standings') or {}).get('entries', []):
+            s = {x.get('name'): x.get('value') for x in ent.get('stats', []) if x.get('name')}
+            raw = str(ent.get('team', {}).get('abbreviation', '')).upper()
+            gp = s.get('gamesPlayed') or ((s.get('wins') or 0) + (s.get('losses') or 0) + (s.get('otLosses') or 0) + (s.get('ties') or 0))
+            per = s.get('avgPointsAgainst')
+            if per is None and s.get('pointsAgainst') is not None and gp:
+                per = float(s['pointsAgainst']) / float(gp)
+            if raw and per is not None and gp and gp >= min_games:
+                out[aliases.get(raw, raw)] = (float(per), raw)
+        for ch in node.get('children', []):
+            walk(ch)
+    walk(r)
+    return out
+
+
+def _tier_codes(ranked_codes, per_map):
+    # include both the app code and the raw ESPN code so a lookup works whichever one MATCHUP uses
+    codes = []
+    for c in ranked_codes:
+        codes.append(c)
+        raw = per_map[c][1]
+        if raw != c:
+            codes.append(raw)
+    return codes
+
+
+@st.cache_data(ttl=21600)
+def get_nba_defense_tiers(min_games=8, tier_size=6):
+    # Top/bottom tier_size NBA teams by points allowed per game (ESPN standings). Returns (elite, weak, note).
+    fallback = (NBA_ELITE_DEF_FALLBACK, NBA_WEAK_DEF_FALLBACK, "static fallback")
+    try:
+        per = _espn_allowed_per_game("https://site.api.espn.com/apis/v2/sports/basketball/nba/standings", _NBA_ABBR_ALIASES, min_games)
+        if len(per) < 24:
+            return fallback
+        ranked = sorted(per, key=lambda t: per[t][0])
+        return (_tier_codes(ranked[:tier_size], per), _tier_codes(ranked[-tier_size:], per),
+                f"live ESPN PPG allowed ({len(per)} teams)")
+    except Exception:
+        return fallback
+
+
+@st.cache_data(ttl=21600)
+def get_nhl_elite_defenses(min_games=8, tier_size=6):
+    # Top tier_size NHL teams by goals allowed per game (ESPN standings). Returns (elite, note).
+    fallback = (NHL_ELITE_DEF_FALLBACK, "static fallback")
+    try:
+        per = _espn_allowed_per_game("https://site.api.espn.com/apis/v2/sports/hockey/nhl/standings", _NHL_ABBR_ALIASES, min_games)
+        if len(per) < 26:
+            return fallback
+        ranked = sorted(per, key=lambda t: per[t][0])
+        return _tier_codes(ranked[:tier_size], per), f"live ESPN goals allowed per game ({len(per)} teams)"
+    except Exception:
+        return fallback
+
+
 @st.cache_data(ttl=3600)
 def get_espn_roster(team_abbr):
     team_id = ESPN_NBA_TEAM_IDS.get(str(team_abbr).upper())
@@ -1576,7 +1644,9 @@ def get_nhl_stats(player_label):
     try:
         r = requests.get(f"https://search.d3.nhle.com/api/v1/search/player?culture=en-us&limit=25&q={requests.utils.quote(cn)}", timeout=5).json()
         pid = next((p.get('playerId', p.get('id')) for p in r if p.get('name','').lower() == cn.lower()), r[0].get('playerId', r[0].get('id')) if r else None)
-        seasons = ['20252026', '20242025', '20232024']
+        _ny = datetime.now(pytz.timezone('America/New_York'))
+        _start = _ny.year if _ny.month >= 9 else _ny.year - 1      # NHL season starts in the fall
+        seasons = [f"{_start - k}{_start - k + 1}" for k in range(3)]   # e.g. 20262027, 20252026, 20242025
         logs = []
         for s in seasons:
             for match_type in ['2', '3']:  # 2 is Regular Season, 3 is Playoffs
@@ -1968,9 +2038,10 @@ def nfl_splits_table():
 
 def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None, opp_pitcher_era=None, opp_pitcher_name=None, s_col=None):
     if league == "NBA":
-        if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
+        _nba_elite, _nba_weak, _ = get_nba_defense_tiers()
+        if opp in _nba_elite:
             mod_val, mod_desc = 0.90, "Elite Defense (-10%)"
-        elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
+        elif opp in _nba_weak:
             mod_val, mod_desc = 1.10, "Weak Defense (+10%)"
         else:
             mod_val, mod_desc = 1.00, "Average Def (Neutral)"
@@ -2064,7 +2135,7 @@ def get_archetype_defense_modifier(league, opp, archetype, bad_defs=None, opp_pi
             mod_val = 1.10
             mod_desc = f"Swiss Cheese Def (+10%, {sog_allowed} SOG/G). "
             if "Sniper" in archetype or "Dynamo" in archetype: mod_desc += "🚨 Exploit: High shot volume expected."
-        elif opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"]: 
+        elif opp in get_nhl_elite_defenses()[0]: 
             mod_val = 0.90
             mod_desc = "Elite Goalie/Def (-10%). "
             if "Sniper" in archetype: mod_desc += "🛑 Fade: Elite shot suppression."
@@ -2324,10 +2395,8 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         # For away games we use the opponent (home team) park
         def get_park_factor(row):
             if row['Is_Home'] == 1:
-                # We don't store player's own team abbr in gamelog
-                # Use neutral as fallback — home park factor
-                # applied via tonight's modifier separately
-                return 1.0
+                # v4.2: home games are played in the player's own park (venue_team)
+                return PARK_FACTORS.get(str(venue_team or "").upper(), 1.0)
             else:
                 return PARK_FACTORS.get(str(row['MATCHUP']).upper(), 1.0)
 
@@ -2335,12 +2404,10 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
 
         # Tonight's park factor
         if is_home_current == 1:
-            # Player is home — need their own park
-            # MATCHUP col has opponent so we can't look it up directly
-            # Use neutral — the defense modifier already captures this
-            tonight_park = 1.0
+            # v4.2: home = the player's own park; away = the opponent's park (it used to look up a number, so it was always 1.0)
+            tonight_park = PARK_FACTORS.get(str(venue_team or "").upper(), 1.0)
         else:
-            tonight_park = PARK_FACTORS.get(str(tonight_def_mod), 1.0)
+            tonight_park = PARK_FACTORS.get(str(opp or "").upper(), 1.0)
 
         # ── Detect pitcher vs hitter ───────────────────
         is_pitcher = s_col in ["K", "ER"]
@@ -2901,9 +2968,10 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     
     raw_def_mod = 1.0
     if league == "NBA":
-        if opp in ["MIN", "BOS", "OKC", "ORL", "MIA", "NYK"]:
+        _nba_elite, _nba_weak, _ = get_nba_defense_tiers()
+        if opp in _nba_elite:
             raw_def_mod = 0.90
-        elif opp in ["WAS", "DET", "CHA", "SAS", "POR", "ATL", "UTA"]:
+        elif opp in _nba_weak:
             raw_def_mod = 1.10
         else:
             raw_def_mod = 1.00
@@ -2917,7 +2985,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
             raw_def_mod = 1.00
     elif league == "NHL":
         defs = bad_defs if bad_defs is not None else {}
-        raw_def_mod = 1.10 if opp in defs else (0.90 if opp in ["FLA", "DAL", "CAR", "WPG", "VGK", "LAK"] else 1.00)
+        raw_def_mod = 1.10 if opp in defs else (0.90 if opp in get_nhl_elite_defenses()[0] else 1.00)
     elif league == "MLB":
         if opp_pitcher_era is not None:
             if opp_pitcher_era <= 3.30:
