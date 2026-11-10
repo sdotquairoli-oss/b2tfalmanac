@@ -280,7 +280,7 @@ def overwrite_sheet(sheet_name, df):
         last_row = len(new_values)
         total_rows = ws.row_count
         if total_rows > last_row:
-            ws.spreadsheet.values_clear(f"'{ws.title}'!A{last_row + 1}:Z{total_rows}")
+            ws.spreadsheet.values_clear(f"'{ws.title}'!A{last_row + 1}:AD{total_rows}")
         
         # Wipes the entire Streamlit memory so it doesn't duplicate bets
         st.cache_data.clear()
@@ -318,7 +318,7 @@ def save_model_performance(league, stat_type, min_max_err, stat_err, contrarian_
 @st.cache_data(ttl=120)
 def load_ledger():
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]    
-    df = load_sheet_df("ROI_Ledger", new_cols + ["Book", "Closing_Odds", "Raw_Prob"])
+    df = load_sheet_df("ROI_Ledger", new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line"])
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
@@ -366,12 +366,20 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Stat Proj": float(stat_proj),
         "Contrarian Proj": float(contrarian),
         "Context Proj": float(context),
-        "Raw_Prob": "" if raw_prob is None else round(float(raw_prob), 4)
+        "Raw_Prob": "" if raw_prob is None else round(float(raw_prob), 4),
+        "Model_Version": MODEL_VERSION,
+        "Main_Line": ""
     }
+    try:
+        _snap = st.session_state.get("main_line_snap", {}).get((row["Player"], row["Stat"]))
+        if _snap:
+            row["Main_Line"] = float(_snap[0])
+    except Exception:
+        pass
     
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]
     
-    append_to_sheet("ROI_Ledger", row, new_cols + ["Book", "Closing_Odds", "Raw_Prob"])
+    append_to_sheet("ROI_Ledger", row, new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line"])
 
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=25, max_win_rate=0.42):
@@ -2280,18 +2288,19 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         ]
         if 'USG_PCT' in df_ml.columns:
             nba_rf_cols.append('USG_PCT')
-        X_rf_train = df_ml[nba_rf_cols].fillna(0).values
-
-        # ── XGBoost: deviation from season norm ───────
+        # v4.4: tonight's values stay in df_ml (unshifted); the TRAINING matrices use the previous game's rolling values
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-        df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
         df_ml['Roll3_Dev'] = df_ml['Roll3'] - s_mean  # Short-term deviation
-        X_xgb_train = df_ml[['MINS', 'Dev', 'Roll3_Dev', 'Is_B2B']].fillna(0).values
-
-        # ── HGBR: exponential weighted trend ──────────
         df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
         df_ml['EWMA_Mins'] = df_ml['MINS'].ewm(span=5, adjust=False).mean().fillna(expected_mins)
-        X_hgbr_train = df_ml[['EWMA', 'MINS', 'EWMA_Mins', 'Mins_Trend']].fillna(0).values
+        df_tr = df_ml.copy()
+        for _c in ('Roll3', 'Roll5', 'Roll10', 'EWMA'):
+            df_tr[_c] = _lag1(df_ml[_c], s_mean)
+        df_tr['EWMA_Mins'] = _lag1(df_ml['EWMA_Mins'], expected_mins)
+        df_tr['Roll3_Dev'] = df_tr['Roll3'] - s_mean
+        X_rf_train = df_tr[nba_rf_cols].fillna(0).values
+        X_xgb_train = df_tr[['MINS', 'Roll3_Dev', 'Is_B2B']].fillna(0).values
+        X_hgbr_train = df_tr[['EWMA', 'MINS', 'EWMA_Mins', 'Mins_Trend']].fillna(0).values
 
         # ── Tonight's prediction vectors ──────────────
         tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
@@ -2344,7 +2353,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         stat_proj = rf.predict([rf_pred_vec])[0]
 
         roll3_dev = float(df_ml['Roll3'].iloc[-1]) - s_mean
-        con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean, roll3_dev, tonight_b2b]])[0]
+        con_proj  = xgb.predict([[expected_mins, roll3_dev, tonight_b2b]])[0]
 
         ewma_mins = float(df_ml['EWMA_Mins'].iloc[-1])
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins, ewma_mins, mins_slope]])[0]
@@ -2434,13 +2443,13 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 'Roll3', 'Roll5', 'Roll10',
                 'MINS', 'Is_Home', 'Opp_Def_Mod', 'Park_Factor'
             ]
-            X_rf_train = df_ml[pitcher_rf_cols].fillna(0).values
-
-            df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
-            X_xgb_train = df_ml[['MINS', 'Dev', 'Roll5']].fillna(0).values
-
             df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
-            X_hgbr_train = df_ml[['EWMA', 'MINS', 'Park_Factor']].fillna(0).values
+            df_tr = df_ml.copy()      # v4.4: training rows use the previous game's rolling values
+            for _c in ('Roll3', 'Roll5', 'Roll10', 'EWMA'):
+                df_tr[_c] = _lag1(df_ml[_c], s_mean)
+            X_rf_train = df_tr[pitcher_rf_cols].fillna(0).values
+            X_xgb_train = df_tr[['MINS', 'Roll5']].fillna(0).values
+            X_hgbr_train = df_tr[['EWMA', 'MINS', 'Park_Factor']].fillna(0).values
 
             # Use slower pitcher weights for training
             train_weights = pitcher_weights
@@ -2484,7 +2493,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 is_home_current, tonight_def_mod, tonight_park
             ]
             stat_proj = rf.predict([rf_pred_vec])[0]
-            con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean,
+            con_proj  = xgb.predict([[expected_mins,
                                       df_ml['Roll5'].iloc[-1]]])[0]
             base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1],
                                        expected_mins, tonight_park]])[0]
@@ -2505,13 +2514,14 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 'MINS', 'Is_Home', 'Opp_Def_Mod',
                 'Park_Factor', 'Hot_Cold'
             ]
-            X_rf_train = df_ml[hitter_rf_cols].fillna(0).values
-
-            df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
-            X_xgb_train = df_ml[['MINS', 'Dev', 'Hot_Cold', 'Park_Factor']].fillna(0).values
-
             df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
-            X_hgbr_train = df_ml[['EWMA', 'MINS', 'Park_Factor', 'Hot_Cold']].fillna(0).values
+            df_tr = df_ml.copy()      # v4.4: training rows use the previous game's rolling values
+            for _c in ('Roll3', 'Roll5', 'Roll10', 'EWMA'):
+                df_tr[_c] = _lag1(df_ml[_c], s_mean)
+            df_tr['Hot_Cold'] = _lag1(df_ml['Hot_Cold'], 1.0)
+            X_rf_train = df_tr[hitter_rf_cols].fillna(0).values
+            X_xgb_train = df_tr[['MINS', 'Hot_Cold', 'Park_Factor']].fillna(0).values
+            X_hgbr_train = df_tr[['EWMA', 'MINS', 'Park_Factor', 'Hot_Cold']].fillna(0).values
 
             train_weights = weights
             tonight_rest_val = 3.0
@@ -2554,7 +2564,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 tonight_park, hot_cold
             ]
             stat_proj = rf.predict([rf_pred_vec])[0]
-            con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean,
+            con_proj  = xgb.predict([[expected_mins,
                                       hot_cold, tonight_park]])[0]
             base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1],
                                        expected_mins, tonight_park, hot_cold]])[0]
@@ -2614,17 +2624,21 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
             'Opp_Def_Mod', 'Is_B2B', 'TOI_Trend',
             'PPP_Rate', 'SOG_Rate'
         ]
-        X_rf_train = df_ml[nhl_rf_cols].fillna(0).values
-
-        # ── XGBoost: deviation + TOI context ──────────
-        df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
+        # v4.4: training rows use the previous game's rolling values. SOG_Rate was the SAME game's shot rate in training
+        # (a direct leak for shots props) while the live vector used the L5 mean; training now uses the lagged rolling-5 mean.
         df_ml['Roll3_Dev'] = df_ml['Roll3'] - s_mean
-        X_xgb_train = df_ml[['MINS', 'Dev', 'Roll3_Dev', 'Is_B2B', 'PPP_Rate']].fillna(0).values
-
-        # ── HGBR: exponential weighted trend ──────────
         df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
         df_ml['EWMA_TOI'] = df_ml['MINS'].ewm(span=5, adjust=False).mean().fillna(expected_mins)
-        X_hgbr_train = df_ml[['EWMA', 'MINS', 'EWMA_TOI', 'TOI_Trend', 'SOG_Rate']].fillna(0).values
+        df_tr = df_ml.copy()
+        for _c in ('Roll3', 'Roll5', 'Roll10', 'EWMA'):
+            df_tr[_c] = _lag1(df_ml[_c], s_mean)
+        df_tr['PPP_Rate'] = _lag1(df_ml['PPP_Rate'], float(df_ml['PPP_Rate'].mean()))
+        df_tr['SOG_Rate'] = _lag1(df_ml['SOG_Rate'].rolling(5, min_periods=1).mean(), float(df_ml['SOG_Rate'].mean()))
+        df_tr['EWMA_TOI'] = _lag1(df_ml['EWMA_TOI'], expected_mins)
+        df_tr['Roll3_Dev'] = df_tr['Roll3'] - s_mean
+        X_rf_train = df_tr[nhl_rf_cols].fillna(0).values
+        X_xgb_train = df_tr[['MINS', 'Roll3_Dev', 'Is_B2B', 'PPP_Rate']].fillna(0).values
+        X_hgbr_train = df_tr[['EWMA', 'MINS', 'EWMA_TOI', 'TOI_Trend', 'SOG_Rate']].fillna(0).values
 
         def train_poisson():
             return PoissonRegressor(alpha=1e-3, max_iter=500).fit(
@@ -2670,7 +2684,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
 
         roll3_dev = float(df_ml['Roll3'].iloc[-1]) - s_mean
         con_proj = xgb.predict([[
-            expected_mins, trend_proj - s_mean,
+            expected_mins,
             roll3_dev, tonight_b2b,
             float(df_ml['PPP_Rate'].iloc[-1])
         ]])[0]
@@ -2755,18 +2769,15 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 'Stadium_Factor', 'Is_Short_Week',
                 'Is_Post_Bye', 'Opp_Roll4'
             ]
-            X_rf_train = df_ml[qb_rf_cols].fillna(0).values
-
-            df_ml['Dev']      = df_ml[s_col].fillna(0) - s_mean
-            df_ml['Roll2_Dev'] = df_ml['Roll2'] - s_mean
-            X_xgb_train = df_ml[[
-                'MINS', 'Dev', 'Roll2_Dev',
-                'Is_Short_Week', 'Stadium_Factor', 'Opp_Roll4'
-            ]].fillna(0).values
-
             df_ml['EWMA']      = df_ml[s_col].ewm(span=4, adjust=False).mean().fillna(s_mean)
             df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(tonight_opp) if opp_col in df_ml.columns else 0.0
-            X_hgbr_train = df_ml[[
+            df_tr = _nfl_train_frame(df_ml, s_mean, tonight_opp)      # v4.4: training rows use the previous game's rolling values
+            X_rf_train = df_tr[qb_rf_cols].fillna(0).values
+            X_xgb_train = df_tr[[
+                'MINS', 'Roll2_Dev',
+                'Is_Short_Week', 'Stadium_Factor', 'Opp_Roll4'
+            ]].fillna(0).values
+            X_hgbr_train = df_tr[[
                 'EWMA', 'MINS', 'EWMA_OPP', 'Stadium_Factor', 'Is_Post_Bye'
             ]].fillna(0).values
 
@@ -2781,7 +2792,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 tonight_post_bye, tonight_opp
             ]
             xgb_pred_vec = [
-                expected_mins, 0.0,
+                expected_mins,
                 float(df_ml['Roll2'].iloc[-1]) - s_mean,
                 tonight_short_week, tonight_stadium, tonight_opp
             ]
@@ -2800,18 +2811,15 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 'Is_Post_Bye', 'Opp_Roll4', 'Hot_Cold'
             ]
             df_ml['Hot_Cold'] = hot_cold
-            X_rf_train = df_ml[skill_rf_cols].fillna(0).values
-
-            df_ml['Dev']       = df_ml[s_col].fillna(0) - s_mean
-            df_ml['Roll2_Dev'] = df_ml['Roll2'] - s_mean
-            X_xgb_train = df_ml[[
-                'MINS', 'Dev', 'Roll2_Dev',
-                'Hot_Cold', 'Is_Short_Week', 'Opp_Roll4'
-            ]].fillna(0).values
-
             df_ml['EWMA']     = df_ml[s_col].ewm(span=4, adjust=False).mean().fillna(s_mean)
             df_ml['EWMA_OPP'] = df_ml[opp_col].ewm(span=4, adjust=False).mean().fillna(tonight_opp) if opp_col in df_ml.columns else 0.0
-            X_hgbr_train = df_ml[[
+            df_tr = _nfl_train_frame(df_ml, s_mean, tonight_opp)      # v4.4: training rows use the previous game's rolling values
+            X_rf_train = df_tr[skill_rf_cols].fillna(0).values
+            X_xgb_train = df_tr[[
+                'MINS', 'Roll2_Dev',
+                'Hot_Cold', 'Is_Short_Week', 'Opp_Roll4'
+            ]].fillna(0).values
+            X_hgbr_train = df_tr[[
                 'EWMA', 'MINS', 'EWMA_OPP', 'Hot_Cold', 'Stadium_Factor'
             ]].fillna(0).values
 
@@ -2826,7 +2834,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
                 tonight_post_bye, tonight_opp, hot_cold
             ]
             xgb_pred_vec = [
-                expected_mins, 0.0,
+                expected_mins,
                 float(df_ml['Roll2'].iloc[-1]) - s_mean,
                 hot_cold, tonight_short_week, tonight_opp
             ]
@@ -2870,12 +2878,14 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         df_ml['Roll5']  = df_ml[s_col].rolling(5).mean().fillna(df_ml[s_col].mean()).fillna(0)
         df_ml['Roll10'] = df_ml[s_col].rolling(10).mean().fillna(df_ml[s_col].mean()).fillna(0)
         rf_feature_cols = ['Roll3', 'Roll5', 'Roll10', 'MINS', 'Is_Home', 'Rest_Days', 'Opp_Def_Mod']
-        X_rf_train   = df_ml[rf_feature_cols].fillna(0).values
         s_mean       = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
-        df_ml['Dev'] = df_ml[s_col].fillna(0) - s_mean
-        X_xgb_train  = df_ml[['MINS', 'Dev']].fillna(0).values
         df_ml['EWMA'] = df_ml[s_col].ewm(span=5, adjust=False).mean().fillna(s_mean)
-        X_hgbr_train  = df_ml[['EWMA', 'MINS']].fillna(0).values
+        df_tr = df_ml.copy()      # v4.4: training rows use the previous game's rolling values
+        for _c in ('Roll3', 'Roll5', 'Roll10', 'EWMA'):
+            df_tr[_c] = _lag1(df_ml[_c], s_mean)
+        X_rf_train   = df_tr[rf_feature_cols].fillna(0).values
+        X_xgb_train  = df_tr[['MINS']].fillna(0).values
+        X_hgbr_train  = df_tr[['EWMA', 'MINS']].fillna(0).values
         tonight_rest_val = 3.0
         poi  = PoissonRegressor(alpha=1e-3, max_iter=500).fit(X_poi_train.values, y, sample_weight=weights)
         rf   = RandomForestRegressor(n_estimators=50, random_state=42).fit(X_rf_train, y, sample_weight=weights)
@@ -2884,7 +2894,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         trend_proj  = poi.predict([[expected_mins, len(df_ml)]])[0]
         rf_pred_vec = [df_ml['Roll3'].iloc[-1], df_ml['Roll5'].iloc[-1], df_ml['Roll10'].iloc[-1], expected_mins, is_home_current, tonight_rest_val, tonight_def_mod]
         stat_proj   = rf.predict([rf_pred_vec])[0]
-        con_proj    = xgb.predict([[expected_mins, trend_proj - s_mean]])[0]
+        con_proj    = xgb.predict([[expected_mins]])[0]
         base_proj   = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins]])[0]
 
     return (trend_proj, stat_proj, con_proj, base_proj,
@@ -2946,7 +2956,7 @@ def apply_skynet(raw_vote, stat_type, league):
     return {"mod": 1.0, "msg": "🟣 Skynet: Awaiting enough ledger data.", "color": "#94a3b8"}
 
 @st.cache_data(show_spinner=False, ttl=300)
-def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash="", opp_pitcher_era=None, opp_pitcher_name=None, venue_team=None):
+def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type, ignore_blowout=False, df_hash="", ledger_hash="", opp_pitcher_era=None, opp_pitcher_name=None, venue_team=None, with_oos=False):
     df_ml = df.copy()
     archetype = get_player_archetype(df_ml, league)
     
@@ -3099,8 +3109,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
         stat_proj = rf.predict([rf_pred_vec])[0]
 
         roll3_dev = float(df_ml['Roll3'].iloc[-1]) - s_mean
-        con_proj  = xgb.predict([[expected_mins, trend_proj - s_mean,
-                                   roll3_dev, tonight_b2b]])[0]
+        con_proj  = xgb.predict([[expected_mins, roll3_dev, tonight_b2b]])[0]
 
         ewma_mins = float(df_ml['EWMA_Mins'].iloc[-1]) if 'EWMA_Mins' in df_ml.columns else expected_mins
         base_proj = hgbr.predict([[df_ml['EWMA'].iloc[-1], expected_mins,
@@ -3209,6 +3218,17 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     smart_base_hist = (poi_hist * w_poi) + (rf_hist * w_rf) + (xgb_hist * w_xgb) + (hgbr_hist * w_hgbr)
     guru_hist = smart_base_hist * mods * 1.0 * hist_split_mods
     df_ml['AI_Proj'] = (smart_base_hist * 0.50) + (guru_hist * 0.50)
+
+    # v4.4: out-of-sample projections for the last OOS_FOLDS games (only on the main analysis path; scanners skip it for speed)
+    df_ml['AI_Proj_OOS'] = np.nan
+    if with_oos:
+        try:
+            _oos = _walk_forward_oos(df_ml, y_actual, weights, X_poi_train, X_rf_train, X_xgb_train, X_hgbr_train,
+                                     (w_poi, w_rf, w_xgb, w_hgbr), mods, hist_split_mods)
+            if _oos is not None:
+                df_ml['AI_Proj_OOS'] = _oos
+        except Exception:
+            pass
     
     board = [
         {"name": f"⏱️ MIN Maximizer ({w_poi*100:.0f}%)", "model": "Poisson Regressor", "proj": trend_proj, "vote": get_raw_vote(trend_proj), "color": get_final_vote(trend_proj)[1], "quote": f"MAE: {mae_poi:.2f} | Weighted by recent mins."},
@@ -3811,6 +3831,171 @@ def render_nfl_td_lotto(target_player, first, lk):
         c4.metric("EV per $1", f"{ev:+.2f}")
         st.caption(f"P(2+ TD) {res['p2']*100:.0f}%. Lotto rules: one lotto leg per slip, small stake, never inside a floor parlay. "
                    "The rate is a simple Poisson estimate with an assumed position prior. Treat EV under +0.10 as noise.")
+        # v4.4: Lotto_Log
+        try:
+            _stake = st.number_input("Stake ($)", min_value=0.0, max_value=25.0, value=1.0, step=0.5, key=f"{lk}.td_stake")
+            if st.button("📝 Log this lotto", key=f"{lk}.td_log_btn"):
+                if abs(odds) < 100:
+                    st.warning("Enter the book's American odds first.")
+                elif lotto_log_add(target_player, st.session_state.get(f"{lk}.opp"), odds, _stake, p1, fair, ev, res['lam']):
+                    st.success("Logged to Lotto_Log.")
+            with st.expander("Lotto record", expanded=False):
+                render_lotto_record()
+        except Exception as _lg_err:
+            st.caption(f"Lotto log unavailable: {_lg_err}")
+
+
+# ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
+MODEL_VERSION   = "v4.4"
+CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
+OOS_FOLDS       = 8       # walk-forward: the last N games are predicted by models fit on earlier games only
+OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
+OOS_MIN_POINTS  = 4       # need at least this many out-of-sample points to use them
+OOS_BLEND_K     = 4.0     # weight on the out-of-sample error = n / (n + K); the rest goes to the raw stat std
+OOS_SD_FLOOR    = 0.70    # spread never goes below this fraction of the stat's raw std
+INSAMPLE_SD_FLOOR = 0.85  # when no out-of-sample fold exists (short history): in-sample residuals understate error, so floor higher
+LOTTO_COLS = ["Date", "Player", "Opp", "Odds", "Stake", "Model_P1", "Fair_Odds", "EV_per_$1", "Lambda", "Result", "Payout", "Model_Version"]
+
+
+def _lag1(series, fill):
+    # The previous game's value of a rolling / EWMA feature (so a game is never in its own training row). First game gets `fill`.
+    return pd.Series(series).shift(1).fillna(fill)
+
+
+def _nfl_train_frame(df_ml, s_mean, opp_fill):
+    # Training copy for the NFL pipelines. df_ml itself stays unshifted: tonight's vectors read df_ml[...].iloc[-1].
+    df_tr = df_ml.copy()
+    for _c in ('Roll2', 'Roll4', 'Roll8', 'EWMA'):
+        df_tr[_c] = _lag1(df_ml[_c], s_mean)
+    df_tr['Opp_Roll4'] = _lag1(df_ml['Opp_Roll4'], opp_fill)
+    if 'EWMA_OPP' in df_ml.columns:
+        df_tr['EWMA_OPP'] = _lag1(df_ml['EWMA_OPP'], opp_fill)
+    df_tr['Roll2_Dev'] = df_tr['Roll2'] - s_mean
+    return df_tr
+
+
+def record_main_line(player_label, stat, line, odds):
+    # Remembers the market line the Sync button returned, so the ledger row can store it next to the line you took.
+    try:
+        if line is None:
+            return
+        snap = st.session_state.setdefault("main_line_snap", {})
+        snap[(str(player_label).split('(')[0].strip(), str(stat))] = (float(line), odds)
+    except Exception:
+        pass
+
+
+def _walk_forward_oos(df_ml, y, weights, Xp, Xr, Xx, Xh, w, mods, split_mods):
+    # Out-of-sample predictions for the last OOS_FOLDS games. The training matrices already carry lagged features, so
+    # fitting on rows [:i] and predicting row i uses only information that existed before game i.
+    # The held-out row's MINS is replaced by the mean of the previous 5 games' MINS (the live model is also given an expected, not an actual, number).
+    n = len(y)
+    if n < OOS_MIN_TRAIN + OOS_MIN_POINTS:
+        return None
+    start = max(OOS_MIN_TRAIN, n - OOS_FOLDS)
+    mins = pd.to_numeric(df_ml['MINS'], errors='coerce').fillna(0).values
+    Xp, Xr, Xx, Xh = (np.asarray(a, dtype=float) for a in (Xp, Xr, Xx, Xh))
+    y = np.clip(np.asarray(y, dtype=float), 0, None)
+    weights = np.asarray(weights, dtype=float)
+    out = np.full(n, np.nan)
+    for i in range(start, n):
+        m_exp = float(mins[max(0, i - 5):i].mean())
+        sw = weights[:i]
+        xp, xr, xx, xh = Xp[i].copy(), Xr[i].copy(), Xx[i].copy(), Xh[i].copy()
+        xp[0], xr[3], xx[0], xh[1] = m_exp, m_exp, m_exp, m_exp          # MINS column in each matrix
+        preds = []
+        try:
+            m = PoissonRegressor(alpha=1e-3, max_iter=300).fit(Xp[:i], y[:i], sample_weight=sw); preds.append(float(m.predict([xp])[0]))
+        except Exception:
+            preds.append(float(np.average(y[:i], weights=sw)))
+        m = RandomForestRegressor(n_estimators=40, max_depth=5, min_samples_leaf=2, random_state=42).fit(Xr[:i], y[:i], sample_weight=sw); preds.append(float(m.predict([xr])[0]))
+        m = XGBRegressor(n_estimators=60, learning_rate=0.05, max_depth=3, subsample=0.8, random_state=42, objective='reg:squarederror').fit(Xx[:i], y[:i], sample_weight=sw); preds.append(float(m.predict([xx])[0]))
+        m = HistGradientBoostingRegressor(max_iter=60, max_depth=3, random_state=42).fit(Xh[:i], y[:i], sample_weight=sw); preds.append(float(m.predict([xh])[0]))
+        sm = float(np.dot(w, preds))
+        guru = sm * float(mods[i]) * float(split_mods[i])
+        out[i] = sm * 0.50 + guru * 0.50
+    return out
+
+
+def honest_residual_sd(df, s_col):
+    # Spread for the win-probability simulation. Uses the out-of-sample (walk-forward) error when it exists.
+    raw = pd.to_numeric(df[s_col], errors='coerce')
+    raw_sd = float(raw.std()) if raw.notna().sum() > 1 else 1.0
+    if raw_sd != raw_sd or raw_sd <= 0:
+        raw_sd = 1.0
+    oos_sd, n = float('nan'), 0
+    if 'AI_Proj_OOS' in df.columns:
+        r = (raw - pd.to_numeric(df['AI_Proj_OOS'], errors='coerce')).dropna()
+        n = int(len(r))
+        if n >= OOS_MIN_POINTS:
+            oos_sd = float(np.sqrt((r ** 2).mean()))
+    if oos_sd == oos_sd:
+        wgt = n / (n + OOS_BLEND_K)
+        sd = wgt * oos_sd + (1.0 - wgt) * raw_sd
+        sd = max(sd, OOS_SD_FLOOR * raw_sd)
+    else:
+        sd_in = float('nan')
+        if 'Residual' in df.columns:
+            sd_in = float(pd.to_numeric(df['Residual'], errors='coerce').std())
+        if sd_in != sd_in or sd_in <= 0:
+            sd_in = raw_sd
+        sd = max(sd_in, INSAMPLE_SD_FLOOR * raw_sd)
+    return max(float(sd), 0.05)
+
+
+def _lotto_ws():
+    gc = get_gc()
+    if not gc:
+        return None
+    sh = gc.open("B2TF_Database")
+    try:
+        return sh.worksheet("Lotto_Log")
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title="Lotto_Log", rows=500, cols=len(LOTTO_COLS))
+        try: ws.update(values=[LOTTO_COLS], range_name='A1')
+        except TypeError: ws.update('A1', [LOTTO_COLS])
+        return ws
+
+
+def lotto_log_add(player, opp, odds, stake, p1, fair, ev, lam):
+    ws = _lotto_ws()
+    if ws is None:
+        return False
+    row = [datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"), str(player).split('(')[0].strip(), str(opp or ""),
+           int(odds), float(stake), round(float(p1), 4), int(fair), round(float(ev), 3), round(float(lam), 3), "Pending", "", MODEL_VERSION]
+    ws.append_row(row, value_input_option='USER_ENTERED')
+    return True
+
+
+def render_lotto_record():
+    # Record of logged lottos + Hit / Miss buttons for pending ones. Reads the small Lotto_Log sheet directly (no cache).
+    ws = _lotto_ws()
+    if ws is None:
+        return
+    vals = ws.get_all_values()
+    if len(vals) < 2:
+        st.caption("No lottos logged yet.")
+        return
+    rows = []
+    for k, r in enumerate(vals[1:], start=2):
+        r = r + [""] * (len(LOTTO_COLS) - len(r))
+        rows.append((k, r))
+    done = [(k, r) for k, r in rows if r[9] in ("Hit", "Miss")]
+    staked = sum(float(r[4] or 0) for k, r in done)
+    net = sum(float(r[10] or 0) for k, r in done)
+    hits = sum(1 for k, r in done if r[9] == "Hit")
+    st.caption(f"Lotto record: {hits}/{len(done)} hit | staked ${staked:.2f} | net {net:+.2f}")
+    for k, r in rows:
+        if r[9] != "Pending":
+            continue
+        a, b, c = st.columns([3, 1, 1])
+        a.caption(f"{r[0]} {r[1]} {int(float(r[3])):+d} ${float(r[4] or 0):.2f}")
+        if b.button("Hit", key=f"lotto_hit_{k}"):
+            odds, stake = float(r[3]), float(r[4] or 0)
+            profit = stake * (odds / 100.0 if odds > 0 else 100.0 / abs(odds))
+            ws.update_cell(k, 10, "Hit"); ws.update_cell(k, 11, round(profit, 2)); st.rerun()
+        if c.button("Miss", key=f"lotto_miss_{k}"):
+            ws.update_cell(k, 10, "Miss"); ws.update_cell(k, 11, -float(r[4] or 0)); st.rerun()
 
 
 def _nfl_pos(archetype):
@@ -4037,8 +4222,10 @@ def nfl_prob_for_vote(result, vote):
         cdf = sum(_m.exp(-lam) * lam ** i / _m.factorial(i) for i in range(0, k + 1))
         return float(max(0.0, min(1.0, 1.0 - cdf if vote == "OVER" else cdf)))
     sd = None
-    if 'Residual' in df.columns:
-        sd = float(df['Residual'].std())
+    try:
+        sd = honest_residual_sd(df, s_col)
+    except Exception:
+        sd = None
     if not sd or sd != sd:
         sd = max(float(pd.to_numeric(df[s_col], errors='coerce').std()), 1.0)
     z = (line - proj) / sd
@@ -5272,6 +5459,7 @@ def render_syndicate_board(league_key):
             if sync and player_name:
                 with st.spinner("Syncing odds..."):
                     f_line, f_odds, msg, used, rem = get_live_line(player_name, st.session_state.get(f"{lk}.new_stat") or "Points", ODDS_API_KEY, sport_path)
+                    record_main_line(player_name, st.session_state.get(f"{lk}.new_stat") or "Points", f_line, f_odds)
                     if used and rem:
                         st.session_state['api_used'] = int(used)
                         st.session_state['api_remaining'] = int(rem)
@@ -5357,6 +5545,7 @@ def render_syndicate_board(league_key):
     if sync and player_name:
         with st.spinner("Syncing odds..."):
             f_line, f_odds, msg, used, rem = get_live_line(player_name, st.session_state.get(f"{lk}.new_stat") or "Points", ODDS_API_KEY, sport_path)
+            record_main_line(player_name, st.session_state.get(f"{lk}.new_stat") or "Points", f_line, f_odds)
         if used and rem:
             st.session_state['api_used'] = int(used)
             st.session_state['api_remaining'] = int(rem)
@@ -5514,7 +5703,8 @@ def render_syndicate_board(league_key):
                         df_stat, s_col, line, opp, league_key, rest,
                         (0 if (league_key == "NFL" and st.session_state.get(f"{lk}.neutral_site", False)) else is_home_current), stat_type,
                         False, df_hash, ledger_hash, opp_pitcher_era, opp_pitcher_name,
-                        venue_team=("NEUTRAL" if (league_key == "NFL" and st.session_state.get(f"{lk}.neutral_site", False)) else player_team_abbr)
+                        venue_team=("NEUTRAL" if (league_key == "NFL" and st.session_state.get(f"{lk}.neutral_site", False)) else player_team_abbr),
+                        with_oos=True
                     )
                 except:
                     continue
@@ -5603,8 +5793,7 @@ def render_syndicate_board(league_key):
                 MLB_POISSON_STATS = {"H", "HR", "TB", "RBI"}
                 NFL_POISSON_STATS = {"PASS_TDS", "INT", "REC"}
                 df_ml['Residual'] = df_ml[s_col] - df_ml.get('AI_Proj', pd.Series([c_proj] * len(df_ml)))
-                residual_std = df_ml['Residual'].std()
-                if np.isnan(residual_std) or residual_std == 0: residual_std = max(df_ml[s_col].std(), 1.0)
+                residual_std = honest_residual_sd(df_ml, s_col)      # v4.4: walk-forward error blended with the raw std
 
                 if (league_key == "MLB" and s_col in MLB_POISSON_STATS) or (league_key == "NFL" and s_col in NFL_POISSON_STATS):
                     # Poisson simulation for discrete count stats
@@ -6721,10 +6910,23 @@ with t_roi:
                     (graded_df['Closing_Line'].apply(lambda x: float(x) if str(x).strip() not in ['', '0', '0.0', 'nan'] else 0) > 0) &
                     (graded_df['Vote'].isin(['OVER', 'UNDER']))
                 ].copy()
+                # v4.4: a closing line far from the line you took is an alt-line bet; comparing the two would show fake CLV
+                _clv_alt_n = 0
+                try:
+                    _ln = pd.to_numeric(clv_eligible['Line'], errors='coerce')
+                    _cl = pd.to_numeric(clv_eligible['Closing_Line'], errors='coerce')
+                    _alt = ((_cl - _ln).abs() / _ln.clip(lower=0.5)) > CLV_ALT_GAP
+                    _clv_alt_n = int(_alt.sum())
+                    clv_eligible = clv_eligible[~_alt].copy()
+                except Exception:
+                    pass
     
                 if len(clv_eligible) >= 3:
                     with st.expander(f"📊 Closing Line Value Report  ({len(clv_eligible)} tracked bets)", expanded=False):
-    
+                        st.caption(f"Line CLV only means something when the closing line is for the line you took. {_clv_alt_n} row(s) with a closing line "
+                                   f"more than {CLV_ALT_GAP*100:.0f}% away from the line you bet (alt lines) are left out. "
+                                   "Rows where the closing line was typed as the market main line while you bet a lower alt line would show fake positive CLV.")
+
                         clv_results = []
                         for _, cr in clv_eligible.iterrows():
                             bet_clv, timing_clv, clv_rating, timing_rating = calculate_clv(
@@ -7337,6 +7539,7 @@ with t_roi:
                                         "minutes_played": float(row.get('Actual_Mins', 0)) if str(row.get('Actual_Mins', '')).replace('.','').isdigit() else None,
                                         "fouls": int(float(row.get('Actual_Fouls', 0))) if str(row.get('Actual_Fouls', '')).replace('.','').isdigit() else None,
                                         "closing_line": float(current_closing) if current_closing > 0 else None,
+                                        "closing_line_note": "May be the market main line while the bettor took a lower alt line. Do not read the gap as CLV.",
                                         "setup_score": int(float(row.get('Setup_Score', 0))),
                                         "win_probability_pct": round(float(row.get('Win_Prob', 0)) * 100, 1)
                                     }, indent=2)
@@ -7370,10 +7573,10 @@ with t_roi:
     
                         closing_input = st.number_input(
                             "Close 📉",
-                            value=current_closing if current_closing > 0 else bet_line_val,
+                            value=current_closing if current_closing > 0 else 0.0,
                             step=0.5,
                             key=f"close_line_{i}",
-                            help="Enter the line where this prop closed at tip-off"
+                            help="Enter the closing line for the SAME line you bet. If you took an alt line, leave this at 0: the market main line is not comparable."
                         )
     
                         if closing_input != current_closing and closing_input > 0:
