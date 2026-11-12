@@ -318,7 +318,7 @@ def save_model_performance(league, stat_type, min_max_err, stat_err, contrarian_
 @st.cache_data(ttl=120)
 def load_ledger():
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]
-    df = load_sheet_df("ROI_Ledger", new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line"])
+    df = load_sheet_df("ROI_Ledger", new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line", "Spread"])
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
@@ -342,7 +342,7 @@ def load_ledger():
 
     return df
 
-def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0, min_max=0.0, stat_proj=0.0, contrarian=0.0, context=0.0, raw_prob=None):
+def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, is_boosted=False, setup_score=0, user_prob=0.55, opening_line=0.0, min_max=0.0, stat_proj=0.0, contrarian=0.0, context=0.0, raw_prob=None, spread=None):
     row = {
         "Date": datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d"),
         "League": str(league),
@@ -368,7 +368,8 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Context Proj": float(context),
         "Raw_Prob": "" if raw_prob is None else round(float(raw_prob), 4),
         "Model_Version": MODEL_VERSION,
-        "Main_Line": ""
+        "Main_Line": "",
+        "Spread": "" if spread in (None, "") else float(spread)
     }
     try:
         _snap = st.session_state.get("main_line_snap", {}).get((row["Player"], row["Stat"]))
@@ -379,7 +380,7 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
 
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]
 
-    append_to_sheet("ROI_Ledger", row, new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line"])
+    append_to_sheet("ROI_Ledger", row, new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line", "Spread"])
 
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=25, max_win_rate=0.42):
@@ -2303,7 +2304,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
         X_hgbr_train = df_tr[['EWMA', 'MINS', 'EWMA_Mins', 'Mins_Trend']].fillna(0).values
 
         # ── Tonight's prediction vectors ──────────────
-        tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (0.0 if "3 in 4" in str(rest_status) else 3.0)
+        tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (2.0 if "3 in 4" in str(rest_status) else 3.0)   # v4.4.2: 0.0 -> 2.0
         tonight_b2b      = 1.0 if "B2B" in str(rest_status) else 0.0
 
         def train_poisson():
@@ -2611,7 +2612,7 @@ def build_models(df_ml, s_col, weights, league, is_home_current, rest_status, to
             tonight_sog_rate = 0.0
 
         tonight_rest_val = 1.0 if "B2B" in str(rest_status) else (
-            0.0 if "3 in 4" in str(rest_status) else 3.0)
+            2.0 if "3 in 4" in str(rest_status) else 3.0)   # v4.4.2: 0.0 -> 2.0
 
         # ── Poisson: TOI-driven volume model ──────────
         X_poi_train = df_ml[['MINS']].copy()
@@ -3087,7 +3088,7 @@ def run_ml_board(df, s_col, line, opp, league, rest, is_home_current, stat_type,
     if league == "NBA" and "Weak Def" in mod_desc and expected_mins >= 25 and not ignore_blowout:
         is_blowout_risk = True
         expected_mins = max(15.0, expected_mins - (mins_std * 1.5))
-        tonight_rest = 1.0 if "B2B" in str(rest) else (0.0 if "3 in 4" in str(rest) else 3.0)
+        tonight_rest = 1.0 if "B2B" in str(rest) else (2.0 if "3 in 4" in str(rest) else 3.0)   # v4.4.2: 0.0 -> 2.0
         tonight_b2b  = 1.0 if "B2B" in str(rest) else 0.0
         s_mean = df_ml[s_col].mean() if not pd.isna(df_ml[s_col].mean()) else 0.0
 
@@ -3846,7 +3847,7 @@ def render_nfl_td_lotto(target_player, first, lk):
 
 
 # ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
-MODEL_VERSION   = "v4.4.1"
+MODEL_VERSION   = "v4.4.2"
 CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
 OOS_FOLDS       = 5       # walk-forward: the last N games are predicted by models fit on earlier games only (v4.4.1: 8 -> 5 for speed)
 OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
@@ -5531,9 +5532,12 @@ def render_syndicate_board(league_key):
                 fat_options = ["⚡ Short", "🟢 Standard", "🔋 Bye"]
                 fat_map     = {"⚡ Short": "Short Week (TNF ~4 Days)", "🟢 Standard": "Standard Rest (7 Days)", "🔋 Bye": "Post-Bye Week (~14 Days)"}
             else:
-                fat_options = ["🟢 Rested", "🟡 Tired", "🔴 B2B"]
-                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "🟡 Tired": "Tired (B2B)", "🔴 B2B": "3 in 4 Nights"}
+                # v4.4.2: each button sends what its label says. 🔴 B2B = 2nd night of a back-to-back (-10%, B2B model flag).
+                fat_options = ["🟢 Rested", "🟡 3 in 4", "🔴 B2B"]
+                fat_map     = {"🟢 Rested": "Rested (1+ Days)", "🟡 3 in 4": "3 in 4 Nights", "🔴 B2B": "B2B (2nd Night)"}
 
+            if st.session_state.get(f"{lk}.fat_sel") not in fat_options:
+                st.session_state.pop(f"{lk}.fat_sel", None)       # stale "🟡 Tired" from before v4.4.2
             fat_sel = st.radio("Energy", fat_options, horizontal=False, key=f"{lk}.fat_sel", label_visibility="collapsed")
             rest = fat_map.get(fat_sel, "Rested (1+ Days)")
             st.session_state[f"{lk}.rest"] = rest
@@ -5770,10 +5774,12 @@ def render_syndicate_board(league_key):
                 # Game script modifier
                 spread_val      = st.session_state.get(f"{lk}.spread", 0.0)
                 blowout_penalty = 1.0
-                if abs(spread_val) >= 14.0:   blowout_penalty = 0.70
-                elif abs(spread_val) >= 10.0: blowout_penalty = 0.78
-                elif abs(spread_val) >= 7.5:  blowout_penalty = 0.85
-                elif abs(spread_val) >= 6.5:  blowout_penalty = 0.88
+                # v4.4.2: was 0.88 at 6.5+, 0.85 at 7.5+, 0.78 at 10+, 0.70 at 14+ (a full 4th-quarter benching every time).
+                # Now nothing below NBA_GRADE_AVOID_SPREAD and expected-value trims above it. PROVISIONAL: refit from the
+                # ROI_Ledger Spread column. Skipped when run_ml_board already slashed minutes (BLOWOUT RISK) so it isn't counted twice.
+                if "BLOWOUT RISK" not in str(mod_desc):
+                    if abs(spread_val) >= 14.0:                     blowout_penalty = 0.88
+                    elif abs(spread_val) >= NBA_GRADE_AVOID_SPREAD: blowout_penalty = 0.94
                 if league_key == "NFL":
                     # Direction-aware game script. spread_val < 0 = your player's team is the favorite.
                     # Favorites run more / throw less; underdogs throw more / run less. STARTING VALUES, tune with ledger data.
@@ -5880,7 +5886,7 @@ def render_syndicate_board(league_key):
                     "current_split_mod": current_split_mod, "fatigue_val": fatigue_val,
                     "fatigue_desc": fatigue_desc, "skynet_msg": skynet_data["msg"],
                     "skynet_color": skynet_data["color"], "agree_count": agree_count,
-                    "implied_prob": implied_prob, "opp": opp,
+                    "implied_prob": implied_prob, "opp": opp, "spread": spread_val,
                     "opp_pitcher_name": opp_pitcher_name, "opp_pitcher_era": opp_pitcher_era,
                     "l10_hits": int((df_l10[s_col] >= line).sum()),
                     "vs_opp_hits": int((df_ml[df_ml['MATCHUP'] == opp][s_col] >= line).sum()),
@@ -6359,7 +6365,7 @@ def render_syndicate_board(league_key):
                         if ri >= len(stat_results): continue
                         r = stat_results[ri]
                         implied = abs(r['odds']) / (abs(r['odds']) + 100) if r['odds'] < 0 else 100 / (r['odds'] + 100)
-                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r.get('p_over', r['win_prob']), False, r['setup_score'], implied, r['line'], raw_prob=r.get('p_over_raw'))
+                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r.get('p_over', r['win_prob']), False, r['setup_score'], implied, r['line'], raw_prob=r.get('p_over_raw'), spread=r.get('spread'))
                         log_prediction_receipt(target_player, r['stat_type'], r['proj'], datetime.now().strftime("%Y-%m-%d"), is_override=True)
                         log_gate_row(league_key, target_player, r, opp, forced_vote="OVER")
                     st.success("🚨 The Man takes responsibility!"); time.sleep(1); st.rerun()
@@ -6382,7 +6388,7 @@ def render_syndicate_board(league_key):
                                 league_key, target_player, r['stat_type'], r['line'], r['odds'],
                                 r['proj'], r['vote'], r['win_prob'], False, r['setup_score'],
                                 implied, r['line'], min_max_proj, stat_proj_v, contrarian_v, context_v,
-                                raw_prob=r.get('win_prob_raw')
+                                raw_prob=r.get('win_prob_raw'), spread=r.get('spread')
                             )
                             log_prediction_receipt(target_player, r['stat_type'], r['proj'], datetime.now().strftime("%Y-%m-%d"))
                             log_gate_row(league_key, target_player, r, opp)
