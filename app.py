@@ -6642,7 +6642,7 @@ with t_parlay:
                                         r_val = pd.to_numeric(parlay_df.at[orig_idx, 'Risk'], errors='coerce')
                                         o = int(o_val) if pd.notna(o_val) else 0
                                         r = float(r_val) if pd.notna(r_val) else 0.0
-                                        is_f = parlay_df.at[orig_idx].get('Is_Free_Bet', False)
+                                        is_f = str(parlay_df.at[orig_idx, 'Is_Free_Bet']).strip().upper() == 'TRUE' if 'Is_Free_Bet' in parlay_df.columns else False   # v4.4.2 hotfix: .at needs row AND column
 
                                         if o > 0:
                                             payout = (r * (o / 100)) if is_f else r + (r * (o / 100))
