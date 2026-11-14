@@ -318,7 +318,7 @@ def save_model_performance(league, stat_type, min_max_err, stat_err, contrarian_
 @st.cache_data(ttl=120)
 def load_ledger():
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]
-    df = load_sheet_df("ROI_Ledger", new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line", "Spread"])
+    df = load_sheet_df("ROI_Ledger", new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line", "Spread", "Picker", "Picker_Prob"])
     df = df[df['Player'].astype(str).str.strip() != '']
     df = df[df['Date'].astype(str).str.strip() != '']
     df = df.reset_index(drop=True)
@@ -369,7 +369,8 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Raw_Prob": "" if raw_prob is None else round(float(raw_prob), 4),
         "Model_Version": MODEL_VERSION,
         "Main_Line": "",
-        "Spread": "" if spread in (None, "") else float(spread)
+        "Spread": "" if spread in (None, "") else float(spread),
+        "Picker": "", "Picker_Prob": ""      # head-to-head tag (Gemini / Claude), filled in the sheet
     }
     try:
         _snap = st.session_state.get("main_line_snap", {}).get((row["Player"], row["Stat"]))
@@ -380,7 +381,7 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
 
     new_cols = ["Date", "League", "Player", "Stat", "Odds", "Line", "Proj", "Vote", "Actual", "Result", "Win_Prob", "Is_Boosted", "Setup_Score", "User_Prob", "Opening_Line", "Closing_Line", "Actual_Mins", "Actual_Fouls", "MIN Max Proj", "Stat Proj", "Contrarian Proj", "Context Proj"]
 
-    append_to_sheet("ROI_Ledger", row, new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line", "Spread"])
+    append_to_sheet("ROI_Ledger", row, new_cols + ["Book", "Closing_Odds", "Raw_Prob", "Model_Version", "Main_Line", "Spread", "Picker", "Picker_Prob"])
 
 @st.cache_data(ttl=120)
 def get_suppressed_stats(league, min_bets=25, max_win_rate=0.42):
