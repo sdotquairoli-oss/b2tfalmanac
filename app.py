@@ -695,7 +695,7 @@ def get_nba_schedule():
             away_team = next(t for t in c['competitors'] if t['homeAway'] == 'away')
 
             # Normalize ESPN abbreviations to standard 3-letter NBA codes
-            espn_fix = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA"}
+            espn_fix = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA", "WSH": "WAS"}   # v4.4.3: + WSH
             home_abbrev = espn_fix.get(home_team['team']['abbreviation'].upper(), home_team['team']['abbreviation'].upper())
             away_abbrev = espn_fix.get(away_team['team']['abbreviation'].upper(), away_team['team']['abbreviation'].upper())
 
@@ -1249,7 +1249,8 @@ def get_nfl_schedule():
     except Exception as e:
         return None, f"Failed to connect to NFL API: {str(e)}"
 @st.cache_data(ttl=300)
-def get_nfl_stats(player_label):
+def get_nfl_stats(player_label, history_seasons=0):
+    # history_seasons > 0 is for the vs-OPP display only (pulls extra past seasons); the model always calls with 0.
     import re
     cn = player_label.split("(")[0].strip()
     fetch_errors = []
@@ -1328,10 +1329,12 @@ def get_nfl_stats(player_label):
             return pd.DataFrame(), 404, fetch_errors or [f"Could not locate ESPN ID for {cn}"]
 
         # 3. GAMELOG FETCH (no season param = current season, then last season)
-        curr_year = datetime.now().year
-        urls = [
-            f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog",
-            f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog?season={curr_year - 1}"
+        # v4.4.3: NFL seasons run Sep–Feb, so Jan/Feb still belong to last fall's season (calendar year - 1).
+        _now = datetime.now()
+        season_start = _now.year if _now.month >= 3 else _now.year - 1
+        urls = [f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog"] + [
+            f"https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/{athlete_id}/gamelog?season={season_start - k}"
+            for k in range(1, 2 + int(history_seasons or 0))
         ]
 
         all_rows = []
@@ -1408,6 +1411,7 @@ def get_nfl_stats(player_label):
                     game_loc = str(meta.get('gameLocation', '')).lower().strip()
                     is_home  = 1 if (at_vs in ['vs', 'vs.'] or game_loc == 'home' or meta.get('homeAway', '') == 'home') else 0
                     opp      = meta.get('opponent', {}).get('abbreviation', 'OPP').upper()
+                    opp      = NFL_ABBR_FIX.get(opp, opp)     # v4.4.3: old / alternate ESPN codes -> app codes
 
                     # Passing
                     pass_att = pick(stats, 'passingattempts', 'passingatt')
@@ -1466,7 +1470,7 @@ def get_nfl_stats(player_label):
 
         today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
-        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 480)]
+        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= (480 if not history_seasons else 400 * (int(history_seasons) + 2)))]
         df['Weight'] = np.exp(-0.004 * df['Days_Ago'])   # NFL: roles/teams change in the offseason, so last year counts for less
 
         return df.reset_index(drop=True), 200, []
@@ -1475,7 +1479,8 @@ def get_nfl_stats(player_label):
         return pd.DataFrame(), 500, [str(e)]
 
 @st.cache_data(ttl=300)
-def get_nba_stats(player_label):
+def get_nba_stats(player_label, history_seasons=0):
+    # history_seasons > 0 is for the vs-OPP display only (pulls extra past seasons); the model always calls with 0.
     cn = player_label.split("(")[0].strip()
 
     ALIASES = {
@@ -1495,7 +1500,7 @@ def get_nba_stats(player_label):
         cn = ALIASES[cn.lower()]
 
     # ESPN abbreviation fixes — same map used in get_nba_schedule
-    ESPN_FIX = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA"}
+    ESPN_FIX = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA", "WSH": "WAS"}   # v4.4.3: + WSH
 
     fetch_errors = []
 
@@ -1535,6 +1540,8 @@ def get_nba_stats(player_label):
             seasons = [curr_year, curr_year - 1]    # April 2026 → [2026, 2025] ✅
         else:
             seasons = [curr_year + 1, curr_year]    # Oct 2026 → [2027, 2026]
+        if history_seasons:                         # v4.4.3: vs-OPP display only
+            seasons = seasons + [seasons[-1] - k for k in range(1, int(history_seasons) + 1)]
 
         all_rows = []
 
@@ -1637,7 +1644,7 @@ def get_nba_stats(player_label):
         df['ShortDate'] = df['ValidDate'].dt.strftime('%b %d')
         today = pd.to_datetime(datetime.now(pytz.timezone('America/New_York')).strftime("%Y-%m-%d"))
         df['Days_Ago'] = (today - df['ValidDate']).dt.days
-        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= 1095)]
+        df = df[(df['Days_Ago'] >= 0) & (df['Days_Ago'] <= (1095 if not history_seasons else 400 * (int(history_seasons) + 3)))]
         df['Weight']  = np.exp(-0.003465 * df['Days_Ago'])
         df['USG_PCT'] = 0.25  # ESPN gamelog doesn't expose USG% — league avg default
 
@@ -3257,7 +3264,7 @@ def run_nba_heaters(stat_choice="Points"):
             "Rebounds + Assists": "RA"
         }.get(stat_choice, "PTS")
 
-        ESPN_FIX = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA"}
+        ESPN_FIX = {"GS": "GSW", "NO": "NOP", "NY": "NYK", "SA": "SAS", "UTAH": "UTA", "WSH": "WAS"}   # v4.4.3: + WSH
 
         heaters = []
         seen_players = set()
@@ -3848,7 +3855,7 @@ def render_nfl_td_lotto(target_player, first, lk):
 
 
 # ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
-MODEL_VERSION   = "v4.4.2"
+MODEL_VERSION   = "v4.4.3"
 CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
 OOS_FOLDS       = 5       # walk-forward: the last N games are predicted by models fit on earlier games only (v4.4.1: 8 -> 5 for speed)
 OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
@@ -4672,6 +4679,99 @@ NFL_HAIRCUT_SINCE = ""    # "YYYY-MM-DD": set this to the date you change NFL_PR
 NFL_STAT_LABELS = ["Passing Yards", "Passing TDs", "Completions", "Interceptions", "Rushing Yards",
                    "Receiving Yards", "Receptions", "Carries", "Rush+Rec Yards"]
 NFL_CAL_MIN_LEGS = 30
+
+
+NFL_ABBR_FIX = {"WAS": "WSH", "LA": "LAR", "STL": "LAR", "OAK": "LV", "SD": "LAC", "JAC": "JAX"}
+VS_OPP_HISTORY_SEASONS = 3      # extra past seasons for the vs-OPP box (NFL/NBA): current + last + 3 more = 5 seasons
+
+
+def _vs_opp_add_combos(d, league, s_col):
+    d = d.copy()
+    if league == "NBA":
+        if s_col == "PRA" and 'PTS' in d: d['PRA'] = d['PTS'] + d['TRB'] + d['AST']
+        if s_col == "PR"  and 'PTS' in d: d['PR']  = d['PTS'] + d['TRB']
+        if s_col == "PA"  and 'PTS' in d: d['PA']  = d['PTS'] + d['AST']
+        if s_col == "RA"  and 'TRB' in d: d['RA']  = d['TRB'] + d['AST']
+        if s_col in ("DD", "TD") and 'PTS' in d:
+            tens = (d['PTS'] >= 10).astype(int) + (d['TRB'] >= 10).astype(int) + (d['AST'] >= 10).astype(int)
+            d['DD'] = (tens >= 2).astype(int); d['TD'] = (tens >= 3).astype(int)
+    if league == "NFL" and s_col == "RUSH_REC" and 'RUSH_YDS' in d and 'REC_YDS' in d:
+        d['RUSH_REC'] = d['RUSH_YDS'] + d['REC_YDS']
+    return d
+
+
+def summarize_vs_opp(hist, opp, s_col, line):
+    """Pure: hits/games/avg/span of a player's games vs one opponent. hist needs ValidDate, MATCHUP, s_col."""
+    empty = {"vs_opp_hits": 0, "vs_opp_games": 0, "vs_opp_avg": None, "vs_opp_span": "", "vs_opp_vals": ""}
+    if hist is None or len(hist) == 0 or s_col not in hist.columns or 'MATCHUP' not in hist.columns:
+        return empty
+    g = hist[hist['MATCHUP'].astype(str).str.upper() == str(opp).upper()].sort_values('ValidDate')
+    if g.empty:
+        return empty
+    vals = pd.to_numeric(g[s_col], errors='coerce').dropna()
+    if vals.empty:
+        return empty
+    yrs = pd.to_datetime(g['ValidDate']).dt.year
+    y0, y1 = int(yrs.min()), int(yrs.max())
+    span = f"'{str(y0)[-2:]}" if y0 == y1 else f"'{str(y0)[-2:]}–'{str(y1)[-2:]}"
+    shown = ", ".join(f"{d:%m/%y}: {v:g}" for d, v in zip(pd.to_datetime(g['ValidDate']).tail(8), vals.tail(8)))
+    return {"vs_opp_hits": int((vals >= line).sum()), "vs_opp_games": int(len(vals)),
+            "vs_opp_avg": round(float(vals.mean()), 1), "vs_opp_span": span, "vs_opp_vals": shown}
+
+
+def vs_opp_history(league, player_label, opp, s_col, line, df_model):
+    """vs-OPP box data. NFL/NBA pull extra past seasons (display only); falls back to the model's own window."""
+    if league in ("NFL", "NBA"):
+        try:
+            fn = get_nfl_stats if league == "NFL" else get_nba_stats
+            hist, code, _ = fn(player_label, history_seasons=VS_OPP_HISTORY_SEASONS)
+            if code == 200 and hist is not None and len(hist):
+                out = summarize_vs_opp(_vs_opp_add_combos(hist, league, s_col), opp, s_col, line)
+                if out["vs_opp_games"] > 0:
+                    return out
+        except Exception:
+            pass
+    return summarize_vs_opp(df_model, opp, s_col, line)
+
+
+def picker_h2h_table(ledger_df, unit=10.0):
+    """Gemini vs Claude: graded legs per picker, hit % vs implied, flat-stake P/L, Brier (picker and app)."""
+    if ledger_df is None or len(ledger_df) == 0 or 'Picker' not in ledger_df.columns:
+        return None
+    d = ledger_df.copy()
+    d['Picker'] = d['Picker'].astype(str).str.strip()
+    d = d[d['Picker'].isin(['Gemini', 'Claude'])]
+    if d.empty:
+        return None
+    rows = []
+    for who in ['Claude', 'Gemini']:
+        g = d[d['Picker'] == who]
+        if g.empty:
+            continue
+        gr = g[g['Result'].isin(['Win', 'Loss'])].copy()
+        pending = int((g['Result'] == 'Pending').sum())
+        n = len(gr)
+        row = {"Picker": who, "Graded": n, "Pending": pending}
+        if n:
+            odds = pd.to_numeric(gr['Odds'], errors='coerce')
+            dec = np.where(odds > 0, 1 + odds / 100.0, 1 + 100.0 / odds.abs())
+            imp = np.where(odds > 0, 100.0 / (odds + 100.0), odds.abs() / (odds.abs() + 100.0))
+            y = (gr['Result'] == 'Win').astype(float).to_numpy()
+            pl = float(np.where(y == 1, unit * (dec - 1), -unit).sum())
+            pp = pd.to_numeric(gr['Picker_Prob'], errors='coerce').to_numpy()
+            ap = pd.to_numeric(gr['Raw_Prob'], errors='coerce').to_numpy() if 'Raw_Prob' in gr else np.full(n, np.nan)
+            row.update({
+                "W-L": f"{int(y.sum())}-{n - int(y.sum())}",
+                "Hit %": round(100 * y.mean(), 1),
+                "Implied %": round(100 * float(np.nanmean(imp)), 1),
+                "Picker est %": round(100 * float(np.nanmean(pp)), 1) if np.isfinite(pp).any() else None,
+                f"P/L (${unit:g}/leg)": round(pl, 2),
+                "ROI %": round(100 * pl / (unit * n), 1),
+                "Brier (picker)": round(float(np.nanmean((pp - y) ** 2)), 3) if np.isfinite(pp).any() else None,
+                "Brier (app)": round(float(np.nanmean((ap - y)[np.isfinite(ap)] ** 2)), 3) if np.isfinite(ap).any() else None,
+            })
+        rows.append(row)
+    return pd.DataFrame(rows) if rows else None
 
 
 def nfl_bias_table(ledger_df):
@@ -5890,8 +5990,7 @@ def render_syndicate_board(league_key):
                     "implied_prob": implied_prob, "opp": opp, "spread": spread_val,
                     "opp_pitcher_name": opp_pitcher_name, "opp_pitcher_era": opp_pitcher_era,
                     "l10_hits": int((df_l10[s_col] >= line).sum()),
-                    "vs_opp_hits": int((df_ml[df_ml['MATCHUP'] == opp][s_col] >= line).sum()),
-                    "vs_opp_games": int((df_ml['MATCHUP'] == opp).sum()),
+                    **vs_opp_history(league_key, target_player, opp, s_col, line, df_ml),   # v4.4.3: up to 5 seasons (NFL/NBA)
                     "l5_hits": int((df_ml.tail(5)[s_col] >= line).sum()),
                     "s_avg": round(float(df_stat[s_col].mean()), 1),
                     "l10_avg": round(float(df_l10[s_col].mean()), 1),
@@ -6087,8 +6186,8 @@ def render_syndicate_board(league_key):
                     </div>
                     <div style='width:1px;background:#334155;height:32px;margin-top:2px;'></div>
                     <div>
-                        <div style='font-size:14px;font-weight:900;color:{vs_opp_color};'>{vs_opp_str}</div>
-                        <div style='font-size:9px;color:#94a3b8;'>vs {opp}</div>
+                        <div title="{result.get('vs_opp_vals', '')}{(' | avg ' + str(result.get('vs_opp_avg'))) if result.get('vs_opp_avg') is not None else ''}" style='font-size:14px;font-weight:900;color:{vs_opp_color};cursor:help;'>{vs_opp_str}</div>
+                        <div style='font-size:9px;color:#94a3b8;'>vs {opp} {result.get('vs_opp_span', '')}</div>
                     </div>
                 </div>""", unsafe_allow_html=True)
 
@@ -6366,7 +6465,9 @@ def render_syndicate_board(league_key):
                         if ri >= len(stat_results): continue
                         r = stat_results[ri]
                         implied = abs(r['odds']) / (abs(r['odds']) + 100) if r['odds'] < 0 else 100 / (r['odds'] + 100)
-                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r.get('p_over', r['win_prob']), False, r['setup_score'], implied, r['line'], raw_prob=r.get('p_over_raw'), spread=r.get('spread'))
+                        _bd = r.get('board') or []
+                        _bp = [(_bd[i]['proj'] if len(_bd) > i else 0.0) for i in (0, 1, 2, 4)]   # v4.4.3: MIN Max / Stat / Contrarian / Context
+                        save_to_ledger(league_key, target_player, r['stat_type'], r['line'], r['odds'], r['proj'], "OVER", r.get('p_over', r['win_prob']), False, r['setup_score'], implied, r['line'], _bp[0], _bp[1], _bp[2], _bp[3], raw_prob=r.get('p_over_raw'), spread=r.get('spread'))
                         log_prediction_receipt(target_player, r['stat_type'], r['proj'], datetime.now().strftime("%Y-%m-%d"), is_override=True)
                         log_gate_row(league_key, target_player, r, opp, forced_vote="OVER")
                     st.success("🚨 The Man takes responsibility!"); time.sleep(1); st.rerun()
@@ -6827,6 +6928,15 @@ with t_roi:
                 h1.metric("Win Rate", f"{(h_wins/h_tot*100) if h_tot > 0 else 0.0:.1f}%", f"{h_wins}-{h_tot-h_wins}")
                 h2.metric("ROI", f"{h_roi:+.1f}%", f"${h_prof:+.2f}")
                 st.markdown("</div>", unsafe_allow_html=True)
+
+            # v4.4.3: Picker head-to-head (ROI_Ledger columns Picker / Picker_Prob)
+            _h2h = picker_h2h_table(ledger_df)
+            if _h2h is not None:
+                st.markdown("### 🤝 Picker Head-to-Head: Gemini vs. Claude")
+                st.dataframe(_h2h, hide_index=True, use_container_width=True)
+                st.caption("Flat stake per leg at its own odds, so a -350 leg and a +105 leg count the same. "
+                           "Beat 'Implied %' to make money; lower Brier = better-calibrated estimates. "
+                           "'Brier (app)' scores the app's Raw_Prob on the same legs. Judge after ~75 legs each.")
 
             st.markdown("---")
 
