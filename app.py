@@ -370,7 +370,7 @@ def save_to_ledger(league, player, stat, line, odds, proj, vote, win_prob=0.55, 
         "Model_Version": MODEL_VERSION,
         "Main_Line": "",
         "Spread": "" if spread in (None, "") else float(spread),
-        "Picker": "", "Picker_Prob": ""      # head-to-head tag (Gemini / Claude), filled in the sheet
+        "Picker": "", "Picker_Prob": ""      # head-to-head tag (Gemini / Claude / Both), filled in the sheet
     }
     try:
         _snap = st.session_state.get("main_line_snap", {}).get((row["Player"], row["Stat"]))
@@ -4735,17 +4735,18 @@ def vs_opp_history(league, player_label, opp, s_col, line, df_model):
 
 
 def picker_h2h_table(ledger_df, unit=10.0):
-    """Gemini vs Claude: graded legs per picker, hit % vs implied, flat-stake P/L, Brier (picker and app)."""
+    """Gemini vs Claude: graded legs per picker, hit % vs implied, flat-stake P/L, Brier (picker and app).
+    A leg tagged 'Both' (both pickers backed it) counts on each side."""
     if ledger_df is None or len(ledger_df) == 0 or 'Picker' not in ledger_df.columns:
         return None
     d = ledger_df.copy()
     d['Picker'] = d['Picker'].astype(str).str.strip()
-    d = d[d['Picker'].isin(['Gemini', 'Claude'])]
+    d = d[d['Picker'].isin(['Gemini', 'Claude', 'Both'])]
     if d.empty:
         return None
     rows = []
     for who in ['Claude', 'Gemini']:
-        g = d[d['Picker'] == who]
+        g = d[d['Picker'].isin([who, 'Both'])]
         if g.empty:
             continue
         gr = g[g['Result'].isin(['Win', 'Loss'])].copy()
