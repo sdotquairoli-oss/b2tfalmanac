@@ -3855,7 +3855,7 @@ def render_nfl_td_lotto(target_player, first, lk):
 
 
 # ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
-MODEL_VERSION   = "v4.4.3"
+MODEL_VERSION   = "v4.4.4"
 CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
 OOS_FOLDS       = 5       # walk-forward: the last N games are predicted by models fit on earlier games only (v4.4.1: 8 -> 5 for speed)
 OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
@@ -4254,6 +4254,392 @@ def nfl_prob_for_vote(result, vote):
     z = (line - proj) / sd
     cdf = 0.5 * (1.0 + _m.erf(z / _m.sqrt(2.0)))
     return float(max(0.0, min(1.0, 1.0 - cdf if vote == "OVER" else cdf)))
+
+
+# ===== v4.4.4: BOARD LOG (every analyzed leg, both sides) + SHADOW TAGS =====
+# Every leg that "Analyze All Stats" evaluates is written to the Board_Log tab, whether or not you bet it.
+# Each leg is logged on the side the projection leans (OVER if proj >= line, else UNDER) with the model's
+# raw probability for that side. Graded later by "Auto-Grade Pending". This gives calibration data that
+# isn't limited to the legs you chose to bet, and it is split OVER vs UNDER so a projection bias shows up.
+# Shadow tags label legs for candidate rules. They NEVER change a vote, gate, or probability.
+BOARD_LOG_COLS = ["Date", "League", "Player", "Team", "Opp", "Stat", "Line", "Odds", "Implied", "Proj", "Lean",
+                  "Vote", "Agree", "P_Lean_Raw", "Spread", "L5_Hits", "Model_Version", "Shadow_Tags", "Actual", "Result"]
+BOARD_COMBO_STATS = {"PRA", "PR", "PA", "RA"}
+BOARD_MIN_CELL = 30            # rows with fewer graded legs than this are flagged as noise in the report
+BOARD_GRADE_MAX_PLAYERS = 40   # players fetched per grading click (keeps the ESPN/NHL/MLB calls bounded)
+BOARD_SHADOW_RULES = {
+    "COMBO_FLOOR":     "NBA pts/reb/ast combo, OVER, line at or below 80% of projection (candidate: higher prob cap)",
+    "SINGLE_AST_REB":  "NBA single-stat assists or rebounds OVER (candidate: fragile, avoid)",
+    "TRAIL_SCRIPT_RB": "NFL rushing yards/carries OVER for a team getting 3+ points (candidate: trailing-script risk)",
+    "LOW_VOLUME_WR":   "NFL receptions/receiving yards OVER with under 3 catches a game over the last 5 (candidate: WR3 freeze-out)",
+    "SHORT_PRICE":     "OVER priced at -300 or shorter (candidate: vig trap)",
+}
+
+
+def board_lean(proj, line):
+    try:
+        p, l = float(proj), float(line)
+    except Exception:
+        return ""
+    if p != p or l != l:
+        return ""
+    return "OVER" if p >= l else "UNDER"
+
+
+def board_shadow_tags(league, s_col, lean, line, proj, odds, spread, df_ml=None):
+    # Pure logic. Returns a ';'-joined string of tag names (see BOARD_SHADOW_RULES).
+    tags = []
+    try:
+        line, proj = float(line), float(proj)
+    except Exception:
+        return ""
+    try:
+        sp = float(spread)
+    except Exception:
+        sp = 0.0
+    try:
+        o = float(odds)
+    except Exception:
+        o = 0.0
+    if lean != "OVER":
+        return ""
+    if league == "NBA" and s_col in BOARD_COMBO_STATS and proj > 0 and line <= 0.80 * proj:
+        tags.append("COMBO_FLOOR")
+    if league == "NBA" and s_col in ("AST", "TRB"):
+        tags.append("SINGLE_AST_REB")
+    if league == "NFL" and s_col in ("RUSH_YDS", "CARRIES") and sp >= 3.0:      # spread > 0 = player's team is the underdog
+        tags.append("TRAIL_SCRIPT_RB")
+    if league == "NFL" and s_col in ("REC", "REC_YDS") and df_ml is not None and "REC" in getattr(df_ml, "columns", []):
+        try:
+            l5 = float(pd.to_numeric(df_ml["REC"], errors="coerce").tail(5).mean())
+            if l5 == l5 and l5 < 3.0:
+                tags.append("LOW_VOLUME_WR")
+        except Exception:
+            pass
+    if o < 0 and o <= -300:
+        tags.append("SHORT_PRICE")
+    return ";".join(tags)
+
+
+def board_rows_from_results(league, player_label, opp, results, date_str, model_version):
+    # Pure logic: one Board_Log row per analyzed stat, on the side the projection leans.
+    lab = str(player_label)
+    name = lab.split('(')[0].strip()
+    team = lab.split('(')[1].split(')')[0].strip().upper() if '(' in lab and ')' in lab else ""
+    rows = []
+    for r in results or []:
+        try:
+            lean = board_lean(r.get('proj'), r.get('line'))
+            if not lean:
+                continue
+            p_raw = r.get('p_over_raw') if lean == "OVER" else r.get('p_under_raw')
+            p_raw = float(p_raw) if p_raw is not None else ""
+            odds = r.get('odds', "")
+            rows.append({
+                "Date": date_str, "League": league, "Player": name, "Team": team,
+                "Opp": r.get('opp', opp) or "", "Stat": r.get('stat_type', ""),
+                "Line": float(r.get('line')), "Odds": odds,
+                "Implied": round(float(r.get('implied_prob')), 4) if r.get('implied_prob') is not None else "",
+                "Proj": round(float(r.get('proj')), 2), "Lean": lean, "Vote": r.get('vote', ""),
+                "Agree": r.get('agree_count', ""),
+                "P_Lean_Raw": round(p_raw, 4) if p_raw != "" else "",
+                "Spread": r.get('spread', ""), "L5_Hits": r.get('l5_hits', ""),
+                "Model_Version": model_version,
+                "Shadow_Tags": board_shadow_tags(league, r.get('s_col', ""), lean, r.get('line'), r.get('proj'),
+                                                 odds, r.get('spread', 0), r.get('df_ml')),
+                "Actual": "", "Result": "",
+            })
+        except Exception:
+            continue
+    return rows
+
+
+def _board_key(date, league, player, stat, line):
+    try:
+        ln = round(float(line), 2)
+    except Exception:
+        ln = str(line)
+    return (str(date).strip(), str(league).strip(), str(player).strip(), str(stat).strip(), ln)
+
+
+def board_dedupe(rows, existing_df):
+    # Pure logic: drop rows already logged today for the same player/stat/line (re-running Analyze doesn't double-count).
+    keys = set()
+    if existing_df is not None and not existing_df.empty:
+        for _, e in existing_df.iterrows():
+            keys.add(_board_key(e.get("Date"), e.get("League"), e.get("Player"), e.get("Stat"), e.get("Line")))
+    out = []
+    for r in rows:
+        k = _board_key(r["Date"], r["League"], r["Player"], r["Stat"], r["Line"])
+        if k in keys:
+            continue
+        keys.add(k)
+        out.append(r)
+    return out
+
+
+def board_grade_value(lean, line, val):
+    try:
+        v, l = float(val), float(line)
+    except Exception:
+        return ""
+    if v == l:
+        return "Push"
+    if lean == "OVER":
+        return "Win" if v > l else "Loss"
+    if lean == "UNDER":
+        return "Win" if v < l else "Loss"
+    return ""
+
+
+def board_stat_column(stats, league, stat):
+    # Builds the combo column if needed and returns its name (same logic as auto_grade_ledger).
+    s_col = S_MAP.get(stat, "PTS")
+    if league == "NBA":
+        if s_col == "A": s_col = "AST"
+        if s_col == "PRA" and 'PTS' in stats: stats['PRA'] = stats['PTS'] + stats['TRB'] + stats['AST']
+        if s_col == "PR" and 'PTS' in stats: stats['PR'] = stats['PTS'] + stats['TRB']
+        if s_col == "PA" and 'PTS' in stats: stats['PA'] = stats['PTS'] + stats['AST']
+        if s_col == "RA" and 'TRB' in stats: stats['RA'] = stats['TRB'] + stats['AST']
+        if s_col in ("DD", "TD") and 'PTS' in stats:
+            tens = (stats['PTS'] >= 10).astype(int) + (stats['TRB'] >= 10).astype(int) + (stats['AST'] >= 10).astype(int)
+            stats['DD'] = (tens >= 2).astype(int)
+            stats['TD'] = (tens >= 3).astype(int)
+    if league == "NFL" and s_col == "RUSH_REC" and 'RUSH_YDS' in stats and 'REC_YDS' in stats:
+        stats['RUSH_REC'] = stats['RUSH_YDS'] + stats['REC_YDS']
+    if league == "MLB" and s_col == "HRR" and all(c in stats for c in ('H', 'R', 'RBI')):
+        stats['HRR'] = stats['H'] + stats['R'] + stats['RBI']
+    return s_col
+
+
+def board_actual_from_stats(stats, league, stat, date_str):
+    # Pure logic: the stat value from the first game on or within 3 days after the logged date (never looks back).
+    if stats is None or getattr(stats, "empty", True) or 'ValidDate' not in stats:
+        return None
+    st_df = stats.copy()
+    s_col = board_stat_column(st_df, league, stat)
+    if s_col not in st_df:
+        return None
+    try:
+        d0 = pd.to_datetime(date_str).date()
+    except Exception:
+        return None
+    st_df['td'] = pd.to_datetime(st_df['ValidDate']).dt.date
+    window = [d0 + pd.Timedelta(days=i) for i in range(4)]
+    g = st_df[st_df['td'].isin(window)].sort_values('td').head(1)
+    if g.empty:
+        return None
+    v = pd.to_numeric(g.iloc[0][s_col], errors='coerce')
+    return None if v != v else float(v)
+
+
+@st.cache_data(ttl=120)
+def load_board_log():
+    gc = get_gc()
+    if not gc:
+        return pd.DataFrame(columns=BOARD_LOG_COLS)
+    try:
+        ws = gc.open("B2TF_Database").worksheet("Board_Log")
+        df = pd.DataFrame(ws.get_all_records())
+        for c in BOARD_LOG_COLS:
+            if c not in df.columns:
+                df[c] = ""
+        df = df[BOARD_LOG_COLS].fillna("")
+        for c in ("Date", "League", "Player", "Team", "Stat", "Lean", "Result", "Shadow_Tags"):
+            df[c] = df[c].astype(str).str.strip()
+        return df
+    except Exception:
+        return pd.DataFrame(columns=BOARD_LOG_COLS)
+
+
+def _board_cell(v):
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if v is None:
+        return ""
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.floating,)):
+        return float(v)
+    return v
+
+
+def append_board_rows(rows):
+    # One write per Analyze click. Returns how many rows were added.
+    if not rows:
+        return 0
+    gc = get_gc()
+    if not gc:
+        return 0
+    try:
+        sh = gc.open("B2TF_Database")
+        try:
+            ws = sh.worksheet("Board_Log")
+        except Exception:
+            ws = sh.add_worksheet(title="Board_Log", rows=2000, cols=len(BOARD_LOG_COLS))
+            ws.append_row(BOARD_LOG_COLS)
+        fresh = board_dedupe(rows, load_board_log())
+        if fresh:
+            ws.append_rows([[_board_cell(r.get(c, "")) for c in BOARD_LOG_COLS] for r in fresh],
+                           value_input_option='USER_ENTERED')
+            load_board_log.clear()
+        return len(fresh)
+    except Exception as e:
+        st.warning(f"Board log not saved: {e}")
+        return 0
+
+
+def board_log_results(league, player_label, opp, results):
+    if not st.session_state.get("board_log.on", True):
+        return 0
+    date_str = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d")
+    return append_board_rows(board_rows_from_results(league, player_label, opp, results, date_str, MODEL_VERSION))
+
+
+def _board_fetch_stats(league, player, team):
+    try:
+        if league == "NBA":
+            df, _, _ = get_nba_stats(f"{player} ({team})" if team else player)
+        elif league == "NFL":
+            df, _, _ = get_nfl_stats(player)
+        elif league == "NHL":
+            df, _, _ = get_nhl_stats(player)
+        elif league == "MLB":
+            df, _, _ = get_mlb_stats(player)
+        else:
+            return None
+        return df
+    except Exception:
+        return None
+
+
+def auto_grade_board_log(max_players=BOARD_GRADE_MAX_PLAYERS):
+    load_board_log.clear()
+    df = load_board_log()
+    if df.empty:
+        return df, "Board log is empty."
+    today = datetime.now(pytz.timezone('US/Eastern')).date()
+    pend_mask = ~df['Result'].isin(["Win", "Loss", "Push"])
+    try:
+        pend_mask &= pd.to_datetime(df['Date'], errors='coerce').dt.date < today
+    except Exception:
+        pass
+    if not pend_mask.any():
+        return df, "Board log: nothing to grade yet."
+    cache, fetched, updated = {}, 0, 0
+    for idx, r in df[pend_mask].iterrows():
+        key = (r['League'], r['Player'], r['Team'])
+        if key not in cache:
+            if fetched >= max_players:
+                continue
+            fetched += 1
+            time.sleep(0.5)
+            cache[key] = _board_fetch_stats(*key)
+        val = board_actual_from_stats(cache[key], r['League'], r['Stat'], r['Date'])
+        if val is None:
+            continue
+        res = board_grade_value(r['Lean'], r['Line'], val)
+        if not res:
+            continue
+        df.at[idx, 'Actual'] = round(val, 2)
+        df.at[idx, 'Result'] = res
+        updated += 1
+    if updated:
+        overwrite_sheet("Board_Log", df)
+        load_board_log.clear()
+    left = int((~df['Result'].isin(["Win", "Loss", "Push"])).sum())
+    return df, f"Board log: graded {updated} legs ({left} still pending)."
+
+
+def _board_bucket(p):
+    if p != p:
+        return ""
+    if p < 0.5: return "<50%"
+    if p < 0.6: return "50-60%"
+    if p < 0.7: return "60-70%"
+    if p < 0.8: return "70-80%"
+    return "80%+"
+
+
+def board_summary(df, league="All"):
+    # Pure logic. Returns (side_df, bucket_df, tag_df) or (None, None, None) if nothing is graded.
+    if df is None or df.empty:
+        return None, None, None
+    d = df.copy()
+    if league != "All":
+        d = d[d['League'] == league]
+    d = d[d['Result'].isin(["Win", "Loss"])].copy()
+    if d.empty:
+        return None, None, None
+    d['p'] = pd.to_numeric(d['P_Lean_Raw'], errors='coerce')
+    d['w'] = (d['Result'] == "Win").astype(int)
+
+    def _row(label, g):
+        n = len(g)
+        hit = g['w'].mean() * 100 if n else float('nan')
+        mp = g['p'].mean() * 100 if n else float('nan')
+        return {"Group": label, "Legs": n, "Hit %": round(hit, 1), "Avg model %": round(mp, 1),
+                "Gap (pts)": round(hit - mp, 1), "Expected wins": round(g['p'].sum(), 1), "Actual wins": int(g['w'].sum()),
+                "Sample": "ok" if n >= BOARD_MIN_CELL else "too small"}
+
+    side_rows = [_row(s, d[d['Lean'] == s]) for s in ("OVER", "UNDER") if (d['Lean'] == s).any()]
+    side_rows.append(_row("All", d))
+    side_df = pd.DataFrame(side_rows)
+
+    d['bucket'] = d['p'].apply(_board_bucket)
+    order = ["<50%", "50-60%", "60-70%", "70-80%", "80%+"]
+    b_rows = []
+    for s in ("OVER", "UNDER"):
+        for b in order:
+            g = d[(d['Lean'] == s) & (d['bucket'] == b)]
+            if len(g):
+                r = _row(f"{s} {b}", g)
+                b_rows.append(r)
+    bucket_df = pd.DataFrame(b_rows) if b_rows else None
+
+    t_rows = []
+    tagged = d[d['Shadow_Tags'].astype(str).str.len() > 0]
+    for tag in BOARD_SHADOW_RULES:
+        has = d['Shadow_Tags'].astype(str).str.split(';').apply(lambda xs: tag in xs)
+        g = d[has]
+        if g.empty:
+            continue
+        lg = set(g['League'])
+        base = d[(~has) & (d['Lean'] == "OVER") & (d['League'].isin(lg))]
+        r = _row(tag, g)
+        r["Untagged hit %"] = round(base['w'].mean() * 100, 1) if len(base) else float('nan')
+        r["Rule"] = BOARD_SHADOW_RULES[tag]
+        t_rows.append(r)
+    tag_df = pd.DataFrame(t_rows) if t_rows else None
+    return side_df, bucket_df, tag_df
+
+
+def render_board_report():
+    st.checkbox("Log every analyzed leg to Board_Log", value=True, key="board_log.on",
+                help="Each 'Analyze All Stats' run writes one row per stat (the side the projection leans). Nothing about votes changes.")
+    bl = load_board_log()
+    if bl.empty:
+        st.caption("Nothing logged yet. Every 'Analyze All Stats' run adds rows here; 'Auto-Grade Pending' grades them the next day.")
+        return
+    graded = int(bl['Result'].isin(["Win", "Loss", "Push"]).sum())
+    st.caption(f"{len(bl)} legs logged, {graded} graded, {len(bl) - graded} pending.")
+    scope = st.radio("League", ["All", "NBA", "NFL", "NHL", "MLB"], horizontal=True, key="board_log.scope")
+    side_df, bucket_df, tag_df = board_summary(bl, scope)
+    if side_df is None:
+        st.caption("No graded legs for this league yet.")
+        return
+    st.markdown("**Overs vs. unders** (the projection's lean, bet or not)")
+    st.dataframe(side_df, hide_index=True, use_container_width=True)
+    st.caption("Gap = hit % minus the model's average raw probability. Negative = overconfident. If one side runs much "
+               "worse than the other (e.g. unders far below overs), the projections are biased in that direction, and "
+               "the market blend can't fix that on its own: it shrinks edges but never flips one. Rows marked 'too small' are noise.")
+    if bucket_df is not None:
+        st.markdown("**By confidence bucket**")
+        st.dataframe(bucket_df, hide_index=True, use_container_width=True)
+    if tag_df is not None:
+        st.markdown("**Shadow tags** (candidate rules; they never change a vote)")
+        st.dataframe(tag_df, hide_index=True, use_container_width=True)
+        st.caption("Promote a rule only after it has 50+ graded legs and a clear, steady gap versus 'Untagged hit %'.")
 
 
 def log_gate_row(league, player_label, result, opp, forced_vote=None):
@@ -6009,6 +6395,11 @@ def render_syndicate_board(league_key):
             pb.empty()
             new_results.sort(key=lambda x: x['setup_score'], reverse=True)
             st.session_state[f"{lk}.stat_results"] = new_results
+            try:   # v4.4.4: Board_Log (never affects votes)
+                _opp0 = next((str(_r.get('opp', '')) for _r in new_results if _r.get('opp')), "")
+                board_log_results(league_key, target_player, _opp0, new_results)
+            except Exception as _be:
+                st.warning(f"Board log skipped: {_be}")
             st.rerun()
 
     # --- RESULTS DISPLAY ---
@@ -6826,7 +7217,11 @@ with t_roi:
     with roi_col2:
         if st.button("🤖 Auto-Grade Pending", type="primary", use_container_width=True):
             with st.spinner("Checking official APIs..."): _, grade_msg = auto_grade_ledger()
-            st.success(grade_msg); time.sleep(1.5); st.rerun()
+            try:
+                with st.spinner("Grading the board log..."): _, board_msg = auto_grade_board_log()
+            except Exception as _be:
+                board_msg = f"Board log grading skipped: {_be}"
+            st.success(f"{grade_msg}  |  {board_msg}"); time.sleep(1.5); st.rerun()
 
     ledger_df = load_ledger()
     if not ledger_df.empty:
@@ -6945,6 +7340,8 @@ with t_roi:
             roi_tab_slips, roi_tab_data = st.tabs(["🎫 Your Bet Slips", "📊 Deep Analytics & Charts"])
 
             with roi_tab_data:
+                with st.expander("📋 Board Log: every analyzed leg, both sides (overs vs. unders, shadow tags)", expanded=False):
+                    render_board_report()
                 with st.expander("🎚️ NFL Calibration (is the model biased? do its probabilities mean what they say?)", expanded=False):
                     _bias_df, _bias_all = nfl_bias_table(ledger_df)
                     if _bias_df is None:
