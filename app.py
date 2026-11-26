@@ -3855,7 +3855,7 @@ def render_nfl_td_lotto(target_player, first, lk):
 
 
 # ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
-MODEL_VERSION   = "v4.4.4"
+MODEL_VERSION   = "v4.4.4a"
 CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
 OOS_FOLDS       = 5       # walk-forward: the last N games are predicted by models fit on earlier games only (v4.4.1: 8 -> 5 for speed)
 OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
@@ -7013,7 +7013,7 @@ with t_parlay:
                 calc_dec, c_prob = 1.0, 1.0
                 for p in selected_picks:
                     o = pick_odds_map[p]
-                    calc_dec *= ((o / 100.0) + 1.0) if o > 0 else ((100.0 / abs(o)) + 1.0)
+                    calc_dec *= ((o / 100.0) + 1.0) if o > 0 else (((100.0 / abs(o)) + 1.0) if o < 0 else 1.0)   # v4.4.4a: o == 0 guard
                     c_prob *= pick_prob_map.get(p, 0.55)
 
                 true_american = int(round((calc_dec - 1.0) * 100)) if calc_dec >= 2.0 else int(round(-100.0 / (calc_dec - 1.0))) if selected_picks else 150
@@ -7098,7 +7098,7 @@ with t_parlay:
 
                     if not is_f: total_staked += r
                     if row['Result'] == 'Win':
-                        p_profit += (r * (o / 100)) if o > 0 else (r / (abs(o) / 100))
+                        p_profit += (r * (o / 100)) if o > 0 else ((r / (abs(o) / 100)) if o < 0 else 0.0)   # v4.4.4a: o == 0 guard
                     elif row['Result'] == 'Cash Out':
                         ret_val = row.get('Return', '')
                         try:
@@ -7280,7 +7280,7 @@ with t_roi:
                 for _, r in df_sub.iterrows():
                     o = pd.to_numeric(r['Odds'], errors='coerce')
                     risk = 100.0  # Assuming 1U = $100 for standard ROI calc
-                    if pd.isna(o): continue
+                    if pd.isna(o) or o == 0: continue   # v4.4.4a: blank odds (e.g. a leg priced only as part of a parlay) can't be valued
                     if r['Result'] in ['Win', 'Loss']: staked += risk
                     if r['Result'] == 'Win':
                         profit += (risk * (o / 100)) if o > 0 else (risk / (abs(o) / 100))
