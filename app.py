@@ -590,8 +590,9 @@ def auto_grade_ledger():
                             except: pass
         except: continue
 
-    try:   # v4.4.4b: keep ROI_Ledger grouped by sport, oldest to newest within each
-        df = df.sort_values(['League', 'Date'], kind='stable').reset_index(drop=True)
+    try:   # v4.4.4d: normalize dates to YYYY-MM-DD, then keep the ledger oldest -> newest (entry order kept within a day)
+        df['Date'] = df['Date'].apply(board_iso_date)
+        df = df.sort_values('Date', kind='stable').reset_index(drop=True)
     except Exception:
         pass
     overwrite_sheet("ROI_Ledger", df)
@@ -3859,7 +3860,7 @@ def render_nfl_td_lotto(target_player, first, lk):
 
 
 # ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
-MODEL_VERSION   = "v4.4.4c"
+MODEL_VERSION   = "v4.4.4d"
 CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
 OOS_FOLDS       = 5       # walk-forward: the last N games are predicted by models fit on earlier games only (v4.4.1: 8 -> 5 for speed)
 OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
@@ -4278,6 +4279,21 @@ BOARD_SHADOW_RULES = {
     "LOW_VOLUME_WR":   "NFL receptions/receiving yards OVER with under 3 catches a game over the last 5 (candidate: WR3 freeze-out)",
     "SHORT_PRICE":     "OVER priced at -300 or shorter (candidate: vig trap)",
 }
+
+
+def board_iso_date(v):
+    # Pure logic (v4.4.4d): '11/26/2026', '2026-11-26 00:00:00', 46352 (Sheets serial) -> '2026-11-26'. Unparseable stays as-is.
+    s = str(v).strip()
+    if not s:
+        return s
+    try:
+        if s.replace('.', '', 1).isdigit() and float(s) > 30000:          # Google Sheets date serial
+            return (pd.Timestamp('1899-12-30') + pd.Timedelta(days=float(s))).strftime('%Y-%m-%d')
+        if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+            return pd.to_datetime(s[:10]).strftime('%Y-%m-%d')
+        return pd.to_datetime(s).strftime('%Y-%m-%d')
+    except Exception:
+        return s
 
 
 def board_lean(proj, line):
@@ -7939,7 +7955,7 @@ with t_roi:
 
             ROI_PAGE_SIZE = 25
             total_slips = len(ledger_df)
-            slips_to_render = ledger_df.reset_index().sort_values('Date', kind='stable').iloc[::-1].head(ROI_PAGE_SIZE)   # v4.4.4b: newest by date
+            slips_to_render = ledger_df.reset_index().sort_values('Date', kind='stable', key=lambda d: d.apply(board_iso_date)).iloc[::-1].head(ROI_PAGE_SIZE)   # v4.4.4d: newest by date
 
             if total_slips > ROI_PAGE_SIZE:
                 st.caption(f"📋 Showing most recent {ROI_PAGE_SIZE} of {total_slips} slips. Grade older bets via Auto-Grade.")
