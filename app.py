@@ -590,6 +590,10 @@ def auto_grade_ledger():
                             except: pass
         except: continue
 
+    try:   # v4.4.4b: keep ROI_Ledger grouped by sport, oldest to newest within each
+        df = df.sort_values(['League', 'Date'], kind='stable').reset_index(drop=True)
+    except Exception:
+        pass
     overwrite_sheet("ROI_Ledger", df)
     return df, f"Graded {updated} bets synced to Cloud!"
 
@@ -3855,7 +3859,7 @@ def render_nfl_td_lotto(target_player, first, lk):
 
 
 # ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
-MODEL_VERSION   = "v4.4.4a"
+MODEL_VERSION   = "v4.4.4c"
 CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
 OOS_FOLDS       = 5       # walk-forward: the last N games are predicted by models fit on earlier games only (v4.4.1: 8 -> 5 for speed)
 OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
@@ -4362,6 +4366,29 @@ def _board_key(date, league, player, stat, line):
     return (str(date).strip(), str(league).strip(), str(player).strip(), str(stat).strip(), ln)
 
 
+def board_plan_writes(rows, existing_df):
+    # Pure logic (v4.4.4c). Returns (appends, updates): new legs to append, and [(sheet_row, row)] for legs already
+    # logged today that are still ungraded. The LATEST run wins, so re-running after toggling Teammate Out / Short Week
+    # replaces the earlier numbers. Graded rows are never touched. Within one batch the last copy of a key wins.
+    where = {}
+    if existing_df is not None and not existing_df.empty:
+        for pos, (_, e) in enumerate(existing_df.iterrows()):
+            k = _board_key(e.get("Date"), e.get("League"), e.get("Player"), e.get("Stat"), e.get("Line"))
+            where[k] = (pos + 2, str(e.get("Result", "")).strip() in ("Win", "Loss", "Push"))   # +2: header row, 1-based
+    latest = {}
+    for r in rows:
+        latest[_board_key(r["Date"], r["League"], r["Player"], r["Stat"], r["Line"])] = r
+    appends, updates = [], []
+    for k, r in latest.items():
+        if k in where:
+            row_no, graded = where[k]
+            if not graded:
+                updates.append((row_no, r))
+        else:
+            appends.append(r)
+    return appends, updates
+
+
 def board_dedupe(rows, existing_df):
     # Pure logic: drop rows already logged today for the same player/stat/line (re-running Analyze doesn't double-count).
     keys = set()
@@ -4465,7 +4492,7 @@ def _board_cell(v):
 
 
 def append_board_rows(rows):
-    # One write per Analyze click. Returns how many rows were added.
+    # One append (new legs) + one batch update (re-run legs) per Analyze click. Returns how many rows were written.
     if not rows:
         return 0
     gc = get_gc()
@@ -4478,12 +4505,18 @@ def append_board_rows(rows):
         except Exception:
             ws = sh.add_worksheet(title="Board_Log", rows=2000, cols=len(BOARD_LOG_COLS))
             ws.append_row(BOARD_LOG_COLS)
-        fresh = board_dedupe(rows, load_board_log())
+        load_board_log.clear()                      # fresh read: row numbers must match the sheet right now
+        fresh, redo = board_plan_writes(rows, load_board_log())
+        _vals = lambda r: [_board_cell(r.get(c, "")) for c in BOARD_LOG_COLS]
+        if redo:
+            _last = chr(ord('A') + len(BOARD_LOG_COLS) - 1)
+            ws.batch_update([{"range": f"A{n}:{_last}{n}", "values": [_vals(r)]} for n, r in redo],
+                            value_input_option='USER_ENTERED')
         if fresh:
-            ws.append_rows([[_board_cell(r.get(c, "")) for c in BOARD_LOG_COLS] for r in fresh],
-                           value_input_option='USER_ENTERED')
+            ws.append_rows([_vals(r) for r in fresh], value_input_option='USER_ENTERED')
+        if fresh or redo:
             load_board_log.clear()
-        return len(fresh)
+        return len(fresh) + len(redo)
     except Exception as e:
         st.warning(f"Board log not saved: {e}")
         return 0
@@ -4501,7 +4534,7 @@ def _board_fetch_stats(league, player, team):
         if league == "NBA":
             df, _, _ = get_nba_stats(f"{player} ({team})" if team else player)
         elif league == "NFL":
-            df, _, _ = get_nfl_stats(player)
+            df, _, _ = get_nfl_stats(f"{player} ({team})" if team else player)   # v4.4.4c: team tag skips the 32-roster scan
         elif league == "NHL":
             df, _, _ = get_nhl_stats(player)
         elif league == "MLB":
@@ -7906,7 +7939,7 @@ with t_roi:
 
             ROI_PAGE_SIZE = 25
             total_slips = len(ledger_df)
-            slips_to_render = ledger_df.reset_index().iloc[::-1].head(ROI_PAGE_SIZE)
+            slips_to_render = ledger_df.reset_index().sort_values('Date', kind='stable').iloc[::-1].head(ROI_PAGE_SIZE)   # v4.4.4b: newest by date
 
             if total_slips > ROI_PAGE_SIZE:
                 st.caption(f"📋 Showing most recent {ROI_PAGE_SIZE} of {total_slips} slips. Grade older bets via Auto-Grade.")
