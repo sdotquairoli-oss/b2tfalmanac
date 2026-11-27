@@ -3860,7 +3860,7 @@ def render_nfl_td_lotto(target_player, first, lk):
 
 
 # ===== v4.4: model version, lagged training features, walk-forward spread, Lotto_Log =====
-MODEL_VERSION   = "v4.4.4d"
+MODEL_VERSION   = "v4.4.4e"
 CLV_ALT_GAP     = 0.15    # line-CLV report skips rows whose closing line is more than this fraction away from your line
 OOS_FOLDS       = 5       # walk-forward: the last N games are predicted by models fit on earlier games only (v4.4.1: 8 -> 5 for speed)
 OOS_MIN_TRAIN   = 10      # never fit a fold on fewer rows than this
@@ -5169,6 +5169,23 @@ def vs_opp_history(league, player_label, opp, s_col, line, df_model):
     return summarize_vs_opp(df_model, opp, s_col, line)
 
 
+# v4.4.4e: rows whose numbers did NOT come from a live, pre-kickoff app run. They stay in P/L and W-L records,
+# but never feed calibration (bias %, probability buckets, Brier of the app).
+NON_MODEL_VERSION_TAGS = ("recon", "est.", "user pick")
+
+
+def ledger_is_live_model(df):
+    # Pure logic. Boolean Series: True where Model_Version is blank (older live rows) or a real app version.
+    if df is None or len(df) == 0 or 'Model_Version' not in df.columns:
+        return pd.Series(True, index=getattr(df, 'index', None))
+    mv = df['Model_Version'].astype(str).str.lower()
+    return ~mv.apply(lambda v: any(t in v for t in NON_MODEL_VERSION_TAGS))
+
+
+def ledger_live_model_rows(df):
+    return df if df is None or len(df) == 0 else df[ledger_is_live_model(df)]
+
+
 def picker_h2h_table(ledger_df, unit=10.0):
     """Gemini vs Claude: graded legs per picker, hit % vs implied, flat-stake P/L, Brier (picker and app).
     A leg tagged 'Both' (both pickers backed it) counts on each side."""
@@ -5195,7 +5212,7 @@ def picker_h2h_table(ledger_df, unit=10.0):
             y = (gr['Result'] == 'Win').astype(float).to_numpy()
             pl = float(np.where(y == 1, unit * (dec - 1), -unit).sum())
             pp = pd.to_numeric(gr['Picker_Prob'], errors='coerce').to_numpy()
-            ap = pd.to_numeric(gr['Raw_Prob'], errors='coerce').to_numpy() if 'Raw_Prob' in gr else np.full(n, np.nan)
+            ap = pd.to_numeric(gr['Raw_Prob'], errors='coerce').where(ledger_is_live_model(gr)).to_numpy() if 'Raw_Prob' in gr else np.full(n, np.nan)   # v4.4.4e
             row.update({
                 "W-L": f"{int(y.sum())}-{n - int(y.sum())}",
                 "Hit %": round(100 * y.mean(), 1),
@@ -5215,7 +5232,8 @@ def nfl_bias_table(ledger_df):
     # Returns (per-stat DataFrame, overall dict) or (None, None).
     if ledger_df is None or ledger_df.empty or 'League' not in ledger_df.columns:
         return None, None
-    d = ledger_df[(ledger_df['League'] == "NFL") & (ledger_df['Stat'].isin(NFL_STAT_LABELS))].copy()
+    d = ledger_live_model_rows(ledger_df)   # v4.4.4e: no recon / estimate / user-pick rows
+    d = d[(d['League'] == "NFL") & (d['Stat'].isin(NFL_STAT_LABELS))].copy()
     d['Proj'] = pd.to_numeric(d['Proj'], errors='coerce')
     d['Actual'] = pd.to_numeric(d['Actual'], errors='coerce')
     d = d.dropna(subset=['Proj', 'Actual'])
@@ -5243,7 +5261,8 @@ def nfl_calibration_table(ledger_df, league="NFL"):
     # Win-probability buckets vs how often those legs actually won. Needs Win_Prob and a graded Result.
     if ledger_df is None or ledger_df.empty or 'Win_Prob' not in ledger_df.columns:
         return None
-    d = ledger_df[ledger_df['Result'].isin(['Win', 'Loss'])].copy()
+    d = ledger_live_model_rows(ledger_df)   # v4.4.4e: no recon / estimate / user-pick rows
+    d = d[d['Result'].isin(['Win', 'Loss'])].copy()
     if league != "All":
         d = d[d['League'] == league]
     d['Win_Prob'] = pd.to_numeric(d['Win_Prob'], errors='coerce')
@@ -7415,6 +7434,10 @@ with t_roi:
                     else:
                         st.dataframe(_cal_df, hide_index=True, use_container_width=True)
                         st.caption("A calibrated model has 'Actually won %' close to 'Avg model prob %' in every row. Small rows (under about 10 legs) are noise.")
+                    _n_off = int((~ledger_is_live_model(ledger_df)).sum())
+                    if _n_off:
+                        st.caption(f"Left out of both tables: {_n_off} rows tagged recon / est. / user pick in Model_Version "
+                                   "(not a live pre-kickoff app run). They still count in P/L and the W-L records.")
                 with st.expander("🛡️ NFL Gate Report (does the gate actually predict wins?)", expanded=False):
                     _gsum, _gmerged = gate_report_summary(load_gate_log(), ledger_df)
                     if _gsum is None:
